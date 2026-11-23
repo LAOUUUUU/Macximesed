@@ -44,10 +44,10 @@ echo "Starting macx watch --suspend…"
 # eslogger ignores every process in its own process group. Job control gives the watcher a group of its
 # own; without it, every simulation below would be in eslogger's group and invisible to it.
 set -m
-"$MACX" watch --suspend --min-severity info --log "$LOG" > "$WORK/watch.out" 2>&1 &
+MACX_NO_UPDATE_CHECK=1 "$MACX" watch --suspend --min-severity info --log "$LOG" > "$WORK/watch.out" 2>&1 &
 WATCH=$!
 set +m
-for _ in $(seq 1 50); do grep -q "Watching" "$WORK/watch.out" 2>/dev/null && break; sleep 0.2; done
+for _ in $(seq 1 150); do grep -q "Watching" "$WORK/watch.out" 2>/dev/null && break; kill -0 "$WATCH" 2>/dev/null || break; sleep 0.2; done
 if ! grep -q "Watching" "$WORK/watch.out"; then
   echo "macx watch didn't start:"; cat "$WORK/watch.out"; exit 1
 fi

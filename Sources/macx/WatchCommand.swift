@@ -34,6 +34,8 @@ struct Watch: ParsableCommand {
     var log: String?
 
     func run() throws {
+        // Line-buffer stdout so alerts reach a log file or pipe straight away, not when macx exits.
+        setvbuf(stdout, nil, _IOLBF, 0)
         guard let minimum = Severity.allCases.first(where: { String(describing: $0) == minSeverity.lowercased() }) else {
             throw UserError("Unknown severity \"\(minSeverity)\". Use info, low, medium, high or critical.")
         }
