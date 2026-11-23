@@ -5,10 +5,9 @@ The job list: what is being built now and what comes next. Finished work moves t
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
 ## Now
-- [ ] **1. `macx scan`**: read-only report covering protections (SIP, Gatekeeper, FileVault, firewall), top CPU/memory users, disk use and thermal state. No root.
+- [ ] **2. Undo store + quarantine folder**, then the **Safe cleanup** tier (caches, logs, Trash, Xcode/Simulator data, package-manager caches, leftovers from removed apps).
 
 ## Next
-- [ ] **2. Undo store + quarantine folder**, then the **Safe cleanup** tier (caches, logs, Trash, Xcode/Simulator data, package-manager caches, leftovers from removed apps).
 - [ ] **3. Apps**: list apps with size, last use and arm64/Intel; mark unused ones (90 days); uninstall with leftovers; undo for 7 days.
 - [ ] **4. Persistence scan**: snapshot and diff LaunchDaemons/Agents, background items, login items, cron, shell rc files, profiles and hidden folders; AMOS rules (fake `com.apple.*` labels, hidden-folder loaders).
 - [ ] **5. File check**: signature, team ID, notarization, quarantine, SHA-256, what a pkg/dmg/app installs. Optional MalwareBazaar hash lookup.
@@ -19,6 +18,9 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [ ] **10. Risky tier**: triple confirmation, undo script.
 - [ ] **11. Root daemon + menu bar app**.
 - [ ] **12. Extreme**: deleting sealed-volume apps after the user turns SIP and authenticated-root off in Recovery. Off by default.
+
+## Done
+- [x] **1. `macx scan`** (2026-11-23). See [CHANGELOG.md](CHANGELOG.md).
 
 ## Open questions
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
