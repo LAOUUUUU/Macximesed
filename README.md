@@ -37,6 +37,8 @@ The installed macx counts as **its own app** for privacy permissions. Normally m
 
 **macOS 27 ignores Full Disk Access for the bare `macx` binary.** It shows in the list as on, but isn't honoured, which matches a report about macOS 26.1 and later. Until macx ships as an app bundle, give Full Disk Access to your terminal app instead, and run macx with `MACX_OWN_RESPONSIBILITY=0` so the terminal's access applies (for example `sudo MACX_OWN_RESPONSIBILITY=0 macx watch`).
 
+**Known limit (macOS 27.0.1):** Full Disk Access for macx itself didn't take in testing. That covered the bare binary, the app ad-hoc signed, and the app signed with a self-signed certificate, untrusted and then trusted. What works is giving Full Disk Access to Terminal.app and running `sudo MACX_OWN_RESPONSIBILITY=0 macx watch` there. Stable signing (below) is still used, so a future fix carries over to updates.
+
 **For Full Disk Access to work, macx needs a stable signature.** Either use a self-signed certificate called "Macximesed Local Signing" in your login keychain (no Apple ID needed; `codesign` uses it even though it's not trusted, and it gives a stable designated requirement), or a free Apple Development certificate. In Xcode, open Settings → Accounts, add your Apple ID, then Manage Certificates → **+** → Apple Development. `scripts/install.sh` finds it and signs the app with it, and the updater uses it too, so the permission sticks across updates. Without it, macx is ad-hoc signed and macOS 27 ignores its Full Disk Access.
 
 The binary is ad-hoc signed, so each reinstall looks new to macOS. After updating, switch Full Disk Access off and on again.

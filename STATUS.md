@@ -10,7 +10,18 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [ ] **`sfltool dumpbtm` stopped answering on this Mac on 2026-11-23** (it answered earlier that day). Find out whether it's waiting for an authorization prompt.
 - [ ] **Signed hash feed** on GitHub Pages (the channel is there now: add a `hashFeed` entry to it), checked offline by `macx check` and `macx watch`.
 
-- [ ] **App bundle for Full Disk Access (moved up from step 11).** Tested 2026-11-23 on macOS 27.0.1: Full Disk Access granted to the bare, ad-hoc signed `~/.local/bin/macx` shows as on but is ignored (`macx privacy` stays "no"). macx has to live inside a `Macximesed.app` with a stable signature, and the app holds the permission. Until then, `sudo macx watch` needs the terminal app to have Full Disk Access, plus `MACX_OWN_RESPONSIBILITY=0`.
+- [ ] **Full Disk Access for macx itself is unsolved on macOS 27.0.1.** Tried 2026-11-23, all refused by eslogger ("responsible process needs TCC Full Disk Access") even with the switch on in Settings:
+  1. the bare ad-hoc binary;
+  2. an ad-hoc signed `Macximesed.app`;
+  3. the app signed with a self-signed "Macximesed Local Signing" certificate (untrusted);
+  4. the same with the certificate trusted for code signing.
+
+  **Works:** Full Disk Access on Terminal.app, then `sudo MACX_OWN_RESPONSIBILITY=0 macx watch` from Terminal.
+
+  **Not tried yet:**
+  - an Apple Development certificate (needs an Apple ID in Xcode);
+  - running the watcher as a launchd daemon registered with SMAppService from the app;
+  - checking whether `sudo` itself breaks the responsibility hand-off. Test `macx watch` started some other way than sudo, for example from launchd.
 
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
