@@ -21,6 +21,7 @@ enum UpdateCheck {
         defer { try? state.save() }
 
         guard let channel = try? UpdateClient.fetchChannel(timeout: 4) else { return }
+        _ = try? HashFeed.refresh(from: channel)
         let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: now)
         state.lastSequence = max(state.lastSequence, channel.sequence)
         // Only the rollback warning here; "out of date" is shown by `macx update`, not before every command.
@@ -94,6 +95,7 @@ struct Update: ParsableCommand {
         try? state.save()
         let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: Date())
         decision.warnings.forEach { print($0) }
+        if let feed = try? HashFeed.refresh(from: channel) { print("Malware hash feed: \(feed.count) known samples (checked offline).") }
 
         switch decision.action {
         case .none:

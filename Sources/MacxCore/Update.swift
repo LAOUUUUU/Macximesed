@@ -54,6 +54,13 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
         public var advisory: String?
     }
 
+    /// The malware hash feed: its SHA-256 here is what makes the separately downloaded feed trustworthy.
+    public struct Feed: Codable, Sendable, Equatable {
+        public var url: String
+        public var sha256: String
+        public var count: Int?
+    }
+
     public var schema: Int
     /// Goes up with every published file. A lower number than one already seen is a rollback attempt.
     public var sequence: Int
@@ -62,14 +69,16 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
     public var expires: Date
     public var latest: Release
     public var minimumSafe: Floor?
+    public var hashFeed: Feed?
 
-    public init(schema: Int, sequence: Int, published: Date, expires: Date, latest: Release, minimumSafe: Floor?) {
+    public init(schema: Int, sequence: Int, published: Date, expires: Date, latest: Release, minimumSafe: Floor?, hashFeed: Feed? = nil) {
         self.schema = schema
         self.sequence = sequence
         self.published = published
         self.expires = expires
         self.latest = latest
         self.minimumSafe = minimumSafe
+        self.hashFeed = hashFeed
     }
 }
 

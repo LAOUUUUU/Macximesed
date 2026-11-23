@@ -23,7 +23,8 @@ struct Check: ParsableCommand {
     var online = false
 
     func run() throws {
-        var lookup: HashLookup?
+        // Offline by default: the signed hash feed cached by the daily update check.
+        var lookup: HashLookup? = HashFeed.loadCached()
         if online {
             guard let key = ProcessInfo.processInfo.environment["MACX_MALWAREBAZAAR_KEY"], !key.isEmpty else {
                 throw UserError("--online needs a MalwareBazaar Auth-Key in MACX_MALWAREBAZAAR_KEY (free at https://auth.abuse.ch/).")

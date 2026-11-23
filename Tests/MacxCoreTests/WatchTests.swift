@@ -197,3 +197,25 @@ struct WatchRuleTests {
         #expect(ids(save).isEmpty)
     }
 }
+
+@Suite("Live watch with the hash feed")
+struct WatchHashFeedTests {
+    @Test func knownMalwareStartingIsCriticalAndPlatformBinariesArentHashed() throws {
+        let tmp = try TempDir()
+        let payload = try tmp.file("payload", "pretend payload")
+        let hash = sha256(try Data(contentsOf: payload))
+        let feed = try HashFeed.parse(
+            Data(#"{"schema":1,"generated":"x","entries":[{"sha256":"\#(hash)","family":"AMOS","source":"test"}]}"#.utf8))
+        let rules = WatchRules(home: URL(fileURLWithPath: "/Users/v"), signatures: FakeSignatures(byPath: [:]), feed: feed)
+
+        let bad = event(
+            "exec", process: proc("/bin/zsh", platform: true),
+            body: #"{"target":\#(proc(payload.path, team: "ABCDE12345")),"args":["payload"]}"#)
+        let alerts = rules.evaluate(ESEvent.parse(bad)!)
+        #expect(alerts.contains { $0.rule == "known-malware" && $0.severity == .critical && ($0.detail ?? "").contains("AMOS") })
+
+        let apple = event(
+            "exec", process: proc("/bin/zsh", platform: true), body: #"{"target":\#(proc("/bin/ls", platform: true)),"args":["ls"]}"#)
+        #expect(rules.evaluate(ESEvent.parse(apple)!).isEmpty)
+    }
+}

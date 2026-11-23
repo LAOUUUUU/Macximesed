@@ -40,7 +40,9 @@ struct Watch: ParsableCommand {
             throw UserError("Unknown severity \"\(minSeverity)\". Use info, low, medium, high or critical.")
         }
         let user = Self.invokingUser()
-        let rules = WatchRules(home: user.home)
+        // The hash feed cached in the real user's home (not root's, under sudo).
+        let feed = HashFeed.loadCached(from: user.home.appendingPathComponent("Library/Application Support/Macximesed/hashfeed.json"))
+        let rules = WatchRules(home: user.home, feed: feed)
         let log = AlertLog(
             home: user.home, uid: user.uid, gid: user.gid,
             file: self.log.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) })

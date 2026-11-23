@@ -5,13 +5,15 @@ The sequence always goes up by one, so clients can reject an older file (rollbac
 90 days, so a replayed old file can't keep clients from hearing about a fix. The security floor
 (minimumSafe) is kept from the previous file unless it's set or cleared here.
 """
-import argparse, datetime, json, sys
+import argparse, datetime, hashlib, json, sys
 
 p = argparse.ArgumentParser()
 p.add_argument("--previous", help="previous channel JSON (may be missing)")
 p.add_argument("--version"), p.add_argument("--url"), p.add_argument("--sha256"), p.add_argument("--notes")
 p.add_argument("--minimum-safe"), p.add_argument("--reason"), p.add_argument("--advisory")
 p.add_argument("--clear-floor", action="store_true")
+p.add_argument("--hash-feed", help="feed file to record (its SHA-256 goes into the signed channel)")
+p.add_argument("--hash-feed-url", default="https://laouuuuu.github.io/Macximesed/feed/v1.json")
 p.add_argument("--out", required=True)
 a = p.parse_args()
 
@@ -58,6 +60,12 @@ channel = {
 }
 if floor:
     channel["minimumSafe"] = floor
+if a.hash_feed:
+    raw = open(a.hash_feed, "rb").read()
+    channel["hashFeed"] = {"url": a.hash_feed_url, "sha256": hashlib.sha256(raw).hexdigest(),
+                           "count": len(json.loads(raw).get("entries", []))}
+elif "hashFeed" in prev:
+    channel["hashFeed"] = prev["hashFeed"]
 
 with open(a.out, "w") as f:
     json.dump(channel, f, sort_keys=True, separators=(",", ":"))

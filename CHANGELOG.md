@@ -5,6 +5,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Added
+- **Signed malware hash feed** (`feed/v1.json` on GitHub Pages): listed with its SHA-256 in the signed update channel, downloaded by the daily update check, and checked offline by `macx check` and `macx watch` (new critical `known-malware` alert). Built by `scripts/release/make-feed.py` from `data/hashes/curated.tsv` and, with a `MALWAREBAZAAR_KEY` secret, MalwareBazaar's macOS samples.
 - Research brief and 12-step plan (`research/macximesed-v1/RESEARCH.md`).
 - `STATUS.md` (job list) and `CHANGELOG.md` (history).
 - Swift package: `MacxCore` library, `macx` command-line tool, tests.

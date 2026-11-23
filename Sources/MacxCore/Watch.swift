@@ -94,13 +94,17 @@ public struct WatchAlert: Sendable, Equatable {
 public struct WatchRules: Sendable {
     public var home: URL
     public var signatures: SignatureChecking
+    /// Known-malware hashes. Non-Apple programs are hashed as they start (cached by path and change time).
+    public var feed: HashFeed?
+    let hashes = ExecHashCache()
 
     /// eslogger events the rules use. `open` is left out: it's far too noisy to watch live.
     public static let events = ["exec", "create", "rename", "deleteextattr", "btm_launch_item_add"]
 
-    public init(home: URL, signatures: SignatureChecking = GuardedSignatureChecker()) {
+    public init(home: URL, signatures: SignatureChecking = GuardedSignatureChecker(), feed: HashFeed? = nil) {
         self.home = home
         self.signatures = signatures
+        self.feed = feed
     }
 
     public func evaluate(_ e: ESEvent) -> [WatchAlert] {
@@ -120,6 +124,9 @@ public struct WatchRules: Sendable {
                 var detail = String(command.prefix(300))
                 if !result.decoded.isEmpty { detail += "\n  decodes to: " + result.decoded.joined(separator: "\n  decodes to: ") }
                 add(p.rawValue, p == .quarantineStrip ? .high : .critical, p.title, detail)
+            }
+            if let feed, let t = e.target, !t.isPlatform, let hash = hashes.hash(t.path), let name = try? feed.lookup(sha256: hash) {
+                add("known-malware", .critical, "A known malware program started", "\(name)\n  SHA-256 \(hash)\n  \(t.path)")
             }
             if let t = e.target, t.isUnsignedThirdParty, Self.isHiddenOrTemp(t.path, home: h) {
                 add("exec-from-hidden-or-temp", .high, "An unsigned program started from a hidden or temporary folder", t.path)
@@ -182,5 +189,28 @@ public struct WatchRules: Sendable {
             if a == "-p" || a == "--password" || a == "-password", i + 1 < args.count { out[i + 1] = "********" }
         }
         return out
+    }
+}
+
+/// SHA-256 of program files, remembered by path, size and change time, so each program is hashed once.
+final class ExecHashCache: @unchecked Sendable {
+    private var cache: [String: (UInt64, Date, String)] = [:]
+    private let lock = NSLock()
+
+    func hash(_ path: String) -> String? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+            let size = (attrs[.size] as? NSNumber)?.uint64Value, let mtime = attrs[.modificationDate] as? Date
+        else { return nil }
+        lock.lock()
+        if let c = cache[path], c.0 == size, c.1 == mtime {
+            lock.unlock()
+            return c.2
+        }
+        lock.unlock()
+        guard size < 500_000_000, let h = FileChecker.hashFile(URL(fileURLWithPath: path)) else { return nil }
+        lock.lock()
+        cache[path] = (size, mtime, h)
+        lock.unlock()
+        return h
     }
 }

@@ -4,13 +4,17 @@ The job list: what is being built now and what comes next. Finished work moves t
 
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
-## Now
-- [ ] **Network watching** (`nettop`/`lsof` polling): not built. Test first how many short connections a poll misses.
-- [ ] **Configuration profiles** in `persist` (needs root to list).
-- [ ] **`sfltool dumpbtm` stopped answering on this Mac on 2026-11-23** (it answered earlier that day). Find out whether it's waiting for an authorization prompt.
-- [ ] **Signed hash feed** on GitHub Pages (the channel is there now: add a `hashFeed` entry to it), checked offline by `macx check` and `macx watch`.
+## Antivirus checklist: the first release (0.2.0) ships when all of these are done
+Lao, 2026-11-23: "we release when the anti virus is fully built".
 
-- [ ] **Full Disk Access for macx itself is unsolved on macOS 27.0.1.** Tried 2026-11-23, all refused by eslogger ("responsible process needs TCC Full Disk Access") even with the switch on in Settings:
+- [x] **A. Signed hash feed** (built 2026-11-23; goes live with the first release) on GitHub Pages: listed in the signed channel, cached locally, checked offline by `macx check` and `macx watch`.
+- [ ] **B. Runs in the background** without a terminal open: a launchd daemon running `macx watch`, with a way to see alerts. This depends on solving Full Disk Access below; a launchd daemon is one of the untried routes.
+- [ ] **C. Network watching** for flagged processes (`nettop`/`lsof` polling), with a measured miss rate for short connections.
+- [ ] **D. Configuration profiles** in the persistence checks (root: done inside the daemon or `sudo macx persist`).
+- [ ] **E. `sfltool` stall understood**, or login items read another way.
+- [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
+
+- [ ] **(Needed for B) Full Disk Access for macx itself is unsolved on macOS 27.0.1.** Tried 2026-11-23, all refused by eslogger ("responsible process needs TCC Full Disk Access") even with the switch on in Settings:
   1. the bare ad-hoc binary;
   2. an ad-hoc signed `Macximesed.app`;
   3. the app signed with a self-signed "Macximesed Local Signing" certificate (untrusted);

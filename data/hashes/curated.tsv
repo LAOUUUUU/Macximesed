@@ -1,0 +1,4 @@
+# Known macOS malware, curated by hand. One sample per line, tab-separated: sha256, family, source.
+# Only add hashes from a sample you have yourself or a published report you can link. Never guess.
+# The release workflow merges this file (and MalwareBazaar tag results, when a key is set) into feed/v1.json.
+94a1f42cc5c7eab17b00c19887d6f4fa83f57a6c5c02f05d245030424eea4f0b	unidentified Go loader (cksyncd) found with an AMOS infection	observed in the wild (2026)

@@ -49,6 +49,7 @@ jobs:
           REASON: ${{ inputs.reason }}
           ADVISORY: ${{ inputs.advisory }}
           CLEAR_FLOOR: ${{ inputs.clear_floor }}
+          MALWAREBAZAAR_KEY: ${{ secrets.MALWAREBAZAAR_KEY }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -65,6 +66,9 @@ jobs:
           if [ -n "${MINIMUM_SAFE:-}" ]; then args+=(--minimum-safe "$MINIMUM_SAFE" --reason "$REASON"); fi
           if [ -n "${ADVISORY:-}" ]; then args+=(--advisory "$ADVISORY"); fi
           if [ "${CLEAR_FLOOR:-false}" = "true" ]; then args+=(--clear-floor); fi
+          # The malware hash feed: curated list plus MalwareBazaar tags when a key is set.
+          python3 -I scripts/release/make-feed.py out/feed/v1.json
+          args+=(--hash-feed out/feed/v1.json)
           python3 -I scripts/release/make-channel.py "${args[@]}"
       - name: Sign
         env:

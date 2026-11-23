@@ -73,7 +73,7 @@ swift build -c release
 | `macx apps [--unused [--days 90]] [--intel] [--sort size\|name\|used]` | Lists every app on the Mac, wherever it is, with its size, architecture, when it was last opened, and its folder. | No |
 | `macx apps remove NAME\|BUNDLE-ID [--include-name-matches] [-y]` | Moves the app and its Library leftovers, matched by exact bundle ID (support files, caches, preferences, saved state, containers, launch agents), into the undo folder. Folders that only match the app's name are listed, and moved only with `--include-name-matches`. Refuses apps that are running, built into macOS, or built-in Apple apps. Apple's App Store apps (GarageBand, iMovie, Pages…) are allowed. Root-owned apps need `sudo`. | Sometimes |
 | `macx apps leftovers [--remove ID ...] [-y]` | Lists files named after a bundle ID that no app or helper on this Mac has, skipping app-group IDs and empty items. Can move chosen groups to the undo folder. | No |
-| `macx check FILE ... [--online]` | Checks a download before you open it: app, `.pkg`, `.dmg`, script, compiled AppleScript or any file. Shows the signature, Gatekeeper's decision, who downloaded it and when, the SHA-256, and what it would set up to run by itself. It reads scripts, package install scripts and the files inside disk images (mounted read-only and hidden, then ejected) for download-and-run, base64-hidden code (decoded and shown), quarantine stripping and password prompts. Verdict: *Looks OK*, *Be careful* or *DON'T OPEN THIS* (exit code 2). `--online` looks the SHA-256 up on abuse.ch MalwareBazaar, sending only the hash and using your key in `MACX_MALWAREBAZAAR_KEY`. | No |
+| `macx check FILE ... [--online]` | Checks a download before you open it: app, `.pkg`, `.dmg`, script, compiled AppleScript or any file. Shows the signature, Gatekeeper's decision, who downloaded it and when, the SHA-256, and what it would set up to run by itself. It reads scripts, package install scripts and the files inside disk images (mounted read-only and hidden, then ejected) for download-and-run, base64-hidden code (decoded and shown), quarantine stripping and password prompts. Verdict: *Looks OK*, *Be careful* or *DON'T OPEN THIS* (exit code 2). The SHA-256 is always checked offline against the signed malware hash feed (see below). `--online` also looks the SHA-256 up on abuse.ch MalwareBazaar, sending only the hash and using your key in `MACX_MALWAREBAZAAR_KEY`. | No |
 | `macx persist [--all] [--min-severity low]` | Finds everything set to start by itself and flags what looks like malware. It reads launch daemons and agents (system and yours), login items and background tasks (from `sfltool dumpbtm`), cron, shell startup files, and hidden folders in Application Support. Read-only. | No |
 | `macx persist --case` | Also records an incident case from the high and critical findings. | No |
 | `macx persist --baseline` / `--diff` | Saves what's there now, then later shows what was added, removed or changed since, with findings for the new items. | No |
@@ -205,6 +205,13 @@ Every push and pull request runs these on GitHub-hosted Macs (free for public re
 | `release.yml` | On a `v*.*.*` tag: checks the tag matches `macx --version`, tests, builds the universal binary and publishes a GitHub release with notes from this CHANGELOG |
 
 Dependabot keeps the pinned action SHAs and the Swift package up to date, through pull requests to `dev`.
+
+## Malware hash feed
+A list of SHA-256 hashes of known macOS malware, published on GitHub Pages at `feed/v1.json`. The signed update channel lists the feed's hash, so macx only accepts the exact feed that was signed. The daily update check (and `macx update`) downloads it into `~/Library/Application Support/Macximesed/hashfeed.json`, and from then on it's checked offline:
+- `macx check` flags a file whose hash is on the list as *known malware*;
+- `macx watch` raises a critical alert (and freezes it with `--suspend`) when a listed program starts.
+
+The feed is built at release time from [`data/hashes/curated.tsv`](data/hashes/curated.tsv) plus, when the `MALWAREBAZAAR_KEY` secret is set, abuse.ch MalwareBazaar's recent macOS samples. Only hashes are stored; no samples.
 
 ## Install a release
 Each [release](https://github.com/LAOUUUUU/Macximesed/releases) has a universal `macx` (Apple silicon and Intel) with a SHA-256 file. The binary isn't signed yet, so after checking the hash:
