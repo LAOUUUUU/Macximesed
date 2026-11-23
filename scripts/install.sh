@@ -37,7 +37,12 @@ cat > "$NEW/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-codesign --force --sign - --identifier dev.macximesed.macx "$NEW" 2>/dev/null
+# Sign with an Apple Development identity when there is one (stable, so Full Disk Access sticks across
+# updates); otherwise ad-hoc. MACX_SIGN_IDENTITY overrides ("-" forces ad-hoc).
+SIGN="${MACX_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | sed -nE 's/^ *[0-9]+\) ([0-9A-F]{40}) "Apple Development: .*"$/\1/p' | head -1)}"
+SIGN="${SIGN:--}"
+if [ "$SIGN" = "-" ]; then SIGNED_AS="ad-hoc (Full Disk Access won't stick on macOS 27; see README)"; else SIGNED_AS="Apple Development identity $SIGN"; fi
+codesign --force --sign "$SIGN" --identifier dev.macximesed.macx "$NEW"
 codesign --verify --strict "$NEW"
 rm -rf "$APP"
 mv "$NEW" "$APP"
@@ -47,6 +52,7 @@ ln -sfn "$APP/Contents/MacOS/macx" "$BIN_DIR/macx"
 
 echo "Installed: $APP ($("$BIN_DIR/macx" --version))"
 echo "Command:   $BIN_DIR/macx → the app"
+echo "Signed:    $SIGNED_AS"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Note: $BIN_DIR is not on your PATH. Add this to ~/.zshrc:  export PATH=\"$BIN_DIR:\$PATH\"" ;;

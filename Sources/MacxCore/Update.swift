@@ -274,7 +274,9 @@ public struct UpdateInstaller: Sendable {
         let id =
             (try? PropertyListSerialization.propertyList(from: Data(contentsOf: infoURL), format: nil) as? [String: Any])?[
                 "CFBundleIdentifier"] as? String ?? "dev.macximesed.macx"
-        guard ProcessRunner.capture("/usr/bin/codesign", ["--force", "--sign", "-", "--identifier", id, app.path])?.status == 0 else {
+        // Same identity install.sh used, so the app keeps its Full Disk Access after the update.
+        let sign = SigningIdentity.codesignArgument(SigningIdentity.preferred())
+        guard ProcessRunner.capture("/usr/bin/codesign", ["--force", "--sign", sign, "--identifier", id, app.path])?.status == 0 else {
             throw UpdateError.download("updated, but couldn't re-sign \(app.path)")
         }
     }
@@ -315,4 +317,45 @@ public enum UpdateClient {
         session.finishTasksAndInvalidate()
         return try result.get()
     }
+}
+
+// MARK: - Signing identity
+
+/// The code-signing identity macx is signed with. An "Apple Development" certificate (free from Xcode)
+/// gives macOS a stable identity, so privacy permissions like Full Disk Access survive rebuilds and
+/// updates; ad-hoc signing doesn't. install.sh and the updater must use the same one.
+public struct SigningIdentity: Sendable, Equatable {
+    public var hash: String
+    public var name: String
+
+    public init(hash: String, name: String) {
+        self.hash = hash
+        self.name = name
+    }
+
+    /// The first valid "Apple Development" identity in `security find-identity -v -p codesigning` output.
+    public static func parse(findIdentityOutput: String) -> SigningIdentity? {
+        guard let re = try? NSRegularExpression(pattern: #"^\s*\d+\)\s+([0-9A-F]{40})\s+"(Apple Development: [^"]+)"\s*$"#) else {
+            return nil
+        }
+        for line in findIdentityOutput.split(separator: "\n").map(String.init) {
+            guard let m = re.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                let h = Range(m.range(at: 1), in: line), let n = Range(m.range(at: 2), in: line)
+            else { continue }
+            return SigningIdentity(hash: String(line[h]), name: String(line[n]))
+        }
+        return nil
+    }
+
+    /// `MACX_SIGN_IDENTITY` if set, else the first Apple Development identity in the keychain, else nil (ad-hoc).
+    public static func preferred(runner: CommandRunner = ProcessRunner(timeout: 15)) -> SigningIdentity? {
+        if let forced = ProcessInfo.processInfo.environment["MACX_SIGN_IDENTITY"], !forced.isEmpty {
+            return forced == "-" ? nil : SigningIdentity(hash: forced, name: forced)
+        }
+        guard let out = try? runner.run("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"]) else { return nil }
+        return parse(findIdentityOutput: out)
+    }
+
+    /// What to pass to `codesign --sign`.
+    public static func codesignArgument(_ identity: SigningIdentity?) -> String { identity?.hash ?? "-" }
 }

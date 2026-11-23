@@ -96,6 +96,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - **First runtime evaluation results** (`research/evaluation/runtime-results.md`). All 7 simulated steps alerted in 47–245 ms, each freeze followed within 5–9 ms, children were frozen, and overhead was about 2% CPU. It also measured the cost of `open` events.
 - **App bundle:** `scripts/install.sh` installs `~/Applications/Macximesed.app` (background-only, ad-hoc signed, sealed) with `~/.local/bin/macx` linked into it, because macOS 27 ignores Full Disk Access for bare binaries. `macx privacy` names the app to add.
 - **Updates inside the app bundle:** the updater re-seals the bundle, sets its version, and keeps the previous binary in Application Support so the seal stays valid.
+- **Stable signing:** `scripts/install.sh` and the updater sign Macximesed.app with the first valid "Apple Development" identity in the keychain (a free certificate from Xcode), or `MACX_SIGN_IDENTITY`. That gives macOS a stable identity, so Full Disk Access survives rebuilds and updates. Without one they fall back to ad-hoc, which macOS 27 doesn't honour for Full Disk Access.
 
 ### Changed
 - **No more guessing from names.**

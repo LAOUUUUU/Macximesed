@@ -281,3 +281,25 @@ struct AppBundleUpdateTests {
         #expect(!FileManager.default.fileExists(atPath: exe.deletingLastPathComponent().appendingPathComponent("macx.previous").path))
     }
 }
+
+@Suite("Signing identity")
+struct SigningIdentityTests {
+    let sample = """
+          1) 0123456789ABCDEF0123456789ABCDEF01234567 "Developer ID Application: Someone Else (ZZZZZZZZZZ)"
+          2) A1B2C3D4E5F60718293A4B5C6D7E8F9012345678 "Apple Development: someone@example.com (ABCDE12345)"
+          3) FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF "Apple Development: other@example.com (QWERTY1234)" (CSSMERR_TP_CERT_EXPIRED)
+             3 valid identities found
+        """
+
+    @Test func prefersTheFirstValidAppleDevelopmentIdentity() {
+        let id = SigningIdentity.parse(findIdentityOutput: sample)
+        #expect(id?.hash == "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678")
+        #expect(id?.name == "Apple Development: someone@example.com (ABCDE12345)")
+    }
+
+    @Test func noneMeansAdHoc() {
+        #expect(SigningIdentity.parse(findIdentityOutput: "     0 valid identities found\n") == nil)
+        #expect(SigningIdentity.codesignArgument(nil) == "-")
+        #expect(SigningIdentity.codesignArgument(SigningIdentity(hash: "AB", name: "x")) == "AB")
+    }
+}
