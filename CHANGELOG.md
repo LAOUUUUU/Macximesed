@@ -78,6 +78,15 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
   - **Signing:** Ed25519 with the public key built into macx. Files carry a sequence number (no rollback) and a 90-day expiry (no replays).
   - **Downloads:** each one must match the signed SHA-256, be Mach-O, be newer, and report the signed version. The swap is atomic, and `macx.previous` is kept.
   - **Publishing:** `channel.yml` signs in the protected `release` environment (maintainer approval) and deploys to Pages. Releases call it automatically, and it can be run by hand to raise or clear the security floor.
+- **Incident response** (`macx incident list|show|contain`).
+  - **Cases are recorded** by `watch` for every critical alert, after the freeze and while the process still exists, and by `persist --case`.
+  - **Each case keeps:**
+    - read-only, non-executable copies of the files involved, plus every non-Apple program in the process chain (files over 50 MB are hashed, not copied);
+    - SHA-256, mode, owner and modification time for each file;
+    - the process ancestry and descendants;
+    - the alert timeline;
+    - a `summary.md` with next steps.
+  - **`contain`** moves launch items, hidden Application Support folders and temp-folder programs into the undo store, never anything under `/System`, `/usr`, `/bin` or `/sbin`. It prints `launchctl bootout` commands and the credential-rotation checklist.
 
 ### Changed
 - **No more guessing from names.**

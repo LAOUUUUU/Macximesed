@@ -109,9 +109,20 @@ struct Watch: ParsableCommand {
                     log.append(a)
                     guard a.severity >= minimum else { continue }
                     Self.printAlert(a)
-                    if suspend, a.severity == .critical {
-                        let frozen = Self.freeze(a)
-                        if !frozen.isEmpty { log.appendFreeze(alertRule: a.rule, pids: frozen) }
+                    // Critical: stop it first (if asked), then keep the evidence while the process is still there.
+                    if a.severity == .critical {
+                        var frozen: [Int] = []
+                        if suspend {
+                            frozen = Self.freeze(a)
+                            if !frozen.isEmpty { log.appendFreeze(alertRule: a.rule, pids: frozen) }
+                        }
+                        let recent =
+                            (try? String(contentsOf: log.file, encoding: .utf8))?.split(separator: "\n").suffix(50).map(String.init) ?? []
+                        if let c = IncidentCapture.fromAlert(
+                            a, frozen: frozen, home: user.home, uid: user.uid, gid: user.gid, timeline: recent)
+                        {
+                            print("           Evidence kept: macx incident show \(c.id)")
+                        }
                     }
                 }
             }

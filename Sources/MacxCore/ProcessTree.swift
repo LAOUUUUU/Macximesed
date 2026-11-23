@@ -3,7 +3,7 @@ import Foundation
 
 /// Parent and child links between running processes, read from the kernel with libproc.
 public enum ProcessTree {
-    public struct Entry: Sendable, Equatable {
+    public struct Entry: Sendable, Equatable, Codable {
         public var pid: Int
         public var ppid: Int
         public var path: String

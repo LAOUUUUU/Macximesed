@@ -84,6 +84,7 @@ jobs:
           step 0 guard inspect --no-run -- '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
           step 0 watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl
           step 0 undo list
+          step 0 incident
           $M watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl | grep -q 'Replayed 3 events: 4 alerts' || { echo "::error::replay didn't find the 4 alerts"; FAILED=1; }
           MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself' || { echo "::error::responsibility re-exec didn't take"; FAILED=1; }
           exit $FAILED

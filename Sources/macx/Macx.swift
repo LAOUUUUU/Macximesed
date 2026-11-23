@@ -16,7 +16,8 @@ struct Macx: ParsableCommand {
         abstract: "Macximesed: speed up macOS and watch for stealer-style malware.",
         version: macxVersion,
         subcommands: [
-            Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Privacy.self, Update.self, Undo.self,
+            Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Incident.self, Privacy.self, Update.self,
+            Undo.self,
         ]
     )
 }

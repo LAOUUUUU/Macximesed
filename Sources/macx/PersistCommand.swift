@@ -24,6 +24,9 @@ struct Persist: ParsableCommand {
     @Flag(help: "Compare with the saved baseline.")
     var diff = false
 
+    @Flag(help: "Record an incident case (evidence, hashes, summary) from the high and critical findings.")
+    var `case` = false
+
     func run() throws {
         let items = PersistenceScanner.current()
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -73,6 +76,21 @@ struct Persist: ParsableCommand {
         } else {
             print("")
             printFindings(findings)
+            let serious = findings.filter { $0.severity >= .high }
+            if `case`, let top = serious.first {
+                var files: [URL] = []
+                for f in serious {
+                    files.append(URL(fileURLWithPath: f.item.path))
+                    if let p = f.item.program, p.hasPrefix("/") { files.append(URL(fileURLWithPath: p)) }
+                }
+                let trigger = IncidentTrigger(
+                    rule: top.rule, severity: top.severity, title: "\(serious.count) serious persistence finding(s): \(top.title)",
+                    detail: serious.map { "\($0.rule): \($0.item.path)" }.joined(separator: "\n"))
+                let c = try IncidentRecorder().record(trigger: trigger, pid: nil, processTable: [], files: files, frozen: [], timeline: [])
+                print("\nRecorded incident \(c.id): macx incident show \(c.id)  ·  contain with: macx incident contain \(c.id)")
+            } else if `case` {
+                print("\nNo high or critical findings, so no incident was recorded.")
+            }
         }
     }
 
