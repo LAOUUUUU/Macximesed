@@ -67,6 +67,8 @@ public struct CodeSignatureChecker: SignatureChecking {
 
 public enum PersistenceKind: String, Codable, Sendable, CaseIterable {
     case launchDaemon, launchAgent, userLaunchAgent, loginItem, backgroundTask, cron, shellStartup, hiddenFolder
+    case appExtension, authorizationPlugin, periodicScript, sudoersFile, pamModule, atJob, loginHook
+    case systemExtension, kernelExtension, browserExtension
 
     public var label: String {
         switch self {
@@ -78,6 +80,16 @@ public enum PersistenceKind: String, Codable, Sendable, CaseIterable {
         case .cron: "Cron job"
         case .shellStartup: "Shell startup line"
         case .hiddenFolder: "Hidden support folder"
+        case .appExtension: "App extension"
+        case .authorizationPlugin: "Authorization plugin (runs at login)"
+        case .periodicScript: "Periodic script (runs as root on a schedule)"
+        case .sudoersFile: "sudoers rule file"
+        case .pamModule: "Login (PAM) module"
+        case .atJob: "at job"
+        case .loginHook: "Login or logout hook"
+        case .systemExtension: "System extension"
+        case .kernelExtension: "Kernel extension"
+        case .browserExtension: "Browser extension"
         }
     }
 }
@@ -99,6 +111,8 @@ public struct PersistenceItem: Codable, Sendable, Equatable {
     public var unreadable: Bool = false
     /// For shell lines: the text that matched.
     public var detail: String?
+    /// Libraries forced into the program with DYLD_* environment variables (launch plists).
+    public var injectedLibraries: [String]?
 
     public init(
         kind: PersistenceKind, path: String, label: String?, program: String?, arguments: [String], runsAsRoot: Bool,
@@ -163,7 +177,22 @@ public enum LaunchdParser {
             kind: kind, path: file.path, label: dict["Label"] as? String, program: program, arguments: args,
             runsAsRoot: kind == .launchDaemon && (user == nil || user == "root"),
             runAtLoad: (dict["RunAtLoad"] as? Bool) ?? false, keepAlive: keepAlive,
-            signature: program.map { signatures.check($0) }, teamID: nil, contentHash: sha256(data))
+            signature: program.map { signatures.check($0) }, teamID: nil, contentHash: sha256(data)
+        )
+        .with { item in
+            let env = dict["EnvironmentVariables"] as? [String: Any] ?? [:]
+            let injected = env.filter { $0.key.hasPrefix("DYLD_") }.compactMap { $0.value as? String }
+                .flatMap { $0.split(separator: ":").map(String.init) }
+            item.injectedLibraries = injected.isEmpty ? nil : injected.sorted()
+        }
+    }
+}
+
+extension PersistenceItem {
+    func with(_ change: (inout PersistenceItem) -> Void) -> PersistenceItem {
+        var copy = self
+        change(&copy)
+        return copy
     }
 }
 
@@ -232,9 +261,20 @@ public enum BTMParser {
         }
     }
 
-    public static func current(runner: CommandRunner = ProcessRunner()) -> [BTMRecord] {
-        guard let out = try? runner.run("/usr/bin/sfltool", ["dumpbtm"]) else { return [] }
-        return parse(out)
+    public static func current(runner: CommandRunner = ProcessRunner(timeout: 8)) -> [BTMRecord] {
+        currentWithNote(runner: runner).0
+    }
+
+    /// `sfltool dumpbtm` can stop answering (it may be waiting on an authorization request), so it gets
+    /// 8 seconds; when it doesn't answer, the note says login items and background tasks weren't checked.
+    public static func currentWithNote(runner: CommandRunner = ProcessRunner(timeout: 8)) -> ([BTMRecord], String?) {
+        do {
+            return (parse(try runner.run("/usr/bin/sfltool", ["dumpbtm"])), nil)
+        } catch CommandError.timedOut {
+            return ([], "sfltool didn't answer within 8 s, so login items and background tasks weren't checked this time.")
+        } catch {
+            return ([], "sfltool couldn't list login items and background tasks (\(error)).")
+        }
     }
 }
 
@@ -360,7 +400,9 @@ public enum PersistenceScanner {
     /// Everything, from the real Mac. No root needed.
     public static func current(runner: CommandRunner = ProcessRunner()) -> [PersistenceItem] {
         let cron = try? runner.run("/usr/bin/crontab", ["-l"])
-        return scan(.current, btm: BTMParser.current(runner: runner), cron: cron)
+        let (btm, note) = BTMParser.currentWithNote()
+        if let note { FileHandle.standardError.write(Data("macx: \(note)\n".utf8)) }
+        return scan(.current, btm: btm, cron: cron) + OtherPersistence.scan(.current)
     }
 }
 
@@ -400,11 +442,30 @@ public enum PersistenceRules {
                     add("hidden-support-folder", .medium, "Hidden folder in your Application Support")
                 }
                 continue
-            case .shellStartup, .cron:
+            case .shellStartup, .cron, .periodicScript:
+                if item.kind == .periodicScript {
+                    add("periodic-script", .medium, "A script that runs as root every day, week or month (rarely added by apps)")
+                }
                 for p in CommandPatterns.match(item.detail ?? item.label ?? "").sorted(by: { $0.rawValue < $1.rawValue }) {
                     add(p.rawValue, .high, "\(item.kind.label): \(p.title)")
                 }
-                if item.kind == .shellStartup { continue }
+                if item.kind != .cron { continue }
+            case .authorizationPlugin:
+                add("authorization-plugin", .high, "A plugin that runs at login and can see your password")
+                continue
+            case .sudoersFile:
+                add("sudoers-file", .medium, "Changes who can use sudo, or how (contents need root to read)")
+                continue
+            case .pamModule:
+                add("non-apple-pam-module", .high, "A login module that isn't one of macOS's own (it sees passwords)")
+                continue
+            case .atJob:
+                add("at-job", .low, "A one-off scheduled job")
+                continue
+            case .loginHook:
+                add("login-hook", .high, "A login or logout hook (old mechanism, runs as root; rarely used except by malware)")
+            case .systemExtension, .kernelExtension, .browserExtension:
+                continue  // listed so the baseline can show new ones; not judged on their own
             default: break
             }
 
@@ -462,6 +523,9 @@ public enum PersistenceRules {
             }
 
             if item.unreadable { add("unreadable-plist", .medium, "Launch file can't be read as a property list") }
+            if let libs = item.injectedLibraries, !libs.isEmpty {
+                add("dyld-injection", .high, "Forces a library into the program (DYLD_* variables): \(libs.joined(separator: ", "))")
+            }
         }
         return out.sorted { $0.severity != $1.severity ? $0.severity > $1.severity : $0.item.path < $1.item.path }
     }
