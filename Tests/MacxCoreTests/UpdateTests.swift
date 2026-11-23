@@ -308,16 +308,16 @@ struct SigningIdentityTests {
 struct LocalSigningIdentityTests {
     @Test func fallsBackToTheLocalSelfSignedIdentityEvenIfUntrusted() {
         let out = """
-              1) 6A9E98E2DB2B5769430FC2B14C66198E187A076F "Macximesed Local Signing" (CSSMERR_TP_NOT_TRUSTED)
+              1) 0F1E2D3C4B5A69788796A5B4C3D2E1F00F1E2D3C "Macximesed Local Signing" (CSSMERR_TP_NOT_TRUSTED)
               2) 1111111111111111111111111111111111111111 "Macximesed Local Signing" (CSSMERR_TP_CERT_EXPIRED)
                  2 identities found
             """
-        #expect(SigningIdentity.parse(findIdentityOutput: out)?.hash == "6A9E98E2DB2B5769430FC2B14C66198E187A076F")
+        #expect(SigningIdentity.parse(findIdentityOutput: out)?.hash == "0F1E2D3C4B5A69788796A5B4C3D2E1F00F1E2D3C")
     }
 
     @Test func appleDevelopmentStillWins() {
         let out = """
-              1) 6A9E98E2DB2B5769430FC2B14C66198E187A076F "Macximesed Local Signing" (CSSMERR_TP_NOT_TRUSTED)
+              1) 0F1E2D3C4B5A69788796A5B4C3D2E1F00F1E2D3C "Macximesed Local Signing" (CSSMERR_TP_NOT_TRUSTED)
               2) A1B2C3D4E5F60718293A4B5C6D7E8F9012345678 "Apple Development: someone@example.com (ABCDE12345)"
             """
         #expect(SigningIdentity.parse(findIdentityOutput: out)?.hash == "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678")
