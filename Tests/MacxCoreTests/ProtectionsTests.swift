@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import MacxCore
@@ -65,5 +66,28 @@ struct FakeRunner: CommandRunner {
     func run(_ executable: String, _ arguments: [String]) throws -> String {
         guard let out = outputs[executable] else { throw CommandError.failed(executable, 1) }
         return out
+    }
+}
+
+@Suite("Time limits on system tools")
+struct ToolTimeoutTests {
+    @Test func runGivesUpOnAToolThatNeverFinishes() {
+        let start = Date()
+        #expect(throws: CommandError.timedOut("/bin/sleep")) {
+            try ProcessRunner(timeout: 0.5).run("/bin/sleep", ["30"])
+        }
+        #expect(Date().timeIntervalSince(start) < 5)
+    }
+
+    @Test func captureGivesUpToo() {
+        let start = Date()
+        let r = ProcessRunner.capture("/bin/sleep", ["30"], timeout: 0.5)
+        #expect(r == nil)
+        #expect(Date().timeIntervalSince(start) < 5)
+    }
+
+    @Test func fastToolsStillWork() throws {
+        #expect(try ProcessRunner(timeout: 5).run("/bin/echo", ["hi"]) == "hi\n")
+        #expect(ProcessRunner.capture("/bin/echo", ["hi"], timeout: 5)?.stdout == "hi\n")
     }
 }

@@ -102,5 +102,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **Hang:** a system tool that never finishes no longer hangs macx. Every tool macx runs now has a time limit (30 s by default) and an empty stdin, and a tool that runs out of time counts as unavailable. On CI, `macx persist` waited forever on a tool, most likely `sfltool dumpbtm` waiting for an authorization prompt on a headless Mac.
+- **CI smoke test:** each command is labelled and capped at 2 minutes, so a hang names itself instead of using up the job's time limit.
 - Errors are printed without the usage text underneath.
 - Apps in folders whose names contain dots (for example `Cisco Packet Tracer 9.0.1/`) are found.
