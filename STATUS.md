@@ -6,6 +6,7 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 
 ## Now
 - [ ] **Run `sudo scripts/eval/runtime.sh`** on a real Mac (needs root + Full Disk Access for macx). It measures detection, alert and freeze delay, work done before the freeze, child freezing and overhead, and checks the eslogger parser against real output.
+- [ ] **Network watching** (`nettop`/`lsof` polling): not built. Test first how many short connections a poll misses.
 - [ ] **Configuration profiles** in `persist` (needs root to list).
 - [ ] **`sfltool dumpbtm` stopped answering on this Mac on 2026-11-23** (it answered earlier that day). Find out whether it's waiting for an authorization prompt.
 - [ ] **Signed hash feed** on GitHub Pages (the channel is there now: add a `hashFeed` entry to it), checked offline by `macx check` and `macx watch`.

@@ -90,6 +90,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - **Wider persistence coverage in `macx persist`.**
   - **Flagged:** authorization plugins (high), login and logout hooks (high), non-Apple PAM modules (high), `DYLD_*` library injection in launch plists (high), periodic and `.local` scripts (medium, also scanned for patterns), sudoers.d files (medium) and `at` jobs (low).
   - **Listed for the baseline:** app extensions (`pluginkit`, non-Apple only), system extensions, kernel extensions, and Chrome-family and Firefox-family browser extensions.
+- **Benign persistence suite:** 10 launch items modelled on common legitimate software, each with its real kind of signature. No high or critical findings allowed. The one known medium is Homebrew's ad-hoc signed services.
+- **eslogger benchmark** in `scripts/eval/runtime.sh`: CPU, memory and events per second with macx's events, and with `open` added.
+- **Decision log** in the research brief: the final Extreme decision, and network polling marked as not built yet.
 
 ### Changed
 - **No more guessing from names.**
@@ -119,6 +122,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **zsh paste guard:** a flagged command now needs a typed `RUN`. Pressing Enter a second time no longer runs it.
 - **`sfltool` hang:** `sfltool dumpbtm` can stop answering. It now gets 8 seconds, and `persist` says that login items and background tasks weren't checked, instead of waiting 30 seconds or longer.
 - **`macx apps` speed:** it uses the bundle size Spotlight already recorded, and only walks the files when Spotlight has none. It had run past CI's 2-minute cap on a runner with several 10 GB Xcode installs. Locally it went from 3 s to 0.8 s.
 - **CI smoke step:** it now turns off `bash -e`, so a command expected to exit non-zero (like `guard check` on a bad command, exit 3) is counted as a pass, not treated as fatal.

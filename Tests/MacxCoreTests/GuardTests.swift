@@ -134,3 +134,17 @@ struct GuardHookTests {
         #expect(r?.status == 0, "\(r?.stderr ?? "")")
     }
 }
+
+@Suite("zsh hook confirmation")
+struct GuardHookConfirmationTests {
+    @Test func dangerousCommandsNeedATypedRUNNotASecondEnter() throws {
+        let tmp = try TempDir()
+        let hook = GuardHook(home: tmp.url, macxPath: "/usr/local/bin/macx")
+        try hook.install()
+        let script = try String(contentsOf: hook.script, encoding: .utf8)
+        #expect(script.contains("Type RUN to run it anyway"))
+        #expect(script.contains("[[ \"$reply\" == \"RUN\" ]]"))
+        #expect(!script.contains("Press Enter again"))
+        #expect(!script.contains("_macx_guard_confirmed"))
+    }
+}

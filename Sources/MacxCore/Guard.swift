@@ -233,30 +233,36 @@ public struct GuardHook: Sendable {
         # Macximesed paste guard. Installed by `macx guard install`, removed by `macx guard uninstall`.
         # Before a command runs, macx checks it for download-and-run, hidden base64 code, quarantine
         # stripping and password prompts. A command that downloads code to run is sent to `macx guard inspect`,
-        # which reads the script first. Any other flagged command is stopped once; press Enter again to run it.
+        # which reads the script first. Any other flagged command only runs if you type RUN; Enter alone never runs it.
         [[ -o interactive ]] || return 0
         _macx_guard_bin=\(shellQuote(macxPath))
-        typeset -g _macx_guard_confirmed=""
 
         _macx_guard_accept_line() {
-          if [[ -n "$BUFFER" && "$BUFFER" != "$_macx_guard_confirmed" && -x "$_macx_guard_bin" ]]; then
+          if [[ -n "$BUFFER" && -x "$_macx_guard_bin" ]]; then
             local out
             out=$(MACX_OWN_RESPONSIBILITY=0 "$_macx_guard_bin" guard check --short -- "$BUFFER" 2>/dev/null)
             local code=$?
             if [[ $code -eq 3 ]]; then
               # It downloads code to run: read it first instead. The original never runs directly.
               BUFFER="${(q)_macx_guard_bin} guard inspect -- ${(q)BUFFER}"
-              _macx_guard_confirmed=""
               zle .accept-line
               return 0
             fi
             if [[ $code -eq 2 ]]; then
-              _macx_guard_confirmed="$BUFFER"
-              zle -M "$out"$'\\n''Press Enter again to run it anyway, or edit it.'
+              # Show why, then ask for a typed RUN on the terminal. Anything else (or Enter) cancels and keeps the line.
+              zle -I
+              print -r -- "$out"
+              local reply=""
+              read -r "reply?Type RUN to run it anyway (anything else cancels): " < /dev/tty
+              if [[ "$reply" == "RUN" ]]; then
+                zle .accept-line
+              else
+                print -r -- "Not run. The command is still on the line so you can edit it."
+                zle reset-prompt
+              fi
               return 0
             fi
           fi
-          _macx_guard_confirmed=""
           zle .accept-line
         }
         zle -N accept-line _macx_guard_accept_line

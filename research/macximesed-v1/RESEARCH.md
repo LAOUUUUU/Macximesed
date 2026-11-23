@@ -1,7 +1,16 @@
 # Research: Macximesed v1 — optimizer + behaviour watcher for macOS
 **Date:** 2026-11-23
-**Status:** Complete, waiting for Lao's approval
+**Status:** Approved and being built. Read the decision log first: some early findings were changed by later rounds.
 **Researcher:** Claude Code
+
+## Decision log (what's current)
+This brief was written in three rounds on 2026-11-23, and later rounds changed earlier answers. Where they disagree, this list wins.
+
+1. **Deleting apps on the sealed system volume (Chess, Stocks…):** the first round said *not in any tier*, because it needs SIP off and updates bring the apps back. The second round **replaced** that with the **Extreme** level, at Lao's request. Extreme is off by default, is the last step built, and needs the user to turn SIP and authenticated-root off in Recovery themselves. While SIP is off, every command warns that the antivirus side is weaker. It's best done on a freshly installed Mac. The sentence in *Added 2026-11-23* that says "Not in any tier" is superseded.
+2. **Order:** the antivirus side (steps 4, 5, 6 and 9) was built before performance (steps 7 and 8), at Lao's request.
+3. **Network watching (`nettop`/`lsof` polling): planned, not built.** eslogger has no connect event, and polling can miss connections shorter than the interval. It needs a test before it's relied on: open and close short connections at known rates and count how many a poll sees.
+4. **Payload inspection** (download, inspect, run the exact copy) is its own milestone: `macx guard inspect`. It checks the SHA-256 again before running, and feeds pipe-form scripts on stdin.
+5. **Paste guard confirmation:** a flagged command needs a typed `RUN`. Pressing Enter twice is no longer enough.
 
 ## Question
 How should we build a macOS 27 tool that (1) frees space and background resources in three risk tiers and (2) watches for stealer-style malware (AMOS) better than XProtect does, using only what an unsigned, personal build can do?
@@ -121,7 +130,7 @@ A typical 2026 AMOS infection starts with a pasted `echo <base64> | base64 -D | 
      - The same triple confirmation, plus a banner on every `macx` command while SIP is off, saying the antivirus half is weaker.
      - **Best done on a freshly installed Mac.**
 2. **`macx`** CLI (ArgumentParser 1.8.2): `macx apps [--unused] [--remove <app>]`, `macx boost [on|off|status]`, `macx top`, `macx scan`, `macx persist [--baseline|--diff]`, `macx check <file>`, `macx clean [--tier safe|medium|risky] [--dry-run]`, `macx undo <id>`, `macx watch` (runs eslogger in the foreground, needs sudo + FDA for the terminal).
-3. **`macxd`** root daemon (installed later by the app via SMAppService): runs `eslogger exec fork create rename deleteextattr setextattr open btm_launch_item_add tcc_modify gatekeeper_user_override sudo authentication`, feeds the rule engine, polls BTM every 60 s, and watches network with `nettop`/`lsof` polling for the flagged processes. It sends alerts to the app over XPC. A confirmed-bad process can be suspended (SIGSTOP) while you decide.
+3. **`macxd`** root daemon (installed later by the app via SMAppService): runs `eslogger exec fork create rename deleteextattr setextattr open btm_launch_item_add tcc_modify gatekeeper_user_override sudo authentication`, feeds the rule engine, polls BTM every 60 s, and would watch network with `nettop`/`lsof` polling for the flagged processes. **Not built yet; see the decision log.** It sends alerts to the app over XPC. A confirmed-bad process can be suspended (SIGSTOP) while you decide.
 4. **Macximesed.app** menu bar (SwiftUI, phase 2): status, alerts with Kill / Allow / Trash-and-undo actions, scan, cleanup with tiers.
 
 **Honest limits:** this does not replace XProtect (keep it on). It also can't block before something runs without Apple's entitlement, so it catches things *at or right after* they happen and stops them. For AMOS that is still before the theft finishes: the fake password prompt, the quarantine strip and the persistence write all come first.

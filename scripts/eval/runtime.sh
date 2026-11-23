@@ -170,6 +170,38 @@ import json,collections,sys
 c=collections.Counter(json.loads(l)['rule'] for l in open('$LOG'))
 print(', '.join(f'{k} ×{v}' for k,v in c.most_common()))" 2>/dev/null)
 
+# Benchmark: eslogger alone, with macx's event set and then with `open` added, under the same file load.
+# Measures CPU, memory and how many events per second each produces (open is what makes it heavy).
+LOADDIR="$WORK/load"; mkdir -p "$LOADDIR"; for i in $(seq 1 200); do echo "$i" > "$LOADDIR/f$i"; done
+load() { local end=$((SECONDS + 20)); while [ $SECONDS -lt $end ]; do cat "$LOADDIR"/f* > /dev/null; /bin/ls "$LOADDIR" > /dev/null; done; }
+bench() {
+  local label=$1; shift
+  set -m
+  /usr/bin/eslogger "$@" > "$WORK/bench.jsonl" 2>/dev/null &
+  local ES_PID=$!
+  set +m
+  sleep 2
+  : > "$WORK/bench-cpu.txt"
+  ( while kill -0 $ES_PID 2>/dev/null; do ps -o %cpu=,rss= -p $ES_PID >> "$WORK/bench-cpu.txt"; sleep 1; done ) &
+  local SAMP=$!
+  local before; before=$(wc -l < "$WORK/bench.jsonl")
+  load
+  local after; after=$(wc -l < "$WORK/bench.jsonl")
+  kill $ES_PID 2>/dev/null; kill $SAMP 2>/dev/null; wait $ES_PID 2>/dev/null
+  /usr/bin/python3 -I - "$WORK/bench-cpu.txt" "$label" $((after - before)) <<'PY'
+import sys
+rows = [l.split() for l in open(sys.argv[1]) if len(l.split()) == 2]
+cpu = [float(r[0]) for r in rows]; rss = [int(r[1]) for r in rows]
+n = int(sys.argv[3])
+print(f"| {sys.argv[2]} | {sum(cpu)/len(cpu) if cpu else 0:.1f}% (peak {max(cpu, default=0):.1f}%) | {max(rss, default=0)/1024:.0f} MB | {n/20:.0f} |")
+PY
+}
+echo "Benchmarking eslogger (20 s each)…"
+kill "$SAMPLER" 2>/dev/null
+BENCH="$(bench "macx's events (exec, create, rename, deleteextattr, btm_launch_item_add)" exec create rename deleteextattr btm_launch_item_add)
+$(bench "the same plus open" exec create rename deleteextattr btm_launch_item_add open)"
+echo "$BENCH"
+
 mkdir -p "$(dirname "$OUT")"
 {
   echo "# Runtime evaluation: macx watch --suspend"
@@ -191,6 +223,14 @@ mkdir -p "$(dirname "$OUT")"
   echo "| Period | CPU | Peak memory |"
   echo "|---|---|---|"
   echo "$stats"
+  echo
+  echo "## eslogger benchmark (same file load: repeatedly reading 200 small files for 20 s)"
+  echo
+  echo "| Events | eslogger CPU | Peak memory | Events per second |"
+  echo "|---|---|---|---|"
+  echo "$BENCH"
+  echo
+  echo "$ALERTS log records so far. \`open\` is left out of \`macx watch\` because of the difference above."
   echo
   echo "## Everything logged during the run"
   echo
