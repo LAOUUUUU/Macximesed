@@ -136,8 +136,29 @@ struct PAMIncludeTests {
         struct Stuck: CommandRunner {
             func run(_ executable: String, _ arguments: [String]) throws -> String { throw CommandError.timedOut(executable) }
         }
-        let (records, note) = BTMParser.currentWithNote(runner: Stuck())
+        let (records, note) = BTMParser.currentWithNote(runner: Stuck(), isRoot: true)
         #expect(records.isEmpty)
         #expect(note?.contains("didn't answer") == true)
+    }
+
+    /// Without root, sfltool puts up an admin-password dialog (system.privilege.admin) and waits for it,
+    /// forever on a Mac with nobody at the screen. So macx never runs it without root.
+    @Test func btmIsNotRunWithoutRoot() {
+        final class Recorder: CommandRunner, @unchecked Sendable {
+            var calls: [String] = []
+            func run(_ executable: String, _ arguments: [String]) throws -> String {
+                calls.append(executable)
+                return ""
+            }
+        }
+        let r = Recorder()
+        let (records, note) = BTMParser.currentWithNote(runner: r, isRoot: false)
+        #expect(r.calls.isEmpty)
+        #expect(records.isEmpty)
+        #expect(note?.contains("sudo") == true)
+
+        let (_, rootNote) = BTMParser.currentWithNote(runner: r, isRoot: true)
+        #expect(r.calls == ["/usr/bin/sfltool"])
+        #expect(rootNote == nil)
     }
 }

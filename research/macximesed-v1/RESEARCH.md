@@ -11,6 +11,7 @@ This brief was written in three rounds on 2026-11-23, and later rounds changed e
 3. **Network watching (`nettop`/`lsof` polling): planned, not built.** eslogger has no connect event, and polling can miss connections shorter than the interval. It needs a test before it's relied on: open and close short connections at known rates and count how many a poll sees.
 4. **Payload inspection** (download, inspect, run the exact copy) is its own milestone: `macx guard inspect`. It checks the SHA-256 again before running, and feeds pipe-form scripts on stdin.
 5. **Paste guard confirmation:** a flagged command needs a typed `RUN`. Pressing Enter twice is no longer enough.
+6. **`sfltool dumpbtm` only as root** (2026-11-23): without root it requests `system.privilege.admin` through SecurityAgent and blocks on the dialog (seen with `sample` on a CI runner: stuck in `AuthorizationCopyRights`). As root it returns at once. The BTM store in `/private/var/db/com.apple.backgroundtaskmanagement` needs Full Disk Access, so it isn't a way around this.
 
 ## Question
 How should we build a macOS 27 tool that (1) frees space and background resources in three risk tiers and (2) watches for stealer-style malware (AMOS) better than XProtect does, using only what an unsigned, personal build can do?

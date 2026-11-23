@@ -265,9 +265,16 @@ public enum BTMParser {
         currentWithNote(runner: runner).0
     }
 
-    /// `sfltool dumpbtm` can stop answering (it may be waiting on an authorization request), so it gets
-    /// 8 seconds; when it doesn't answer, the note says login items and background tasks weren't checked.
-    public static func currentWithNote(runner: CommandRunner = ProcessRunner(timeout: 8)) -> ([BTMRecord], String?) {
+    /// `sfltool dumpbtm` asks for the `system.privilege.admin` right before it dumps anything. Without root
+    /// that puts up an admin-password dialog and waits on it: a few seconds with Touch ID, forever on a Mac
+    /// with nobody at the screen (CI), and the dialogs queue when several run at once. As root it answers
+    /// straight away with no dialog. So it only runs as root; the 8 s limit stays as a guard.
+    public static func currentWithNote(
+        runner: CommandRunner = ProcessRunner(timeout: 8), isRoot: Bool = geteuid() == 0
+    ) -> ([BTMRecord], String?) {
+        guard isRoot else {
+            return ([], "login items and background tasks need sudo (sfltool asks for an admin password otherwise): sudo macx persist")
+        }
         do {
             return (parse(try runner.run("/usr/bin/sfltool", ["dumpbtm"])), nil)
         } catch CommandError.timedOut {
@@ -397,7 +404,7 @@ public enum PersistenceScanner {
         }
     }
 
-    /// Everything, from the real Mac. No root needed.
+    /// Everything, from the real Mac. Login items and background tasks need root; the rest doesn't.
     public static func current(runner: CommandRunner = ProcessRunner()) -> [PersistenceItem] {
         let cron = try? runner.run("/usr/bin/crontab", ["-l"])
         let (btm, note) = BTMParser.currentWithNote()

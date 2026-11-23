@@ -11,7 +11,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [ ] **B. Runs in the background** without a terminal open: a launchd daemon running `macx watch`, with a way to see alerts. This depends on solving Full Disk Access below; a launchd daemon is one of the untried routes.
 - [x] **C. Network watching** for flagged processes (2026-11-23): libproc polling every 20 ms, `macx net`; miss rate in [research/evaluation/network-results.md](research/evaluation/network-results.md).
 - [ ] **D. Configuration profiles** in the persistence checks (root: done inside the daemon or `sudo macx persist`).
-- [ ] **E. `sfltool` stall understood**, or login items read another way.
+- [x] **E. `sfltool` stall understood** (2026-11-23): without root it asks for an admin password (`system.privilege.admin`) and waits on the dialog; as root it answers at once. It now runs only as root. Reading the BTM file directly is no better: its folder needs Full Disk Access.
 - [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
 
 - [ ] **(Needed for B) Full Disk Access for macx itself is unsolved on macOS 27.0.1.** Tried 2026-11-23, all refused by eslogger ("responsible process needs TCC Full Disk Access") even with the switch on in Settings:

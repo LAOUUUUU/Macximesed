@@ -87,6 +87,9 @@ jobs:
           step 0 undo list
           step 0 incident
           $M watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl | grep -q 'Replayed 3 events: 4 alerts' || { echo "::error::replay didn't find the 4 alerts"; FAILED=1; }
+          # As root, sfltool answers without a password dialog; it must not time out.
+          sudo MACX_NO_UPDATE_CHECK=1 perl -e 'alarm shift; exec @ARGV' 120 "$M" persist --all --min-severity info > /dev/null 2> persist-root.err
+          if grep -q "didn't answer\|need sudo" persist-root.err; then echo "::error::sudo macx persist: $(cat persist-root.err)"; FAILED=1; else echo "ok: sudo macx persist read login items"; fi
           MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself' || { echo "::error::responsibility re-exec didn't take"; FAILED=1; }
           exit $FAILED
 

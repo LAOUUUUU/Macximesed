@@ -128,6 +128,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **`sfltool` stall explained and fixed.** Without root, `sfltool dumpbtm` asks for the `system.privilege.admin` right, which puts up an admin-password dialog and waits for it. That's a few seconds when Touch ID answers, forever on CI where nobody can, and the dialogs queue when several run at once (5 at once: the last waited 13 s). As root it answers at once with no dialog. `macx persist` now reads login items and background tasks only under `sudo` and says so otherwise, which also makes it faster without sudo (2.7 s down to 0.95 s).
 - **zsh paste guard:** a flagged command now needs a typed `RUN`. Pressing Enter a second time no longer runs it.
 - **`sfltool` hang:** `sfltool dumpbtm` can stop answering. It now gets 8 seconds, and `persist` says that login items and background tasks weren't checked, instead of waiting 30 seconds or longer.
 - **`macx apps` speed:** it uses the bundle size Spotlight already recorded, and only walks the files when Spotlight has none. It had run past CI's 2-minute cap on a runner with several 10 GB Xcode installs. Locally it went from 3 s to 0.8 s.
