@@ -1,0 +1,27 @@
+name: Diagnose profiles (temporary)
+on:
+  push:
+    paths: [".github/workflows/diag-profiles.yml"]
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: macos-15
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Before
+        run: |
+          set +e
+          sudo profiles show -all -output stdout-xml
+          profiles status -type enrollment
+      - name: Try to install the harmless test profile
+        run: |
+          set +e
+          sudo profiles install -path Tests/Fixtures/test-profile.mobileconfig; echo "install exit $?"
+          sudo /usr/libexec/mdmclient InstallProfile 2>&1 | head -3
+          sudo profiles show -all -output stdout-xml | head -150
+          echo "=== list"; sudo profiles list -all -output stdout-xml | head -60
+          echo "=== user, no root"; profiles show -output stdout-xml | head -20
+          echo "=== system_profiler"; system_profiler SPConfigurationProfileDataType -xml 2>/dev/null | head -80
+          sudo profiles remove -identifier io.github.laouuuuu.macximesed.testprofile -forced; echo "remove exit $?"
