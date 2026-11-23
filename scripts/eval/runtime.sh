@@ -22,8 +22,9 @@ MACX="${1:-$UHOME/.local/bin/macx}"
 OUT="${2:-$ROOT/research/evaluation/runtime-results.md}"
 [ -x "$MACX" ] || { echo "No macx at $MACX (install it with scripts/install.sh)"; exit 1; }
 
-WORK=$(mktemp -d)
-chmod 755 "$WORK"
+# A work folder the simulations (running as you) can use: root's own temp folder isn't reachable by your account.
+WORK=$(mktemp -d /private/tmp/macx-eval.XXXXXX)
+chown "$U" "$WORK"; chmod 755 "$WORK"
 LOG="$WORK/alerts.jsonl"
 SAMPLES="$WORK/cpu.txt"
 as_user() { sudo -u "$U" HOME="$UHOME" "$@"; }
@@ -34,6 +35,7 @@ cleanup() {
   pkill -f "macx-sim-" 2>/dev/null
   rm -f "$UHOME/Library/LaunchAgents/com.macx-sim.test.plist"
   rmdir "$UHOME/Library/Application Support/.com.apple.macx-sim" 2>/dev/null
+  [ -f "$WORK/watch.out" ] && cp "$WORK/watch.out" "$(dirname "$OUT")/runtime-watch-output.txt" 2>/dev/null
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -49,7 +51,17 @@ for _ in $(seq 1 50); do grep -q "Watching" "$WORK/watch.out" 2>/dev/null && bre
 if ! grep -q "Watching" "$WORK/watch.out"; then
   echo "macx watch didn't start:"; cat "$WORK/watch.out"; exit 1
 fi
-sleep 2  # let eslogger settle
+sleep 3  # let eslogger settle
+# eslogger refuses to start without Full Disk Access; the watcher then exits. Stop here with its message.
+if ! kill -0 "$WATCH" 2>/dev/null || grep -q "eslogger stopped" "$WORK/watch.out"; then
+  echo
+  echo "macx watch stopped straight away. Its output:"
+  sed 's/^/  /' "$WORK/watch.out"
+  echo
+  echo "Most likely eslogger has no Full Disk Access. Give it to the installed macx (not Terminal):"
+  echo "  $MACX privacy --open   → +  → Cmd-Shift-G → $MACX → switch it on. Then run this again."
+  exit 1
+fi
 
 ES=$(pgrep -P "$WATCH" eslogger || pgrep -x eslogger | head -1)
 MACXPID=$(pgrep -f "$MACX watch" | tail -1)
@@ -59,7 +71,8 @@ SAMPLER=$!
 
 echo "Idle for 15 s (baseline CPU)…"
 sleep 15
-IDLE_LINES=$(wc -l < "$SAMPLES" | tr -d ' ')
+IDLE_LINES=$(wc -l < "$SAMPLES" 2>/dev/null | tr -d ' ')
+IDLE_LINES=${IDLE_LINES:-0}
 
 RESULTS=""
 # result row: name | expected rule | alert? | ms to alert | ms alert->frozen | ops before frozen | children frozen?
