@@ -2,7 +2,7 @@
 
 Squeeze more speed out of macOS and catch stealer-style malware (like AMOS, the Atomic macOS Stealer) that XProtect misses.
 
-> **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps`, `macx persist` and `macx undo` exist so far. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
+> **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps`, `macx check`, `macx persist`, `macx privacy` and `macx undo` exist so far. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
 
 ## What it will do
 - **Speed:** clean caches and leftovers, remove apps you don't use, a Boost mode that pushes background work aside for the app you're using, a heat/throttle view, and game profiles.
@@ -55,6 +55,7 @@ swift build -c release
 | `macx apps [--unused [--days 90]] [--intel] [--sort size\|name\|used]` | Lists every app on the Mac, wherever it is, with its size, architecture, when it was last opened, and its folder. | No |
 | `macx apps remove NAME\|BUNDLE-ID [--include-name-matches] [-y]` | Moves the app and its Library leftovers, matched by exact bundle ID (support files, caches, preferences, saved state, containers, launch agents), into the undo folder. Folders that only match the app's name are listed, and moved only with `--include-name-matches`. Refuses apps that are running, built into macOS, or built-in Apple apps. Apple's App Store apps (GarageBand, iMovie, Pages…) are allowed. Root-owned apps need `sudo`. | Sometimes |
 | `macx apps leftovers [--remove ID ...] [-y]` | Lists files named after a bundle ID that no app or helper on this Mac has, skipping app-group IDs and empty items. Can move chosen groups to the undo folder. | No |
+| `macx check FILE ... [--online]` | Checks a download before you open it: app, `.pkg`, `.dmg`, script, compiled AppleScript or any file. Shows the signature, Gatekeeper's decision, who downloaded it and when, the SHA-256, and what it would set up to run by itself. It reads scripts, package install scripts and the files inside disk images (mounted read-only and hidden, then ejected) for download-and-run, base64-hidden code (decoded and shown), quarantine stripping and password prompts. Verdict: *Looks OK*, *Be careful* or *DON'T OPEN THIS* (exit code 2). `--online` looks the SHA-256 up on abuse.ch MalwareBazaar, sending only the hash and using your key in `MACX_MALWAREBAZAAR_KEY`. | No |
 | `macx persist [--all] [--min-severity low]` | Finds everything set to start by itself and flags what looks like malware. It reads launch daemons and agents (system and yours), login items and background tasks (from `sfltool dumpbtm`), cron, shell startup files, and hidden folders in Application Support. Read-only. | No |
 | `macx persist --baseline` / `--diff` | Saves what's there now, then later shows what was added, removed or changed since, with findings for the new items. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |

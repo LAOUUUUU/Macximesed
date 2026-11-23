@@ -60,6 +60,7 @@ jobs:
           $M apps leftovers
           $M persist --all --min-severity info
           $M privacy
+          $M check /System/Applications/Calculator.app
           MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself'
           $M undo list
 

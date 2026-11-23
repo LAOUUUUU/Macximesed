@@ -47,6 +47,11 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
   - issue forms for bugs, detection reports and feature requests, with security reports sent to private reporting;
   - a pull request template;
   - `.editorconfig`.
+- `macx check`: checks downloads before you open them.
+  - **What it reports:** signature (Security framework), Gatekeeper's decision (`spctl`), the quarantine flag (who downloaded it and when), SHA-256, and what the file sets up to run (embedded launch daemons and agents, login items, system extensions, privileged helpers, package install scripts).
+  - **Content scan:** scripts, package scripts, compiled AppleScript and the files inside disk images are scanned for stealer patterns, and base64 payloads are decoded and shown.
+  - **Disk images** are mounted read-only and hidden with `diskutil image attach`, falling back to `hdiutil` on older macOS, then ejected.
+  - **Result:** one of three verdicts, with exit code 2 for dangerous. Optional `--online` MalwareBazaar lookup (hash only).
 
 ### Changed
 - **No more guessing from names.**
