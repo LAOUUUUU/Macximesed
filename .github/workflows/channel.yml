@@ -1,0 +1,90 @@
+name: Update channel
+
+# Builds, signs and publishes the update channel (channel/v1.json + .sig) to GitHub Pages.
+#  - Called by release.yml after a release, with that release's version and SHA-256.
+#  - Run by hand (Actions → Update channel → Run workflow) to raise or clear the security floor.
+# Signing happens in the protected `release` environment: it waits for Lao's approval, and the signing
+# key is that environment's secret and nowhere else.
+on:
+  workflow_call:
+    inputs:
+      version: { type: string, required: true }
+      sha256: { type: string, required: true }
+  workflow_dispatch:
+    inputs:
+      minimum_safe:
+        description: "Versions below this are unsafe and get updated automatically (empty = keep the current floor)"
+        required: false
+      reason:
+        description: "Why (shown to people when they're updated)"
+        required: false
+      advisory:
+        description: "Advisory link (optional)"
+        required: false
+      clear_floor:
+        description: "Remove the security floor"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-channel
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    name: Build and sign the channel
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build channel/v1.json
+        env:
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ inputs.sha256 }}
+          MINIMUM_SAFE: ${{ inputs.minimum_safe }}
+          REASON: ${{ inputs.reason }}
+          ADVISORY: ${{ inputs.advisory }}
+          CLEAR_FLOOR: ${{ inputs.clear_floor }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/channel
+          cp -R site/. out/
+          # The current published file, so the sequence goes up and the floor is kept.
+          curl -fsSL "https://laouuuuu.github.io/Macximesed/channel/v1.json" -o previous.json || echo '{}' > previous.json
+          args=(--previous previous.json --out out/channel/v1.json)
+          if [ -n "$VERSION" ]; then
+            args+=(--version "${VERSION#v}" --sha256 "$SHA256"
+                   --url "https://github.com/$REPO/releases/download/$VERSION/macx-$VERSION-macos-universal.tar.gz"
+                   --notes "https://github.com/$REPO/releases/tag/$VERSION")
+          fi
+          if [ -n "${MINIMUM_SAFE:-}" ]; then args+=(--minimum-safe "$MINIMUM_SAFE" --reason "$REASON"); fi
+          if [ -n "${ADVISORY:-}" ]; then args+=(--advisory "$ADVISORY"); fi
+          if [ "${CLEAR_FLOOR:-false}" = "true" ]; then args+=(--clear-floor); fi
+          python3 -I scripts/release/make-channel.py "${args[@]}"
+      - name: Sign
+        env:
+          MACX_UPDATE_SIGNING_KEY: ${{ secrets.MACX_UPDATE_SIGNING_KEY }}
+        run: scripts/release/sign-channel.sh out/channel/v1.json
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: out
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

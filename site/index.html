@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macximesed updates</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111113; --fg: #f5f5f7; --muted: #a1a1a6; --line: #2c2c2e; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  p, li { color: var(--muted); }
+  code { background: var(--line); padding: 1px 5px; border-radius: 4px; color: var(--fg); }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Macximesed update channel</h1>
+  <p>This site is what <code>macx</code> checks for updates. It holds one signed file,
+     <a href="channel/v1.json"><code>channel/v1.json</code></a>, with its Ed25519 signature,
+     <a href="channel/v1.json.sig"><code>v1.json.sig</code></a>.</p>
+  <ul>
+    <li>macx checks once a day and tells you when a new version is out. Updating is up to you.</li>
+    <li>If your version is marked unsafe (<code>minimumSafe</code>), macx updates itself before the next command.</li>
+    <li>Every file is signed in a protected release step. macx rejects anything with a bad signature, an older sequence number, or a download whose SHA-256 doesn't match.</li>
+  </ul>
+  <p>Source and releases: <a href="https://github.com/LAOUUUUU/Macximesed">github.com/LAOUUUUU/Macximesed</a></p>
+</main>
+</body>
+</html>

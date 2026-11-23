@@ -8,7 +8,7 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [ ] **Run `sudo scripts/eval/runtime.sh`** on a real Mac (needs root + Full Disk Access for macx). It measures detection, alert and freeze delay, work done before the freeze, child freezing and overhead, and checks the eslogger parser against real output.
 - [ ] **Incident response:** before stopping anything, copy the binary, plist, hashes, process tree and timeline into a case folder; add recovery (move the persistence item into the undo store) and a credential-rotation checklist.
 - [ ] **Wider persistence coverage:** app extensions (`pluginkit`), configuration profiles, authorization plugins, `periodic` and `at` jobs, sudoers.d and PAM, `DYLD_*` in launch plists, browser extensions.
-- [ ] **Signed hash feed** on GitHub Pages, checked offline by `macx check` and `macx watch`.
+- [ ] **Signed hash feed** on GitHub Pages (the channel is there now: add a `hashFeed` entry to it), checked offline by `macx check` and `macx watch`.
 
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
@@ -28,6 +28,7 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [x] **Paste inspection**, `macx guard inspect` plus disguise-undoing (2026-11-23): reads what a pasted link serves and runs only the inspected copy.
 - [x] **Fixes from review** (2026-11-23): unknowns never count as safe (new *partly unknown* verdict), combination scoring, SHA-256 checked again before running, pipe scripts fed on stdin, whole-tree suspend.
 - [x] **Static evaluation** (`scripts/eval/static.sh`): 17/17 simulated attacks flagged (12 dangerous), 0/11 real installers marked dangerous.
+- [x] **Auto-update** through a signed GitHub Pages channel with a forced security floor (2026-11-23). It goes live with the first release.
 - [x] **No privacy popups** and `macx privacy` (2026-11-23): guarded folders skipped without Full Disk Access; the installed binary owns its permissions.
 
 See [CHANGELOG.md](CHANGELOG.md) for details.

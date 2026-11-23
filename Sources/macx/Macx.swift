@@ -5,6 +5,7 @@ import MacxCore
 enum Entry {
     static func main() {
         Responsibility.becomeOwnResponsibleProcessIfNeeded()
+        UpdateCheck.runIfDue(arguments: Array(CommandLine.arguments.dropFirst()))
         Macx.main()
     }
 }
@@ -13,8 +14,10 @@ struct Macx: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "macx",
         abstract: "Macximesed: speed up macOS and watch for stealer-style malware.",
-        version: "0.1.0",
-        subcommands: [Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Privacy.self, Undo.self]
+        version: macxVersion,
+        subcommands: [
+            Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Privacy.self, Update.self, Undo.self,
+        ]
     )
 }
 

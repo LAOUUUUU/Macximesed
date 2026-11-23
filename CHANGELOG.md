@@ -73,6 +73,11 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
   - **Running it:** it runs the exact copy it inspected, saved owner-only. Dangerous results need you to type `RUN`.
   - **Hook:** the zsh hook now routes download-and-run commands to `inspect`, and `guard check` exits with 3 for them.
 - Disguised commands are now caught: split quoting, backslashes, `$'\x..'`, variables set earlier in the paste, `$(printf …)`, `echo … | rev`, and `echo "…" | sh`. Download-and-run is also found in its two-step form (`curl -o f URL && sh f`, `curl -O URL; ./f`).
+- **Updates through a signed channel on GitHub Pages** (`macx update [--check] [--notices on|off]`).
+  - **Daily check:** macx checks once a day and notifies. Below the signed security floor (`minimumSafe`) it updates itself before running the command.
+  - **Signing:** Ed25519 with the public key built into macx. Files carry a sequence number (no rollback) and a 90-day expiry (no replays).
+  - **Downloads:** each one must match the signed SHA-256, be Mach-O, be newer, and report the signed version. The swap is atomic, and `macx.previous` is kept.
+  - **Publishing:** `channel.yml` signs in the protected `release` environment (maintainer approval) and deploys to Pages. Releases call it automatically, and it can be run by hand to raise or clear the security floor.
 
 ### Changed
 - **No more guessing from names.**

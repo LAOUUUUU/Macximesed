@@ -1,0 +1,241 @@
+import CryptoKit
+import Foundation
+import Testing
+
+@testable import MacxCore
+
+// MARK: - Helpers
+
+struct TestSigner {
+    let key = Curve25519.Signing.PrivateKey()
+    var publicKey: Data { key.publicKey.rawRepresentation }
+
+    func sign(_ channel: UpdateChannel) throws -> (Data, Data) {
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        enc.outputFormatting = [.sortedKeys]
+        let json = try enc.encode(channel)
+        return (json, try key.signature(for: json))
+    }
+}
+
+func channel(sequence: Int = 5, latest: String = "0.3.0", minimumSafe: String? = nil, expires: Date = Date().addingTimeInterval(14 * 86400))
+    -> UpdateChannel
+{
+    UpdateChannel(
+        schema: 1, sequence: sequence, published: Date(), expires: expires,
+        latest: .init(version: latest, url: "https://github.com/x/y/releases/download/v\(latest)/macx.tar.gz", sha256: "abc", notes: nil),
+        minimumSafe: minimumSafe.map { .init(version: $0, reason: "a security bug", advisory: nil) })
+}
+
+// MARK: - Versions
+
+@Suite("Versions")
+struct SemVerTests {
+    @Test func comparesNumerically() throws {
+        #expect(try #require(SemVer("0.10.0")) > #require(SemVer("0.9.9")))
+        #expect(try #require(SemVer("1.0.0")) > #require(SemVer("0.99.99")))
+        #expect(try #require(SemVer("0.2.0")) == #require(SemVer("0.2.0")))
+        #expect(try #require(SemVer("v0.2.0")) == #require(SemVer("0.2.0")))
+    }
+
+    @Test func preReleasesSortBeforeTheRelease() throws {
+        #expect(try #require(SemVer("1.0.0-beta.2")) < #require(SemVer("1.0.0")))
+        #expect(try #require(SemVer("1.0.0-beta.2")) > #require(SemVer("1.0.0-beta.1")))
+    }
+
+    @Test func rejectsJunk() {
+        #expect(SemVer("") == nil)
+        #expect(SemVer("one.two") == nil)
+        #expect(SemVer("1.2") == nil)
+    }
+}
+
+// MARK: - Signature
+
+@Suite("Channel signature")
+struct ChannelSignatureTests {
+    @Test func verifiesWithTheRightKey() throws {
+        let s = TestSigner()
+        let (json, sig) = try s.sign(channel())
+        let c = try ChannelVerifier(publicKeys: [s.publicKey]).verify(json: json, signature: sig)
+        #expect(c.sequence == 5)
+        #expect(c.latest.version == "0.3.0")
+    }
+
+    @Test func rejectsAChangedFileAWrongKeyAndJunk() throws {
+        let s = TestSigner()
+        var (json, sig) = try s.sign(channel())
+        let v = ChannelVerifier(publicKeys: [s.publicKey])
+        json[json.count / 2] ^= 0x01
+        #expect(throws: UpdateError.badSignature) { try v.verify(json: json, signature: sig) }
+
+        (json, sig) = try s.sign(channel())
+        #expect(throws: UpdateError.badSignature) {
+            try ChannelVerifier(publicKeys: [TestSigner().publicKey]).verify(json: json, signature: sig)
+        }
+        #expect(throws: UpdateError.badSignature) { try v.verify(json: json, signature: Data()) }
+    }
+
+    @Test func anyListedKeyWorksForRotation() throws {
+        let old = TestSigner()
+        let new = TestSigner()
+        let (json, sig) = try new.sign(channel())
+        _ = try ChannelVerifier(publicKeys: [old.publicKey, new.publicKey]).verify(json: json, signature: sig)
+    }
+
+    @Test func theBuiltInKeyIsValid() throws {
+        #expect(UpdateKeys.trusted.count >= 1)
+        for k in UpdateKeys.trusted { _ = try Curve25519.Signing.PublicKey(rawRepresentation: k) }
+    }
+}
+
+// MARK: - Decisions
+
+@Suite("Update decisions")
+struct UpdateDecisionTests {
+    let installed = SemVer("0.2.0")!
+
+    @Test func upToDate() {
+        let d = UpdateDecision.decide(channel(latest: "0.2.0"), installed: installed, state: UpdateState(), now: Date())
+        #expect(d.action == .none)
+    }
+
+    @Test func newerVersionIsOnlyANotice() {
+        let d = UpdateDecision.decide(channel(latest: "0.3.0"), installed: installed, state: UpdateState(), now: Date())
+        #expect(d.action == .notify("0.3.0"))
+    }
+
+    @Test func belowTheSecurityFloorIsForced() {
+        let d = UpdateDecision.decide(
+            channel(latest: "0.3.0", minimumSafe: "0.2.1"), installed: installed, state: UpdateState(), now: Date())
+        #expect(d.action == .force("0.3.0", reason: "a security bug"))
+    }
+
+    @Test func atTheFloorIsNotForced() {
+        let d = UpdateDecision.decide(
+            channel(latest: "0.3.0", minimumSafe: "0.2.0"), installed: installed, state: UpdateState(), now: Date())
+        #expect(d.action == .notify("0.3.0"))
+    }
+
+    @Test func rollbackIsRejected() {
+        let d = UpdateDecision.decide(channel(sequence: 3), installed: installed, state: UpdateState(lastSequence: 4), now: Date())
+        #expect(d.action == .none)
+        #expect(d.warnings.contains { $0.contains("older") })
+    }
+
+    @Test func staleChannelWarnsAndNeverForces() {
+        let d = UpdateDecision.decide(
+            channel(latest: "0.3.0", minimumSafe: "0.2.1", expires: Date().addingTimeInterval(-86400)), installed: installed,
+            state: UpdateState(), now: Date())
+        #expect(d.action == .notify("0.3.0"))
+        #expect(d.warnings.contains { $0.contains("out of date") })
+    }
+
+    @Test func neverOffersAnOlderVersion() {
+        let d = UpdateDecision.decide(channel(latest: "0.1.0"), installed: installed, state: UpdateState(), now: Date())
+        #expect(d.action == .none)
+    }
+
+    @Test func checksAtMostOncePerDay() {
+        let now = Date()
+        #expect(UpdateState().isCheckDue(now: now))
+        #expect(!UpdateState(lastCheck: now.addingTimeInterval(-3600)).isCheckDue(now: now))
+        #expect(UpdateState(lastCheck: now.addingTimeInterval(-25 * 3600)).isCheckDue(now: now))
+    }
+
+    @Test func stateSurvivesSaveAndLoad() throws {
+        let tmp = try TempDir()
+        let f = tmp.url.appendingPathComponent("state.json")
+        let s = UpdateState(lastCheck: Date(timeIntervalSince1970: 1_800_000_000), lastSequence: 9, noticesOff: true)
+        try s.save(to: f)
+        #expect(UpdateState.load(from: f) == s)
+        #expect(UpdateState.load(from: tmp.url.appendingPathComponent("missing")) == UpdateState())
+    }
+}
+
+// MARK: - Installing
+
+@Suite("Installing an update")
+struct UpdateInstallTests {
+    func tarball(_ tmp: TempDir, name: String = "macx", from source: String = "/bin/ls") throws -> Data {
+        let dir = tmp.url.appendingPathComponent("pkg-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(atPath: source, toPath: dir.appendingPathComponent(name).path)
+        let tgz = tmp.url.appendingPathComponent("\(UUID().uuidString).tar.gz")
+        _ = try ProcessRunner().run("/usr/bin/tar", ["-czf", tgz.path, "-C", dir.path, name])
+        return try Data(contentsOf: tgz)
+    }
+
+    func installer(reports version: String?) -> UpdateInstaller {
+        UpdateInstaller(versionOf: { _ in version })
+    }
+
+    @Test func installsAtomicallyAndKeepsThePrevious() throws {
+        let tmp = try TempDir()
+        let target = try tmp.file("bin/macx", "old binary")
+        let data = try tarball(tmp)
+        try installer(reports: "0.3.0").install(data, sha256: sha256(data), version: "0.3.0", over: target, installed: SemVer("0.2.0")!)
+        #expect(try Data(contentsOf: target) == Data(contentsOf: URL(fileURLWithPath: "/bin/ls")))
+        #expect(try tmp.read("bin/macx.previous") == "old binary")
+        #expect(FileManager.default.isExecutableFile(atPath: target.path))
+    }
+
+    @Test func refusesAWrongHash() throws {
+        let tmp = try TempDir()
+        let target = try tmp.file("bin/macx", "old binary")
+        let data = try tarball(tmp)
+        #expect(throws: UpdateError.hashMismatch) {
+            try installer(reports: "0.3.0").install(
+                data, sha256: String(repeating: "0", count: 64), version: "0.3.0", over: target,
+                installed: SemVer("0.2.0")!)
+        }
+        #expect(try tmp.read("bin/macx") == "old binary")
+    }
+
+    @Test func refusesSomethingThatIsntAProgramNamedMacx() throws {
+        let tmp = try TempDir()
+        let target = try tmp.file("bin/macx", "old binary")
+        let script = try tmp.file("fake.sh", "#!/bin/sh\necho hi\n")
+        let notMachO = try tarball(tmp, from: script.path)
+        #expect(throws: UpdateError.notAProgram) {
+            try installer(reports: "0.3.0").install(
+                notMachO, sha256: sha256(notMachO), version: "0.3.0", over: target, installed: SemVer("0.2.0")!)
+        }
+        let wrongName = try tarball(tmp, name: "other")
+        #expect(throws: UpdateError.notAProgram) {
+            try installer(reports: "0.3.0").install(
+                wrongName, sha256: sha256(wrongName), version: "0.3.0", over: target, installed: SemVer("0.2.0")!)
+        }
+        #expect(try tmp.read("bin/macx") == "old binary")
+    }
+
+    @Test func refusesWhenTheNewBinarySaysADifferentVersionOrAnOlderOne() throws {
+        let tmp = try TempDir()
+        let target = try tmp.file("bin/macx", "old binary")
+        let data = try tarball(tmp)
+        #expect(throws: UpdateError.versionMismatch) {
+            try installer(reports: "0.2.5").install(data, sha256: sha256(data), version: "0.3.0", over: target, installed: SemVer("0.2.0")!)
+        }
+        #expect(throws: UpdateError.notNewer) {
+            try installer(reports: "0.1.0").install(data, sha256: sha256(data), version: "0.1.0", over: target, installed: SemVer("0.2.0")!)
+        }
+        #expect(try tmp.read("bin/macx") == "old binary")
+    }
+}
+
+@Suite("Channel file format")
+struct ChannelFormatTests {
+    @Test func readsWhatTheReleaseScriptWrites() throws {
+        // Byte-for-byte what scripts/release/make-channel.py writes (sorted keys, compact, whole-second UTC dates).
+        let json = Data(
+            #"{"expires":"2027-02-21T20:20:00Z","latest":{"sha256":"abc","url":"https://github.com/LAOUUUUU/Macximesed/releases/download/v0.2.0/macx-v0.2.0-macos-universal.tar.gz","version":"0.2.0"},"minimumSafe":{"reason":"test floor","version":"0.2.0"},"published":"2026-11-23T20:20:00Z","schema":1,"sequence":2}"#
+                .utf8)
+        let s = TestSigner()
+        let c = try ChannelVerifier(publicKeys: [s.publicKey]).verify(json: json, signature: try s.key.signature(for: json))
+        #expect(c.sequence == 2)
+        #expect(c.minimumSafe?.reason == "test floor")
+        #expect(c.latest.notes == nil)
+        #expect(c.expires > c.published)
+    }
+}

@@ -37,6 +37,18 @@ The installed macx counts as **its own app** for privacy permissions. Normally m
 
 The binary is ad-hoc signed, so each reinstall looks new to macOS. After updating, switch Full Disk Access off and on again.
 
+### Updates
+macx checks [the update channel](https://laouuuuu.github.io/Macximesed/) once a day and tells you when a new version is out. **Updating is up to you** (`macx update`), with one exception: if the signed channel says your version has a security problem (`minimumSafe`), macx updates itself before running your next command, and then carries on. If it can't (offline, say), it keeps working and keeps warning you. `macx update --notices off` turns off the "new version" message. The security check can't be turned off. `MACX_NO_UPDATE_CHECK=1` skips it entirely, for CI and tests.
+
+How it stays safe:
+- **One signed file.** The channel is a single file, signed with Ed25519. macx only accepts the public key built into it.
+- **The key is guarded.** The private key exists only as a secret of the repo's protected `release` environment, which needs the maintainer's approval for every signing.
+- **Replays don't work.** Each file has a sequence number, so macx rejects one older than any it has already seen. Each file also expires after 90 days, and an expired file can't force anything.
+- **Downloads are checked.** A download must match the signed SHA-256, be a Mach-O called `macx`, and report the signed version. It must also be newer than what's installed.
+- **Swaps are safe.** The new binary is swapped in atomically, and the old one is kept as `macx.previous`.
+
+macx is still ad-hoc signed, so macOS sees each update as a new program. If you gave macx Full Disk Access, switch it off and on again after an update.
+
 ## Build from source
 ```bash
 swift build -c release
@@ -66,6 +78,7 @@ swift build -c release
 | `sudo macx watch [--suspend] [--min-severity medium]` | **Live watch** through Apple's `eslogger`. It checks every program start, launch-item write, quarantine removal and new background item as it happens: pasted download-and-run or base64 commands (decoded), fake password prompts, `dscl -authonly` password checks (the password is masked), fake `com.apple.*` launch items and folders, and unsigned programs starting from hidden or temp folders. `--suspend` freezes (SIGSTOP) the process behind a critical alert. Alerts are saved to `~/Library/Logs/Macximesed/watch.jsonl`. Needs Full Disk Access for macx (see *Permissions*). | **Yes** |
 | `macx watch --replay FILE` | Runs the same rules over a saved eslogger JSON Lines file. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
+| `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
 | `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. This is the only command that really deletes, and it asks first. | No |

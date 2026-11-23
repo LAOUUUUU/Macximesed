@@ -16,18 +16,21 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    outputs:
+      sha256: ${{ steps.build.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check the tag matches macx --version
         run: |
           set -euo pipefail
           WANT="${GITHUB_REF_NAME#v}"
-          HAVE=$(grep -Eo 'version: "[^"]+"' Sources/macx/Macx.swift | cut -d'"' -f2)
+          HAVE=$(grep -Eo 'macxVersion = "[^"]+"' Sources/MacxCore/Update.swift | cut -d'"' -f2)
           echo "tag $WANT, code $HAVE"
           [ "$WANT" = "$HAVE" ]
       - name: Test
         run: swift test
       - name: Build universal binary
+        id: build
         run: |
           set -euo pipefail
           swift build -c release --arch arm64 --arch x86_64
@@ -39,6 +42,7 @@ jobs:
           tar -C dist -czf "$NAME" macx
           shasum -a 256 "$NAME" > "$NAME.sha256"
           echo "ASSET=$NAME" >> "$GITHUB_ENV"
+          echo "sha256=$(shasum -a 256 "$NAME" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Release notes from CHANGELOG.md
         run: |
           set -euo pipefail
@@ -62,3 +66,16 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" \
             --title "Macximesed $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+
+  channel:
+    name: Update channel
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/channel.yml
+    with:
+      version: ${{ github.ref_name }}
+      sha256: ${{ needs.release.outputs.sha256 }}
+    secrets: inherit
