@@ -11,6 +11,8 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [ ] **`sfltool dumpbtm` stopped answering on this Mac on 2026-11-23** (it answered earlier that day). Find out whether it's waiting for an authorization prompt.
 - [ ] **Signed hash feed** on GitHub Pages (the channel is there now: add a `hashFeed` entry to it), checked offline by `macx check` and `macx watch`.
 
+- [ ] **App bundle for Full Disk Access (moved up from step 11).** Tested 2026-11-23 on macOS 27.0.1: Full Disk Access granted to the bare, ad-hoc signed `~/.local/bin/macx` shows as on but is ignored (`macx privacy` stays "no"). macx has to live inside a `Macximesed.app` with a stable signature, and the app holds the permission. Until then, `sudo macx watch` needs the terminal app to have Full Disk Access, plus `MACX_OWN_RESPONSIBILITY=0`.
+
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
 - [ ] **8. Games**: per-game profiles (Boost, Rosetta check, Metal HUD), heat graph, best way to run (native, CrossOver, cloud).

@@ -35,6 +35,8 @@ Then click **+**, press Cmd-Shift-G, paste `~/.local/bin/macx`, and switch it on
 
 The installed macx counts as **its own app** for privacy permissions. Normally macOS credits a command-line tool's access to the terminal that started it. macx relaunches itself with `responsibility_spawnattrs_setdisclaim`, the call LLDB uses for the programs it debugs, so the permission belongs to macx, not to Terminal or your editor. Development builds in `.build/` don't do this. To force it either way, set `MACX_OWN_RESPONSIBILITY=0` or `=1`.
 
+**macOS 27 ignores Full Disk Access for the bare `macx` binary.** It shows in the list as on, but isn't honoured, which matches a report about macOS 26.1 and later. Until macx ships as an app bundle, give Full Disk Access to your terminal app instead, and run macx with `MACX_OWN_RESPONSIBILITY=0` so the terminal's access applies (for example `sudo MACX_OWN_RESPONSIBILITY=0 macx watch`).
+
 The binary is ad-hoc signed, so each reinstall looks new to macOS. After updating, switch Full Disk Access off and on again.
 
 ### Updates
