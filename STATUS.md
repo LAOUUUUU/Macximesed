@@ -5,7 +5,10 @@ The job list: what is being built now and what comes next. Finished work moves t
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
 ## Now
-- [ ] **Try `sudo macx watch` on a real Mac** for a few minutes and check its alerts against real eslogger output (the parser was built from Apple's header field names).
+- [ ] **Run `sudo scripts/eval/runtime.sh`** on a real Mac (needs root + Full Disk Access for macx). It measures detection, alert and freeze delay, work done before the freeze, child freezing and overhead, and checks the eslogger parser against real output.
+- [ ] **Incident response:** before stopping anything, copy the binary, plist, hashes, process tree and timeline into a case folder; add recovery (move the persistence item into the undo store) and a credential-rotation checklist.
+- [ ] **Wider persistence coverage:** app extensions (`pluginkit`), configuration profiles, authorization plugins, `periodic` and `at` jobs, sudoers.d and PAM, `DYLD_*` in launch plists, browser extensions.
+- [ ] **Signed hash feed** on GitHub Pages, checked offline by `macx check` and `macx watch`.
 
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
@@ -23,6 +26,8 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [x] **6. Paste-to-shell guard**, `macx guard` (2026-11-23): history scan with base64 decoding, clipboard check, opt-in zsh Enter-key hook.
 - [x] **9. Live watch**, `sudo macx watch [--suspend]` and `--replay` (2026-11-23). This finishes the antivirus side, apart from running it in the background (step 11).
 - [x] **Paste inspection**, `macx guard inspect` plus disguise-undoing (2026-11-23): reads what a pasted link serves and runs only the inspected copy.
+- [x] **Fixes from review** (2026-11-23): unknowns never count as safe (new *partly unknown* verdict), combination scoring, SHA-256 checked again before running, pipe scripts fed on stdin, whole-tree suspend.
+- [x] **Static evaluation** (`scripts/eval/static.sh`): 17/17 simulated attacks flagged (12 dangerous), 0/11 real installers marked dangerous.
 - [x] **No privacy popups** and `macx privacy` (2026-11-23): guarded folders skipped without Full Disk Access; the installed binary owns its permissions.
 
 See [CHANGELOG.md](CHANGELOG.md) for details.

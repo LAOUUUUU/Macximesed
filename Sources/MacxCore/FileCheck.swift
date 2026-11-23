@@ -211,18 +211,27 @@ public enum FileKind: String, Sendable {
 }
 
 public enum Verdict: String, Sendable, Comparable {
-    case ok, caution, dangerous
+    /// Nothing dangerous in what could be read, but some parts couldn't be checked (they're listed).
+    case ok, partlyUnknown, caution, dangerous
+
+    /// Findings that mean "couldn't see", not "saw something bad".
+    public static let unknownRules: Set<String> = [
+        "runs-unresolved-code", "computed-download", "downloads-program-to-run", "runs-generated-script",
+    ]
 
     static func from(_ findings: [CheckFinding]) -> Verdict {
-        switch findings.map(\.severity).max() {
-        case .critical?, .high?: .dangerous
-        case .medium?: .caution
-        default: .ok
-        }
+        let seen = findings.filter { !unknownRules.contains($0.rule) }
+        let base: Verdict =
+            switch seen.map(\.severity).max() {
+            case .critical?, .high?: .dangerous
+            case .medium?: .caution
+            default: .ok
+            }
+        return base == .ok && seen.count < findings.count ? .partlyUnknown : base
     }
 
     public static func < (a: Verdict, b: Verdict) -> Bool {
-        let order: [Verdict] = [.ok, .caution, .dangerous]
+        let order: [Verdict] = [.ok, .partlyUnknown, .caution, .dangerous]
         return order.firstIndex(of: a)! < order.firstIndex(of: b)!
     }
 }

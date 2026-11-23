@@ -50,6 +50,7 @@ struct Check: ParsableCommand {
         let verdict: String =
             switch r.verdict {
             case .ok: "Looks OK"
+            case .partlyUnknown: "Looks OK so far (parts couldn't be checked)"
             case .caution: "Be careful"
             case .dangerous: "DON'T OPEN THIS"
             }

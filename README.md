@@ -111,7 +111,7 @@ Stealer sites and IP addresses change all the time, so a list is always out of d
 | **Prevented** | nothing | No auth events without Apple's entitlement. |
 | **After the fact** | `--suspend` | Stops (SIGSTOP) the flagged process and everything it started, top-down, so a stopped parent can't start new children. It re-reads the process tree until no new child appears, and shows who started the process. |
 
-How long a flagged process runs before it's stopped hasn't been measured yet. That's the runtime simulation step in [STATUS.md](STATUS.md). Until there are numbers, treat `--suspend` as damage limitation, not prevention. AMOS's steps all come before the theft finishes: the pasted command, the fake password prompt, the password check, the launch daemon and the hidden folder. eslogger's output format isn't a stable API, so the parser reads every field as optional and works out the event type from the event's name.
+eslogger ignores processes in its own process group, so anything started from the same shell job as `macx watch` is invisible to it. Run the watcher in its own terminal tab. How long a flagged process runs before it's stopped is measured by `scripts/eval/runtime.sh`, but hasn't been measured on a real Mac yet. That's the runtime simulation step in [STATUS.md](STATUS.md). Until there are numbers, treat `--suspend` as damage limitation, not prevention. AMOS's steps all come before the theft finishes: the pasted command, the fake password prompt, the password check, the launch daemon and the hidden folder. eslogger's output format isn't a stable API, so the parser reads every field as optional and works out the event type from the event's name.
 
 ### What `macx persist` flags
 Each rule comes from how AMOS and similar stealers stay on a Mac:
@@ -146,6 +146,19 @@ swift format lint --strict --recursive Sources Tests Package.swift
 ```
 
 Formatting follows `.swift-format` (4-space indents, 140 columns). To format in place, run `swift format --in-place --recursive Sources Tests Package.swift`.
+
+### Evaluation
+These measure what macx catches and what it gets wrong. They don't test individual functions.
+
+- **Static** (`scripts/eval/static.sh`, no root needed): runs `macx guard inspect --no-run` against 17 harmless imitations of stealer techniques (served locally from `Tests/Evaluation/served`) and 11 real, widely used installers (Homebrew, rustup, nvm, Oh My Zsh, bun, deno, uv, pnpm, starship, fnm, Spicetify). Latest result: [research/evaluation/static-results.md](research/evaluation/static-results.md). No attacks were missed and no installer was marked dangerous. 4 installers download a program that can't be read as text, so they're reported as "parts couldn't be checked".
+- **Runtime** (`sudo scripts/eval/runtime.sh`): starts `macx watch --suspend`, fires harmless versions of each stealer step and measures:
+  - whether each one raised an alert;
+  - the delay from action to alert, and from alert to freeze;
+  - how much a busy process got done before it was frozen;
+  - whether a child it started was frozen too;
+  - macx and eslogger CPU and memory, idle and busy.
+
+  It writes [research/evaluation/runtime-results.md](research/evaluation/runtime-results.md). It needs root and Full Disk Access for macx, so it has to be run on a real Mac by hand.
 
 ### CI
 Every push and pull request runs these on GitHub-hosted Macs (free for public repos):

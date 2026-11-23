@@ -210,6 +210,15 @@ public enum ScriptInspector {
             "launch-item", .medium, "Sets itself to start automatically (launch daemon or agent)",
             #"/Library/Launch(?:Daemons|Agents)/|\blaunchctl\s+(?:load|bootstrap|enable)\b"#
         ),
+        // Apple's own launch items and folders never come from a downloaded script: these are the AMOS disguise.
+        (
+            "fake-apple-launch-item", .high, "Writes an Apple-named launch item (Apple's own are never installed by scripts)",
+            #"/Library/Launch(?:Daemons|Agents)/com\.apple\."#
+        ),
+        (
+            "fake-apple-folder", .high, "Creates a hidden Apple-named folder in Application Support (AMOS hides here)",
+            #"Application Support/\.com\.apple\."#
+        ),
         ("hidden-folder", .medium, "Writes into a hidden folder in Application Support", #"Application Support/\.[A-Za-z0-9]"#),
         (
             "quarantine-strip", .high, "Removes macOS's download-safety (quarantine) flag",

@@ -30,13 +30,18 @@ struct Watch: ParsableCommand {
     @Option(help: "Check a saved eslogger JSON Lines file instead of watching live (no sudo needed).", completion: .file())
     var replay: String?
 
+    @Option(help: "Write alerts to this JSON Lines file instead of ~/Library/Logs/Macximesed/watch.jsonl.", completion: .file())
+    var log: String?
+
     func run() throws {
         guard let minimum = Severity.allCases.first(where: { String(describing: $0) == minSeverity.lowercased() }) else {
             throw UserError("Unknown severity \"\(minSeverity)\". Use info, low, medium, high or critical.")
         }
         let user = Self.invokingUser()
         let rules = WatchRules(home: user.home)
-        let log = AlertLog(home: user.home, uid: user.uid, gid: user.gid)
+        let log = AlertLog(
+            home: user.home, uid: user.uid, gid: user.gid,
+            file: self.log.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) })
 
         if let replay {
             guard let text = try? String(contentsOfFile: (replay as NSString).expandingTildeInPath, encoding: .utf8) else {
@@ -104,7 +109,10 @@ struct Watch: ParsableCommand {
                     log.append(a)
                     guard a.severity >= minimum else { continue }
                     Self.printAlert(a)
-                    if suspend, a.severity == .critical { Self.freeze(a) }
+                    if suspend, a.severity == .critical {
+                        let frozen = Self.freeze(a)
+                        if !frozen.isEmpty { log.appendFreeze(alertRule: a.rule, pids: frozen) }
+                    }
                 }
             }
         }
@@ -133,12 +141,13 @@ struct Watch: ParsableCommand {
     }
 
     /// Stops the process and everything it started, top-down, and shows who started it.
-    static func freeze(_ a: WatchAlert) {
-        guard let pid = a.pid, pid > 1, pid != Int(getpid()) else { return }
+    @discardableResult
+    static func freeze(_ a: WatchAlert) -> [Int] {
+        guard let pid = a.pid, pid > 1, pid != Int(getpid()) else { return [] }
         let before = ProcessTree.snapshot()
         let chain = ProcessTree.ancestry(of: pid, in: before).dropFirst().prefix(6)
         let frozen = ProcessTree.freeze(root: pid)
-        guard !frozen.isEmpty else { return }
+        guard !frozen.isEmpty else { return [] }
         let list = frozen.map(String.init).joined(separator: " ")
         print("           Froze \(frozen.count) process\(frozen.count == 1 ? "" : "es"): \(list)")
         if !chain.isEmpty {
@@ -146,6 +155,7 @@ struct Watch: ParsableCommand {
                 "           Started by: " + chain.map { "\(($0.path as NSString).lastPathComponent) (\($0.pid))" }.joined(separator: " ← "))
         }
         print("           Resume: sudo kill -CONT \(list)    End them: sudo kill -KILL \(list)")
+        return frozen
     }
 
     /// The real user behind sudo, so ~/ paths and the log file are theirs, not root's.
@@ -159,14 +169,30 @@ struct Watch: ParsableCommand {
 
 /// Alerts as JSON Lines in the user's Logs folder, owned by the user even when macx runs as root.
 struct AlertLog {
+    /// Millisecond timestamps, so delays can be measured.
+    nonisolated(unsafe) static let timeFormat: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
     let file: URL
     let uid: uid_t
     let gid: gid_t
 
-    init(home: URL, uid: uid_t, gid: gid_t) {
-        file = home.appendingPathComponent("Library/Logs/Macximesed/watch.jsonl")
+    init(home: URL, uid: uid_t, gid: gid_t, file: URL? = nil) {
+        self.file = file ?? home.appendingPathComponent("Library/Logs/Macximesed/watch.jsonl")
         self.uid = uid
         self.gid = gid
+    }
+
+    /// Records when a freeze happened and what it stopped (used to measure alert-to-stop time).
+    func appendFreeze(alertRule: String, pids: [Int]) {
+        write([
+            "time": Self.timeFormat.string(from: Date()), "epoch": Date().timeIntervalSince1970,
+            "rule": "frozen", "severity": "info", "title": "Froze after \(alertRule)", "detail": "", "pid": pids.first ?? -1,
+            "process": "", "frozen": pids,
+        ])
     }
 
     func append(_ a: WatchAlert) {
@@ -177,9 +203,15 @@ struct AlertLog {
             chown(dir.path, uid, gid)
         }
         let record: [String: Any] = [
-            "time": ISO8601DateFormatter().string(from: Date()), "rule": a.rule, "severity": String(describing: a.severity),
+            "time": Self.timeFormat.string(from: Date()), "epoch": Date().timeIntervalSince1970,
+            "rule": a.rule, "severity": String(describing: a.severity),
             "title": a.title, "detail": a.detail ?? "", "pid": a.pid ?? -1, "process": a.processPath ?? "",
         ]
+        write(record)
+    }
+
+    func write(_ record: [String: Any]) {
+        let fm = FileManager.default
         guard var line = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]) else { return }
         line.append(0x0A)
         if !fm.fileExists(atPath: file.path) {

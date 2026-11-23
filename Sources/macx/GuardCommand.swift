@@ -153,6 +153,7 @@ struct Guard: ParsableCommand {
             let verdict: String =
                 switch report.verdict {
                 case .ok: "Nothing dangerous found"
+                case .partlyUnknown: "Nothing dangerous in what could be read, but parts couldn't be checked (see Can't tell)"
                 case .caution: "Be careful"
                 case .dangerous: "DON'T RUN THIS"
                 }
@@ -191,6 +192,7 @@ struct Guard: ParsableCommand {
             if let saved = r.savedCopy { print("  Saved copy: \(saved.path)") }
             printFindings("What it does", i.behaviours)
             printFindings("Where it's from", i.facts)
+            printFindings("Can't tell (not checked, never treated as safe)", i.unknowns)
             if i.behaviours.isEmpty, i.kind == .script { print("  What it does: nothing on the watch list") }
             for n in i.nested {
                 print("  It also downloads: \(n.url.absoluteString)  (\(n.kind.rawValue), \(formatBytes(UInt64(n.bytes))))")

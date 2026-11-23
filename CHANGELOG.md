@@ -94,6 +94,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - The README has a table of what the live watch observes and what it can't prevent.
 - CodeQL runs on `main`, pull requests and weekly, not on every `dev` push, because it was holding the scarce macOS runners.
 
+- **Partly unknown verdict.** When the only findings are things that couldn't be checked, the verdict is *partly unknown* (nothing dangerous in what could be read, parts unchecked), not *Be careful*. `guard inspect` now prints those parts under *Can't tell*.
+- **Apple-named items in scripts are high:** `fake-apple-launch-item` and `fake-apple-folder` now apply to scripts too.
+- **Evaluation harnesses:**
+  - `scripts/eval/static.sh` covers 17 harmless attack simulations and 11 real installers, and records the results in `research/evaluation/static-results.md`;
+  - `scripts/eval/runtime.sh` (needs sudo) covers detection, delays, work done before the freeze, child freezing and overhead.
+- `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
+
 ### Fixed
 - Errors are printed without the usage text underneath.
 - Apps in folders whose names contain dots (for example `Cisco Packet Tracer 9.0.1/`) are found.

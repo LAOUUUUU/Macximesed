@@ -13,7 +13,7 @@ struct UnknownsTests {
     @Test func evalOfAVariableIsUnknown() {
         let i = inspect("#!/bin/sh\ncode=$(cat /tmp/x)\neval \"$code\"\n")
         #expect(i.unknowns.contains { $0.rule == "runs-unresolved-code" })
-        #expect(i.verdict == .caution)  // not "ok": we can't see what it runs
+        #expect(i.verdict == .partlyUnknown)  // not "ok": we can't see what it runs
     }
 
     @Test func downloadFromAComputedURLIsUnknown() {
@@ -88,5 +88,35 @@ struct CombinationScoringTests {
         // Asking for the login password in a script-made box has no ordinary use.
         let i = inspect("#!/bin/zsh\nosascript -e 'display dialog \"x\" default answer \"\" with hidden answer'\n")
         #expect(i.behaviours.first { $0.rule == "password-prompt" }?.severity == .critical)
+    }
+}
+
+@Suite("Partly unknown verdict")
+struct PartialVerdictTests {
+    let url = URL(string: "https://raw.githubusercontent.com/x/y/i.sh")!
+    func inspect(_ s: String) -> Inspection {
+        ScriptInspector.inspect(Data(s.utf8), url: url, finalURL: url, knownHosts: ["raw.githubusercontent.com"])
+    }
+
+    @Test func onlyUnknownsGivesPartlyUnknownNotCaution() {
+        let i = inspect(
+            "#!/bin/sh\nurl=\"https://github.com/x/releases/download/$VERSION/tool\"\ncurl -fsSL -o /tmp/tool \"$url\"\nchmod +x /tmp/tool\n/tmp/tool\n"
+        )
+        #expect(!i.unknowns.isEmpty)
+        #expect(i.verdict == .partlyUnknown)
+    }
+
+    @Test func aRealMediumBehaviourStillMeansCaution() {
+        let i = inspect("#!/bin/sh\neval \"$X\"\ncat > ~/Library/LaunchAgents/com.vendor.x.plist <<E\nE\n")
+        #expect(i.verdict == .caution)
+    }
+
+    @Test func fakeAppleNamesInScriptsAreHigh() {
+        let i = inspect(
+            "#!/bin/sh\ncat > /Library/LaunchDaemons/com.apple.helper.plist <<X\nX\nmkdir -p \"$HOME/Library/Application Support/.com.apple.helper\"\n"
+        )
+        #expect(i.behaviours.contains { $0.rule == "fake-apple-launch-item" && $0.severity == .high })
+        #expect(i.behaviours.contains { $0.rule == "fake-apple-folder" && $0.severity == .high })
+        #expect(i.verdict == .dangerous)
     }
 }
