@@ -22,6 +22,16 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx apps`: lists apps with size, architecture (Apple silicon, Intel or Universal, read from the Mach-O header) and last use (Spotlight, or `~` estimated from the app's own files). Filters: `--unused [--days]`, `--intel`, plus `--sort`.
 - `macx apps remove`: uninstalls an app and its exact-match leftovers into the undo folder. Refuses running apps, apps on the sealed system volume, and built-in Apple apps, but allows Apple's App Store apps.
 - `macx apps leftovers`: finds files of apps that are gone, by vendor of reverse-DNS names, and can move them to the undo folder.
+- `macx persist`: finds everything set to start by itself and flags AMOS-style tricks.
+  - **Sources:** launch daemons and agents (system and user), login items and background tasks (from `sfltool dumpbtm`), cron, shell startup files, and hidden folders in Application Support.
+  - **Rules:**
+    - fake `com.apple.*` labels and folders;
+    - shell loops;
+    - hidden-folder and temp-folder programs;
+    - missing, unsigned and ad-hoc programs;
+    - download-to-shell, base64-to-shell, quarantine stripping, and password prompts or checks.
+  - **Signatures** are read through the Security framework, and root-only files are reported as unreadable, not unsigned.
+  - **Baseline:** `--baseline` saves the current state, and `--diff` shows what changed since.
 
 ### Changed
 - **No more guessing from names.**

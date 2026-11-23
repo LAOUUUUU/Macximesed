@@ -54,6 +54,7 @@ jobs:
           $M clean --dry-run
           $M apps
           $M apps leftovers
+          $M persist --all --min-severity info
           $M undo list
 
   sanitizers:

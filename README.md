@@ -2,7 +2,7 @@
 
 Squeeze more speed out of macOS and catch stealer-style malware (like AMOS, the Atomic macOS Stealer) that XProtect misses.
 
-> **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps` and `macx undo` exist so far. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
+> **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps`, `macx persist` and `macx undo` exist so far. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
 
 ## What it will do
 - **Speed:** clean caches and leftovers, remove apps you don't use, a Boost mode that pushes background work aside for the app you're using, a heat/throttle view, and game profiles.
@@ -33,6 +33,8 @@ swift build -c release
 | `macx apps [--unused [--days 90]] [--intel] [--sort size\|name\|used]` | Lists every app on the Mac, wherever it is, with its size, architecture, when it was last opened, and its folder. | No |
 | `macx apps remove NAME\|BUNDLE-ID [--include-name-matches] [-y]` | Moves the app and its Library leftovers, matched by exact bundle ID (support files, caches, preferences, saved state, containers, launch agents), into the undo folder. Folders that only match the app's name are listed, and moved only with `--include-name-matches`. Refuses apps that are running, built into macOS, or built-in Apple apps. Apple's App Store apps (GarageBand, iMovie, Pages…) are allowed. Root-owned apps need `sudo`. | Sometimes |
 | `macx apps leftovers [--remove ID ...] [-y]` | Lists files named after a bundle ID that no app or helper on this Mac has, skipping app-group IDs and empty items. Can move chosen groups to the undo folder. | No |
+| `macx persist [--all] [--min-severity low]` | Finds everything set to start by itself and flags what looks like malware. It reads launch daemons and agents (system and yours), login items and background tasks (from `sfltool dumpbtm`), cron, shell startup files, and hidden folders in Application Support. Read-only. | No |
+| `macx persist --baseline` / `--diff` | Saves what's there now, then later shows what was added, removed or changed since, with findings for the new items. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
 | `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. This is the only command that really deletes, and it asks first. | No |
@@ -56,6 +58,25 @@ It never cleans:
 - `~/.cache`, which often holds virtual environments and runtimes.
 - Macximesed's own data.
 - Empty items.
+
+### What `macx persist` flags
+Each rule comes from how AMOS and similar stealers stay on a Mac:
+
+| Rule | Severity | Meaning |
+|---|---|---|
+| `fake-apple-folder` | critical | A hidden `.com.apple.*` folder in your Application Support |
+| `fake-apple-label` | critical | A `com.apple.*` launch item outside the system volume that runs a script or a non-Apple program |
+| `shell-loop` | high | Runs a `while … sleep` shell loop that keeps restarting something |
+| `hidden-folder` | high in a Library folder, else medium | Runs something from a hidden (`.name`) folder |
+| `temp-location` | high | Runs from `/tmp`, `/Users/Shared` or Downloads |
+| `missing-program` | high for root autostart, else medium | Its program is gone: a leftover, or a payload that was removed |
+| `unsigned-program` / `adhoc-program` | high for root, else medium | No signature, or an ad-hoc one with no developer identity |
+| `download-to-shell`, `base64-to-shell`, `quarantine-strip`, `password-prompt`, `password-check` | high | Lines in shell startup files or cron that download and run code, decode hidden code, strip the quarantine flag, or ask for or check your password |
+| `inline-script`, `hidden-support-folder`, `unreadable-plist` | medium | Worth a look |
+| `apple-label-outside-system` | low | An Apple-named item outside `/System` that runs an Apple binary directly |
+| `unreadable-program` | info | Root-only program whose signature can't be checked without `sudo` |
+
+Signatures are read with the Security framework (`anchor apple`, team ID, ad-hoc flag). Nothing depends on parsing `codesign` output.
 
 **Last used:** this comes from Spotlight. When Spotlight has no date, it's estimated from the newest change to the app's own bundle-ID files, and shown with `~`. Apps with no date at all are never counted as unused.
 
