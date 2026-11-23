@@ -135,7 +135,10 @@ public struct GuardResult: Sendable, Equatable {
     public var patterns: Set<CommandPattern>
     /// Hidden commands decoded from base64 in the text (and checked too).
     public var decoded: [String]
-    public var isDangerous: Bool { !patterns.isEmpty }
+    /// Downloads in the command that get run: these can be fetched and read first (`macx guard inspect`).
+    public var downloads: [DownloadRun] = []
+    public var isDangerous: Bool { !patterns.isEmpty || !downloads.isEmpty }
+    public var needsInspection: Bool { !downloads.isEmpty }
 }
 
 public struct HistoryHit: Sendable, Equatable {
@@ -147,10 +150,17 @@ public enum PasteGuard {
     /// Checks a command (typed, pasted or from history). Base64 payloads are decoded and checked as well,
     /// so a disguised `curl | sh` is caught even when the outer command only says `base64 -D | zsh`.
     public static func check(_ text: String) -> GuardResult {
-        var patterns = CommandPatterns.match(text)
+        // Check the text as typed and with simple disguises undone (c""url, $'\x63url', a=cu;$a...).
+        let normalized = ShellNormalizer.normalize(text)
+        var patterns = CommandPatterns.match(text).union(CommandPatterns.match(normalized))
         let decoded = CommandPatterns.decodedPayloads(in: text)
-        for d in decoded { patterns.formUnion(CommandPatterns.match(d)) }
-        return GuardResult(patterns: patterns, decoded: decoded)
+        for d in decoded {
+            patterns.formUnion(CommandPatterns.match(d))
+            patterns.formUnion(CommandPatterns.match(ShellNormalizer.normalize(d)))
+        }
+        let downloads = DownloadRuns.find(in: text)
+        if !downloads.isEmpty { patterns.insert(.downloadToShell) }
+        return GuardResult(patterns: patterns, decoded: decoded, downloads: downloads)
     }
 
     public static func scanHistory(home: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> [HistoryHit] {
@@ -215,7 +225,8 @@ public struct GuardHook: Sendable {
         """
         # Macximesed paste guard. Installed by `macx guard install`, removed by `macx guard uninstall`.
         # Before a command runs, macx checks it for download-and-run, hidden base64 code, quarantine
-        # stripping and password prompts. A flagged command is stopped once; press Enter again to run it.
+        # stripping and password prompts. A command that downloads code to run is sent to `macx guard inspect`,
+        # which reads the script first. Any other flagged command is stopped once; press Enter again to run it.
         [[ -o interactive ]] || return 0
         _macx_guard_bin=\(shellQuote(macxPath))
         typeset -g _macx_guard_confirmed=""
@@ -224,7 +235,15 @@ public struct GuardHook: Sendable {
           if [[ -n "$BUFFER" && "$BUFFER" != "$_macx_guard_confirmed" && -x "$_macx_guard_bin" ]]; then
             local out
             out=$(MACX_OWN_RESPONSIBILITY=0 "$_macx_guard_bin" guard check --short -- "$BUFFER" 2>/dev/null)
-            if [[ $? -eq 2 ]]; then
+            local code=$?
+            if [[ $code -eq 3 ]]; then
+              # It downloads code to run: read it first instead. The original never runs directly.
+              BUFFER="${(q)_macx_guard_bin} guard inspect -- ${(q)BUFFER}"
+              _macx_guard_confirmed=""
+              zle .accept-line
+              return 0
+            fi
+            if [[ $code -eq 2 ]]; then
               _macx_guard_confirmed="$BUFFER"
               zle -M "$out"$'\\n''Press Enter again to run it anyway, or edit it.'
               return 0

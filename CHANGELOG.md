@@ -67,6 +67,12 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
     - unsigned programs starting from hidden or temp folders.
   - **Options:** `--suspend` freezes the process behind a critical alert, and alerts are logged to `~/Library/Logs/Macximesed/watch.jsonl` (owned by the user under sudo). `--replay FILE` checks a saved log.
   - **Parser:** follows Apple's `es_message_t` field names and treats every field as optional.
+- `macx guard inspect`: downloads what a pasted command would run, the way curl would and without running it, then reads it.
+  - **Behaviours it reports:** password prompts, `dscl` checks, keychain, browser or wallet data, uploads, launch items, closing Terminal, hidden code, and more downloads (followed one level).
+  - **Facts it reports:** bare IP, plain http, a redirect, a site new to your shell history, or a program instead of a script.
+  - **Running it:** it runs the exact copy it inspected, saved owner-only. Dangerous results need you to type `RUN`.
+  - **Hook:** the zsh hook now routes download-and-run commands to `inspect`, and `guard check` exits with 3 for them.
+- Disguised commands are now caught: split quoting, backslashes, `$'\x..'`, variables set earlier in the paste, `$(printf …)`, `echo … | rev`, and `echo "…" | sh`. Download-and-run is also found in its two-step form (`curl -o f URL && sh f`, `curl -O URL; ./f`).
 
 ### Changed
 - **No more guessing from names.**

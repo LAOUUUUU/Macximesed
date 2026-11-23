@@ -229,6 +229,7 @@ public enum Verdict: String, Sendable, Comparable {
 
 public struct CheckFinding: Sendable, Equatable {
     public var rule: String
+    public var id: String { rule }
     public var severity: Severity
     public var title: String
     public var detail: String?

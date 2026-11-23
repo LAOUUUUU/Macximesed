@@ -6,7 +6,7 @@ import MacxCore
 struct Guard: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Catch pasted download-and-run commands (how AMOS and other ClickFix stealers get in).",
-        subcommands: [History.self, Clipboard.self, CheckCommand.self, Install.self, Uninstall.self, Status.self],
+        subcommands: [History.self, Clipboard.self, CheckCommand.self, Inspect.self, Install.self, Uninstall.self, Status.self],
         defaultSubcommand: History.self
     )
 
@@ -69,7 +69,8 @@ struct Guard: ParsableCommand {
 
     struct CheckCommand: ParsableCommand {
         static let configuration = CommandConfiguration(
-            commandName: "check", abstract: "Check one command. Exit code 2 means dangerous (the zsh hook uses this).")
+            commandName: "check",
+            abstract: "Check one command. Exit code 2 means dangerous, 3 means it downloads code to run (use guard inspect).")
 
         @Flag(help: "One short message (for the zsh hook).")
         var short = false
@@ -90,8 +91,161 @@ struct Guard: ParsableCommand {
             } else {
                 print("Dangerous:")
                 Guard.describe(r).forEach { print("  \($0)") }
+                if r.needsInspection { print("Read what it would run first: macx guard inspect -- '<the command>'") }
             }
-            throw ExitCode(2)
+            throw ExitCode(r.needsInspection ? 3 : 2)
+        }
+    }
+
+    struct Inspect: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Download and read what a pasted command would run, then optionally run that exact copy.",
+            discussion: """
+                For commands like `curl URL | sh`, `bash <(curl URL)`, `sh -c "$(curl URL)"` or `curl -o f URL && sh f`
+                (including disguised or base64-hidden ones), macx downloads the script the way curl would, without
+                running it, and reads it. It reports what the script does (password prompts, keychain or browser data,
+                uploads, launch items, more downloads, which are followed one level) and facts about where it came from
+                (bare IP, plain http, a redirect, a site you've never used before, a program instead of a script).
+                If you choose to run it, macx runs the copy it inspected, so the server can't swap it.
+                """
+        )
+
+        @Flag(name: [.short, .long], help: "Run the inspected copy without asking when nothing dangerous was found.")
+        var yes = false
+
+        @Flag(help: "Only report; never offer to run.")
+        var noRun = false
+
+        @Argument(parsing: .captureForPassthrough, help: "The command, after --.")
+        var command: [String] = []
+
+        func run() throws {
+            let text = command.first == "--" ? command.dropFirst().joined(separator: " ") : command.joined(separator: " ")
+            guard !text.isEmpty else {
+                throw UserError("Give the command after --, for example: macx guard inspect -- 'curl -fsSL https://… | sh'")
+            }
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let history = ShellHistory.files(home: home).flatMap(ShellHistory.read).map(\.command).filter { $0 != text }
+            let inspector = PasteInspector(knownHosts: ScriptInspector.hosts(inHistory: history))
+            let report = inspector.inspect(command: text)
+
+            guard !report.runs.isEmpty else {
+                let r = PasteGuard.check(text)
+                if r.isDangerous {
+                    print("This doesn't download a script to run, but:")
+                    Guard.describe(r).forEach { print("  \($0)") }
+                    throw ExitCode(2)
+                }
+                print("This command doesn't download anything to run.")
+                return
+            }
+
+            for (i, run) in report.runs.enumerated() {
+                if i > 0 { print("") }
+                printRun(run)
+            }
+            let otherPatterns = report.guardResult.patterns.subtracting([.downloadToShell])
+            if !otherPatterns.isEmpty {
+                print("\nThe command itself also:")
+                otherPatterns.sorted { $0.rawValue < $1.rawValue }.forEach { print("  - \($0.title)  [\($0.rawValue)]") }
+            }
+
+            let verdict: String =
+                switch report.verdict {
+                case .ok: "Nothing dangerous found"
+                case .caution: "Be careful"
+                case .dangerous: "DON'T RUN THIS"
+                }
+            print("\nVerdict: \(verdict)")
+            guard !noRun else { throw report.verdict == .dangerous ? ExitCode(2) : ExitCode.success }
+
+            let runnable = report.runs.filter { $0.savedCopy != nil && ($0.inspection?.kind == .script || $0.inspection?.kind == .binary) }
+            guard !runnable.isEmpty else { throw ExitCode(2) }
+            if report.runs.count > 1 || ShellWords.commands(ShellNormalizer.normalize(text)).count > 1 {
+                print("Note: only the downloaded script\(runnable.count > 1 ? "s run" : " runs"), not the rest of your command.")
+            }
+
+            let go: Bool
+            if report.verdict == .dangerous {
+                go = askTyped("Type RUN to run the inspected copy anyway (anything else cancels):", expected: "RUN")
+            } else {
+                go = yes || askYes("Run the inspected copy?")
+            }
+            guard go else {
+                print("Not run.")
+                throw report.verdict == .dangerous ? ExitCode(2) : ExitCode.success
+            }
+            for r in runnable { try execute(r) }
+        }
+
+        func printRun(_ r: InspectedRun) {
+            print("Download: \(r.run.url)")
+            print("  Run by: \(r.run.interpreter ?? "itself") (\(r.run.form.rawValue))")
+            if let e = r.error {
+                print("  Couldn't download it: \(e). Without seeing it, don't run it.")
+                return
+            }
+            guard let i = r.inspection else { return }
+            if i.finalURL != i.url { print("  Ends up at: \(i.finalURL.absoluteString)") }
+            print("  Got: \(i.kind.rawValue), \(formatBytes(UInt64(i.bytes))), SHA-256 \(i.sha256)")
+            if let saved = r.savedCopy { print("  Saved copy: \(saved.path)") }
+            printFindings("What it does", i.behaviours)
+            printFindings("Where it's from", i.facts)
+            if i.behaviours.isEmpty, i.kind == .script { print("  What it does: nothing on the watch list") }
+            for n in i.nested {
+                print("  It also downloads: \(n.url.absoluteString)  (\(n.kind.rawValue), \(formatBytes(UInt64(n.bytes))))")
+                printFindings("    What that does", n.behaviours)
+                printFindings("    Where that's from", n.facts)
+            }
+            let unfetched = i.nestedDownloads.count - i.nested.count
+            if unfetched > 0 { print("  \(unfetched) further download(s) couldn't be fetched to check.") }
+        }
+
+        func printFindings(_ title: String, _ list: [CheckFinding]) {
+            guard !list.isEmpty else { return }
+            print("  \(title):")
+            for f in list.sorted(by: { $0.severity > $1.severity }) {
+                print("    \(f.severity.label.padding(toLength: 8, withPad: " ", startingAt: 0)) \(f.title)  [\(f.rule)]")
+                if let d = f.detail { d.split(separator: "\n").prefix(3).forEach { print("             \($0)") } }
+            }
+        }
+
+        /// Runs the exact bytes that were inspected: with the named interpreter, the script's own `#!`, or directly for a program.
+        func execute(_ r: InspectedRun) throws {
+            guard let saved = r.savedCopy, let kind = r.inspection?.kind else { return }
+            let p = Process()
+            if kind == .binary {
+                let exe = saved.deletingLastPathComponent().appendingPathComponent(saved.lastPathComponent + ".run")
+                try? FileManager.default.removeItem(at: exe)
+                try FileManager.default.copyItem(at: saved, to: exe)
+                try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: exe.path)
+                p.executableURL = exe
+                p.arguments = r.run.arguments
+            } else {
+                let interpreter = r.run.interpreter.flatMap { ["source", ".", "eval"].contains($0) ? nil : $0 } ?? shebang(saved) ?? "sh"
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                p.arguments = [interpreter, saved.path] + r.run.arguments
+            }
+            print("\nRunning the inspected copy (\(saved.lastPathComponent))…\n")
+            fflush(stdout)  // so the report comes before the script's own output
+            try p.run()
+            p.waitUntilExit()
+            if p.terminationStatus != 0 { throw ExitCode(p.terminationStatus) }
+        }
+
+        func shebang(_ file: URL) -> String? {
+            guard let h = try? FileHandle(forReadingFrom: file), let d = try? h.read(upToCount: 200) else { return nil }
+            let first = String(decoding: d, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
+            guard first.hasPrefix("#!") else { return nil }
+            let parts = first.dropFirst(2).split(separator: " ").map(String.init)
+            if let p = parts.first, (p as NSString).lastPathComponent == "env" { return parts.dropFirst().first }
+            return parts.first.map { ($0 as NSString).lastPathComponent }
+        }
+
+        func askTyped(_ question: String, expected: String) -> Bool {
+            guard isatty(STDIN_FILENO) != 0 else { return false }
+            print(question + " ", terminator: "")
+            return readLine()?.trimmingCharacters(in: .whitespaces) == expected
         }
     }
 

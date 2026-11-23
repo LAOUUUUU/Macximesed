@@ -60,8 +60,9 @@ swift build -c release
 | `macx persist --baseline` / `--diff` | Saves what's there now, then later shows what was added, removed or changed since, with findings for the new items. | No |
 | `macx guard [history]` | Scans your shell histories for commands that download and run code, run hidden base64 code (decoded and shown), strip the quarantine flag, or ask for or check your password. Covers zsh (including Terminal's per-tab `~/.zsh_sessions`), bash, fish and `$HISTFILE`. Shows when each one ran. | No |
 | `macx guard clipboard` | Checks the clipboard before you paste it into Terminal. Exit code 2 if it's dangerous. | No |
-| `macx guard check -- COMMAND` | Checks one command. Exit code 2 if it's dangerous. | No |
-| `macx guard install` / `uninstall` / `status` | Adds a zsh hook: when you press Enter on a dangerous command, it's stopped with an explanation, and pressing Enter again runs it anyway. It's one marked block in `.zshrc` (or `$ZDOTDIR/.zshrc`) that sources `~/.config/macximesed/guard.zsh`, and uninstalling removes exactly that. | No |
+| `macx guard check -- COMMAND` | Checks one command. Exit code 2 if it's dangerous, 3 if it downloads code to run (inspect it). | No |
+| `macx guard inspect -- COMMAND [--no-run] [-y]` | **Reads a script before it runs.** For `curl URL \| sh`, `bash <(curl URL)`, `sh -c "$(curl URL)"` or `curl -o f URL && sh f`, including disguised or base64-hidden versions, macx downloads the script the way curl would, without running it. It reports what the script does (password prompts, `dscl` checks, keychain or browser data, uploads, launch items, closing Terminal, hidden code, more downloads followed one level) and where it came from (bare IP, plain http, a redirect, a site you've never used in your shell, a program instead of a script). If you go ahead, it runs **the copy it inspected**, so the server can't swap it. Dangerous results need you to type `RUN`. | No |
+| `macx guard install` / `uninstall` / `status` | Adds a zsh hook. When you press Enter on a command that downloads code to run, it's turned into `macx guard inspect`, so you see the script before anything runs. Any other dangerous command is stopped with an explanation, and pressing Enter again runs it anyway. It's one marked block in `.zshrc` (or `$ZDOTDIR/.zshrc`) that sources `~/.config/macximesed/guard.zsh`, and uninstalling removes exactly that. | No |
 | `sudo macx watch [--suspend] [--min-severity medium]` | **Live watch** through Apple's `eslogger`. It checks every program start, launch-item write, quarantine removal and new background item as it happens: pasted download-and-run or base64 commands (decoded), fake password prompts, `dscl -authonly` password checks (the password is masked), fake `com.apple.*` launch items and folders, and unsigned programs starting from hidden or temp folders. `--suspend` freezes (SIGSTOP) the process behind a critical alert. Alerts are saved to `~/Library/Logs/Macximesed/watch.jsonl`. Needs Full Disk Access for macx (see *Permissions*). | **Yes** |
 | `macx watch --replay FILE` | Runs the same rules over a saved eslogger JSON Lines file. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
@@ -88,6 +89,13 @@ It never cleans:
 - `~/.cache`, which often holds virtual environments and runtimes.
 - Macximesed's own data.
 - Empty items.
+
+### Why not a blocklist of bad sites?
+Stealer sites and IP addresses change all the time, so a list is always out of date, and a dangerous command can be dressed up to look harmless. macx defends in layers instead:
+1. **Undo the disguise.** `c""url`, `c\url`, `$'\x63url'`, variables set earlier in the paste, `$(printf '\x..')`, `echo … | rev` and base64 are all unpacked before checking.
+2. **Read what the link serves** (`macx guard inspect`) and judge the script by what it does, not by its URL. Then run the exact copy that was read.
+3. **Catch it in the act** (`sudo macx watch --suspend`). A disguised script still has to show a password prompt, check the password, read the keychain or add a launch daemon.
+4. **Leave little to steal.** Use a standard (non-admin) account day to day, keep passwords in a password manager rather than the browser, give SSH keys passphrases, use passkeys or 2FA, and run an outbound firewall such as LuLu.
 
 ### What the live watch can and can't do
 It can't stop a program *before* it starts. That needs Apple's restricted Endpoint Security entitlement, which Apple hands out slowly, so macx uses `eslogger` instead. What it does is see each step as it happens and, with `--suspend`, freeze the process at once. AMOS's steps all come before the theft finishes: the pasted command, the fake password prompt, the password check, the launch daemon and the hidden folder. eslogger's output format isn't a stable API, so the parser reads every field as optional and works out the event type from the event's name.
