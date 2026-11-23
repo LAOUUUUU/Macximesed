@@ -107,6 +107,8 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **`macx apps` speed:** it uses the bundle size Spotlight already recorded, and only walks the files when Spotlight has none. It had run past CI's 2-minute cap on a runner with several 10 GB Xcode installs. Locally it went from 3 s to 0.8 s.
+- **CI smoke step:** it now turns off `bash -e`, so a command expected to exit non-zero (like `guard check` on a bad command, exit 3) is counted as a pass, not treated as fatal.
 - **Hang:** a system tool that never finishes no longer hangs macx. Every tool macx runs now has a time limit (30 s by default) and an empty stdin, and a tool that runs out of time counts as unavailable. On CI, `macx persist` waited forever on a tool, most likely `sfltool dumpbtm` waiting for an authorization prompt on a headless Mac.
 - **CI smoke test:** each command is labelled and capped at 2 minutes, so a hang names itself instead of using up the job's time limit.
 - Errors are printed without the usage text underneath.

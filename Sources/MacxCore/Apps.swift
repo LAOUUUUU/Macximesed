@@ -222,7 +222,7 @@ public enum AppScanner {
         let receipt = contents.appendingPathComponent("_MASReceipt/receipt")
         return AppInfo(
             url: app, bundleID: id, name: name, version: info["CFBundleShortVersionString"] as? String,
-            bytes: allocatedSize(of: app), architectures: archs, lastUsed: lastUsed(app),
+            bytes: spotlightSize(app) ?? allocatedSize(of: app), architectures: archs, lastUsed: lastUsed(app),
             isApple: id.hasPrefix("com.apple."),
             fromAppStore: FileManager.default.fileExists(atPath: receipt.path)
         )
@@ -251,6 +251,15 @@ public enum AppScanner {
     public static func spotlightLastUsed(_ app: URL) -> Date? {
         guard let item = MDItemCreateWithURL(kCFAllocatorDefault, app as CFURL) else { return nil }
         return MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date
+    }
+
+    /// Space the bundle takes on disk, as Spotlight recorded it. Walking a 10 GB app like Xcode file by file
+    /// takes minutes on a cold disk, so this is used when Spotlight has it; otherwise the files are counted.
+    public static func spotlightSize(_ app: URL) -> UInt64? {
+        guard let item = MDItemCreateWithURL(kCFAllocatorDefault, app as CFURL),
+            let n = MDItemCopyAttribute(item, "kMDItemPhysicalSize" as CFString) as? NSNumber, n.int64Value > 0
+        else { return nil }
+        return n.uint64Value
     }
 }
 

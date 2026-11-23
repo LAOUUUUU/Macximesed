@@ -52,6 +52,8 @@ jobs:
       - name: Smoke test (read-only commands)
         timeout-minutes: 10
         run: |
+          # GitHub runs steps with `bash -e`; turn that off so one failing command is reported, not fatal.
+          set +e
           set -uo pipefail
           M=.build/release/macx
           FAILED=0
