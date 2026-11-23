@@ -37,11 +37,14 @@ cat > "$NEW/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-# Sign with an Apple Development identity when there is one (stable, so Full Disk Access sticks across
-# updates); otherwise ad-hoc. MACX_SIGN_IDENTITY overrides ("-" forces ad-hoc).
-SIGN="${MACX_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | sed -nE 's/^ *[0-9]+\) ([0-9A-F]{40}) "Apple Development: .*"$/\1/p' | head -1)}"
+# Sign with an Apple Development identity when there is one, else the local self-signed "Macximesed Local
+# Signing" identity (both are stable, so Full Disk Access sticks across updates); otherwise ad-hoc. MACX_SIGN_IDENTITY overrides ("-" forces ad-hoc).
+IDS="$(security find-identity -p codesigning 2>/dev/null)"
+DEV=$(printf '%s\n' "$IDS" | sed -nE 's/^ *[0-9]+\) ([0-9A-F]{40}) "Apple Development: [^"]*"$/\1/p' | head -1)
+LOCAL=$(printf '%s\n' "$IDS" | sed -nE 's/^ *[0-9]+\) ([0-9A-F]{40}) "Macximesed Local Signing"( \(CSSMERR_TP_NOT_TRUSTED\))?$/\1/p' | head -1)
+SIGN="${MACX_SIGN_IDENTITY:-${DEV:-$LOCAL}}"
 SIGN="${SIGN:--}"
-if [ "$SIGN" = "-" ]; then SIGNED_AS="ad-hoc (Full Disk Access won't stick on macOS 27; see README)"; else SIGNED_AS="Apple Development identity $SIGN"; fi
+if [ "$SIGN" = "-" ]; then SIGNED_AS="ad-hoc (Full Disk Access won't stick on macOS 27; see README)"; elif [ "$SIGN" = "$LOCAL" ]; then SIGNED_AS="local self-signed identity (Macximesed Local Signing)"; else SIGNED_AS="identity $SIGN"; fi
 codesign --force --sign "$SIGN" --identifier dev.macximesed.macx "$NEW"
 codesign --verify --strict "$NEW"
 rm -rf "$APP"

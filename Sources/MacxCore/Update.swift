@@ -333,18 +333,26 @@ public struct SigningIdentity: Sendable, Equatable {
         self.name = name
     }
 
-    /// The first valid "Apple Development" identity in `security find-identity -v -p codesigning` output.
+    /// The identity to sign with, from `security find-identity -p codesigning` output: a valid "Apple
+    /// Development" identity first, otherwise the local self-signed "Macximesed Local Signing" one. That one
+    /// is never "trusted" (it's self-signed), which doesn't matter: its certificate still gives a stable
+    /// designated requirement. Expired or revoked identities are skipped.
     public static func parse(findIdentityOutput: String) -> SigningIdentity? {
-        guard let re = try? NSRegularExpression(pattern: #"^\s*\d+\)\s+([0-9A-F]{40})\s+"(Apple Development: [^"]+)"\s*$"#) else {
+        guard let re = try? NSRegularExpression(pattern: #"^\s*\d+\)\s+([0-9A-F]{40})\s+"([^"]+)"\s*(\(([A-Z_]+)\))?\s*$"#) else {
             return nil
         }
+        var development: SigningIdentity?
+        var local: SigningIdentity?
         for line in findIdentityOutput.split(separator: "\n").map(String.init) {
             guard let m = re.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
                 let h = Range(m.range(at: 1), in: line), let n = Range(m.range(at: 2), in: line)
             else { continue }
-            return SigningIdentity(hash: String(line[h]), name: String(line[n]))
+            let problem = Range(m.range(at: 4), in: line).map { String(line[$0]) }
+            let id = SigningIdentity(hash: String(line[h]), name: String(line[n]))
+            if id.name.hasPrefix("Apple Development: "), problem == nil, development == nil { development = id }
+            if id.name == "Macximesed Local Signing", problem == nil || problem == "CSSMERR_TP_NOT_TRUSTED", local == nil { local = id }
         }
-        return nil
+        return development ?? local
     }
 
     /// `MACX_SIGN_IDENTITY` if set, else the first Apple Development identity in the keychain, else nil (ad-hoc).
@@ -352,7 +360,7 @@ public struct SigningIdentity: Sendable, Equatable {
         if let forced = ProcessInfo.processInfo.environment["MACX_SIGN_IDENTITY"], !forced.isEmpty {
             return forced == "-" ? nil : SigningIdentity(hash: forced, name: forced)
         }
-        guard let out = try? runner.run("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"]) else { return nil }
+        guard let out = try? runner.run("/usr/bin/security", ["find-identity", "-p", "codesigning"]) else { return nil }
         return parse(findIdentityOutput: out)
     }
 
