@@ -67,7 +67,8 @@ public struct ScanReport: Sendable, Equatable {
         lines.append("Top processes by CPU")
         for p in topProcesses {
             let cpu = String(format: "%5.1f%%", p.cpuPercent)
-            lines.append("  \(cpu)  \(formatBytes(p.memoryBytes).padding(toLength: 9, withPad: " ", startingAt: 0))  \(p.name)  (pid \(p.pid))")
+            lines.append(
+                "  \(cpu)  \(formatBytes(p.memoryBytes).padding(toLength: 9, withPad: " ", startingAt: 0))  \(p.name)  (pid \(p.pid))")
         }
         if !warnings.isEmpty {
             lines.append("")

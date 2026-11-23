@@ -61,12 +61,38 @@ It never cleans:
 
 Cleaned items go to `~/Library/Application Support/Macximesed/Undo/<batch>/`, with a `manifest.json` per batch. Disk space only comes back after `macx undo purge`.
 
-## Tests
+## Tests and checks
 ```bash
 swift test
 ```
 
-CI runs the build and tests on every push and pull request (`.github/workflows/ci.yml`).
+```bash
+swift format lint --strict --recursive Sources Tests Package.swift
+```
+
+Formatting follows `.swift-format` (4-space indents, 140 columns). To format in place, run `swift format --in-place --recursive Sources Tests Package.swift`.
+
+### CI
+Every push and pull request runs these on GitHub-hosted Macs (free for public repos):
+
+| Workflow | What it checks |
+|---|---|
+| `ci.yml`, lint | `swift format lint --strict` |
+| `ci.yml`, test matrix | **macOS 15** (oldest supported), **macOS 26 Apple silicon**, **macOS 26 Intel**: build with warnings as errors, tests, release build, and a smoke run of every read-only command |
+| `ci.yml`, sanitizers | Tests under AddressSanitizer and ThreadSanitizer |
+| `ci.yml`, coverage | Line coverage, shown in the run summary |
+| `ci.yml`, universal | A universal (arm64 + x86_64) `macx`, uploaded as a build artifact with its SHA-256 |
+| `codeql.yml` | GitHub CodeQL security analysis of the Swift code, also weekly |
+| `release.yml` | On a `v*.*.*` tag: checks the tag matches `macx --version`, tests, builds the universal binary and publishes a GitHub release with notes from this CHANGELOG |
+
+Dependabot keeps the pinned action SHAs and the Swift package up to date, through pull requests to `dev`.
+
+## Install a release
+Each [release](https://github.com/LAOUUUUU/Macximesed/releases) has a universal `macx` (Apple silicon and Intel) with a SHA-256 file. The binary isn't signed yet, so after checking the hash:
+
+```bash
+tar -xzf macx-*-macos-universal.tar.gz && xattr -d com.apple.quarantine macx && ./macx --help
+```
 
 ## License
 [MIT](LICENSE)

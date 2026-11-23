@@ -124,7 +124,8 @@ public enum ReverseDNS {
     public static func isReverseDNS(_ name: String) -> Bool {
         let parts = name.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count >= 3, let first = parts.first, first.count >= 2,
-              first.allSatisfy({ $0.isASCII && $0.isLowercase && $0.isLetter }) else { return false }
+            first.allSatisfy({ $0.isASCII && $0.isLowercase && $0.isLetter })
+        else { return false }
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_$"))
         return parts.allSatisfy { !$0.isEmpty && $0.unicodeScalars.allSatisfy(allowed.contains) }
     }
@@ -153,8 +154,9 @@ public struct ToolCache: Sendable, Equatable {
         var out: [ToolCache] = []
         func ask(_ tool: String, _ args: [String], suffix: String? = nil) {
             guard let exe = ToolFinder.find(tool),
-                  let raw = try? runner.run(exe, args).trimmingCharacters(in: .whitespacesAndNewlines),
-                  raw.hasPrefix("/") else { return }
+                let raw = try? runner.run(exe, args).trimmingCharacters(in: .whitespacesAndNewlines),
+                raw.hasPrefix("/")
+            else { return }
             var url = URL(fileURLWithPath: raw, isDirectory: true)
             if let suffix { url = url.appendingPathComponent(suffix, isDirectory: true) }
             out.append(ToolCache(tool: tool, url: url))
@@ -193,8 +195,10 @@ public struct SystemContext: Sendable {
     /// Xcode's custom DerivedData folder, when the user set one.
     public var derivedData: URL?
 
-    public init(home: URL, bundles: BundleIndex, runningBundleIDs: Set<String>, openFiles: [OpenFile],
-                toolCaches: [ToolCache], derivedData: URL?) {
+    public init(
+        home: URL, bundles: BundleIndex, runningBundleIDs: Set<String>, openFiles: [OpenFile],
+        toolCaches: [ToolCache], derivedData: URL?
+    ) {
         self.home = home
         self.bundles = bundles
         self.runningBundleIDs = runningBundleIDs

@@ -11,12 +11,12 @@ public enum AppArch: String, Sendable, Equatable, Comparable, Codable {
     /// The CPU this Mac has.
     public static var hostIsARM: Bool {
         #if arch(arm64)
-        true
+            true
         #else
-        // An Intel build can still be running under Rosetta on Apple silicon.
-        var translated: Int32 = 0
-        var size = MemoryLayout<Int32>.size
-        return sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0 && translated == 1
+            // An Intel build can still be running under Rosetta on Apple silicon.
+            var translated: Int32 = 0
+            var size = MemoryLayout<Int32>.size
+            return sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0 && translated == 1
         #endif
     }
 
@@ -41,8 +41,14 @@ public enum MachO {
     public static func architectures(of data: Data) -> [AppArch] {
         guard data.count >= 8 else { return [] }
         let bytes = [UInt8](data.prefix(4096))
-        func le(_ o: Int) -> UInt32 { o + 4 <= bytes.count ? UInt32(bytes[o]) | UInt32(bytes[o + 1]) << 8 | UInt32(bytes[o + 2]) << 16 | UInt32(bytes[o + 3]) << 24 : 0 }
-        func be(_ o: Int) -> UInt32 { o + 4 <= bytes.count ? UInt32(bytes[o]) << 24 | UInt32(bytes[o + 1]) << 16 | UInt32(bytes[o + 2]) << 8 | UInt32(bytes[o + 3]) : 0 }
+        func le(_ o: Int) -> UInt32 {
+            o + 4 <= bytes.count
+                ? UInt32(bytes[o]) | UInt32(bytes[o + 1]) << 8 | UInt32(bytes[o + 2]) << 16 | UInt32(bytes[o + 3]) << 24 : 0
+        }
+        func be(_ o: Int) -> UInt32 {
+            o + 4 <= bytes.count
+                ? UInt32(bytes[o]) << 24 | UInt32(bytes[o + 1]) << 16 | UInt32(bytes[o + 2]) << 8 | UInt32(bytes[o + 3]) : 0
+        }
         func arch(_ cpu: UInt32) -> AppArch? {
             switch cpu {
             case cpuARM64: .arm64
@@ -52,12 +58,12 @@ public enum MachO {
         }
 
         switch be(0) {
-        case 0xCAFE_BABE, 0xCAFE_BABF: // universal, 32- or 64-bit offsets
+        case 0xCAFE_BABE, 0xCAFE_BABF:  // universal, 32- or 64-bit offsets
             let entrySize = be(0) == 0xCAFE_BABF ? 32 : 20
             let count = Int(min(be(4), 16))
             let found = (0..<count).compactMap { arch(be(8 + $0 * entrySize)) }
             return Array(Set(found)).sorted()
-        case 0xCFFA_EDFE: // thin 64-bit, little-endian (read as big-endian)
+        case 0xCFFA_EDFE:  // thin 64-bit, little-endian (read as big-endian)
             return arch(le(4)).map { [$0] } ?? []
         default:
             return []
@@ -87,9 +93,11 @@ public struct AppInfo: Sendable, Equatable {
     /// True when `lastUsed` was estimated from the app's own files because Spotlight had no date.
     public var lastUsedIsEstimate: Bool
 
-    public init(url: URL, bundleID: String, name: String, version: String?, bytes: UInt64,
-                architectures: [AppArch], lastUsed: Date?, isApple: Bool, fromAppStore: Bool,
-                lastUsedIsEstimate: Bool = false) {
+    public init(
+        url: URL, bundleID: String, name: String, version: String?, bytes: UInt64,
+        architectures: [AppArch], lastUsed: Date?, isApple: Bool, fromAppStore: Bool,
+        lastUsedIsEstimate: Bool = false
+    ) {
         self.url = url
         self.bundleID = bundleID
         self.name = name
@@ -108,8 +116,10 @@ public struct AppInfo: Sendable, Equatable {
 public enum AppScanner {
     /// Used only when Spotlight can't answer: the standard app folders, plus `Applications` on every mounted volume.
     public static var fallbackFolders: [URL] {
-        var out = [URL(fileURLWithPath: "/Applications"),
-                   FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
+        var out = [
+            URL(fileURLWithPath: "/Applications"),
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
+        ]
         let volumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) ?? []
         for v in volumes where v.path != "/" {
             out.append(v.appendingPathComponent("Applications"))
@@ -118,8 +128,10 @@ public enum AppScanner {
     }
 
     /// Every app on the Mac, wherever it is: asks Spotlight, falls back to scanning folders.
-    public static func discover(includeSystem: Bool = false, runner: CommandRunner = ProcessRunner(),
-                                lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil) -> [AppInfo] {
+    public static func discover(
+        includeSystem: Bool = false, runner: CommandRunner = ProcessRunner(),
+        lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil
+    ) -> [AppInfo] {
         if let out = try? runner.run("/usr/bin/mdfind", ["kMDItemContentTypeTree == 'com.apple.application-bundle'"]) {
             let urls = parseAppPaths(out, includeSystem: includeSystem)
             if !urls.isEmpty { return build(urls, lastUsed: lastUsed, home: home) }
@@ -167,7 +179,7 @@ public enum AppScanner {
             }
             return app
         }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     public static func unused(_ apps: [AppInfo], olderThanDays days: Int, now: Date = Date()) -> [AppInfo] {
@@ -178,13 +190,16 @@ public enum AppScanner {
     static func read(_ app: URL, lastUsed: (URL) -> Date?) -> AppInfo? {
         let contents = app.appendingPathComponent("Contents")
         guard let data = try? Data(contentsOf: contents.appendingPathComponent("Info.plist")),
-              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let id = info["CFBundleIdentifier"] as? String else { return nil }
-        let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String)
+            let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+            let id = info["CFBundleIdentifier"] as? String
+        else { return nil }
+        let name =
+            (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String)
             ?? app.deletingPathExtension().lastPathComponent
-        let archs = (info["CFBundleExecutable"] as? String).map {
-            MachO.architectures(ofFile: contents.appendingPathComponent("MacOS/\($0)"))
-        } ?? []
+        let archs =
+            (info["CFBundleExecutable"] as? String).map {
+                MachO.architectures(ofFile: contents.appendingPathComponent("MacOS/\($0)"))
+            } ?? []
         let receipt = contents.appendingPathComponent("_MASReceipt/receipt")
         return AppInfo(
             url: app, bundleID: id, name: name, version: info["CFBundleShortVersionString"] as? String,
@@ -274,15 +289,19 @@ public enum AppLeftovers {
                 let name = ReverseDNS.baseName(child.lastPathComponent)
                 // App-group IDs (group.*, systemgroup.*) are sharing permissions, not bundle IDs, so no bundle owns them by name.
                 guard ReverseDNS.isReverseDNS(name), !name.hasPrefix("com.apple."),
-                      !name.hasPrefix("group."), !name.hasPrefix("systemgroup."),
-                      bundles.owner(of: name) == nil else { continue }
+                    !name.hasPrefix("group."), !name.hasPrefix("systemgroup."),
+                    bundles.owner(of: name) == nil
+                else { continue }
                 groups[name, default: []].append(child)
             }
         }
-        return groups.map { OrphanGroup(id: $0.key, paths: $0.value.sorted { $0.path < $1.path },
-                                        bytes: $0.value.reduce(0) { $0 + allocatedSize(of: $1) }) }
-            .filter { $0.bytes > 0 }
-            .sorted { $0.id < $1.id }
+        return groups.map {
+            OrphanGroup(
+                id: $0.key, paths: $0.value.sorted { $0.path < $1.path },
+                bytes: $0.value.reduce(0) { $0 + allocatedSize(of: $1) })
+        }
+        .filter { $0.bytes > 0 }
+        .sorted { $0.id < $1.id }
     }
 }
 
@@ -302,16 +321,19 @@ public struct UninstallPlan: Sendable, Equatable {
 }
 
 public enum AppUninstaller {
-    public static func plan(_ app: AppInfo, home: URL, runningBundleIDs: Set<String>,
-                            includeNameMatches: Bool = false) throws -> UninstallPlan {
+    public static func plan(
+        _ app: AppInfo, home: URL, runningBundleIDs: Set<String>,
+        includeNameMatches: Bool = false
+    ) throws -> UninstallPlan {
         if app.isOnSystemVolume { throw UninstallError.systemApp }
         // Apple's App Store apps (GarageBand, iMovie, Pages...) can be downloaded again; built-in ones can't.
         if app.isApple, !app.fromAppStore { throw UninstallError.appleApp }
         if runningBundleIDs.contains(app.bundleID) { throw UninstallError.running(app.name) }
         var leftovers = AppLeftovers.find(for: app, home: home)
         if includeNameMatches { leftovers += AppLeftovers.nameMatches(for: app, home: home).filter { !leftovers.contains($0) } }
-        return UninstallPlan(app: app, paths: [app.url] + leftovers,
-                             bytes: app.bytes + leftovers.reduce(0) { $0 + allocatedSize(of: $1) })
+        return UninstallPlan(
+            app: app, paths: [app.url] + leftovers,
+            bytes: app.bytes + leftovers.reduce(0) { $0 + allocatedSize(of: $1) })
     }
 
     public static func run(_ plan: UninstallPlan, store: UndoStore) throws -> UndoBatch {

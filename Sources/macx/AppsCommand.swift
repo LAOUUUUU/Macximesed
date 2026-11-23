@@ -42,8 +42,11 @@ struct Apps: ParsableCommand {
             for a in apps {
                 let size = formatBytes(a.bytes).padding(toLength: 9, withPad: " ", startingAt: 0)
                 let kind = AppArch.kind(a.architectures).padding(toLength: 17, withPad: " ", startingAt: 0)
-                let used = ((a.lastUsedIsEstimate ? "~" : "") + Apps.lastUsedText(a.lastUsed)).padding(toLength: 14, withPad: " ", startingAt: 0)
-                print("  \(size)  \(kind)  \(used)  \(a.name)  [\(a.bundleID)]  \((a.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)")
+                let used = ((a.lastUsedIsEstimate ? "~" : "") + Apps.lastUsedText(a.lastUsed)).padding(
+                    toLength: 14, withPad: " ", startingAt: 0)
+                print(
+                    "  \(size)  \(kind)  \(used)  \(a.name)  [\(a.bundleID)]  \((a.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)"
+                )
             }
             let total = apps.reduce(0) { $0 + $1.bytes }
             print("\n  \(apps.count) apps, \(formatBytes(total)).")
@@ -79,10 +82,13 @@ struct Apps: ParsableCommand {
             }
             let plan: UninstallPlan
             do {
-                plan = try AppUninstaller.plan(target, home: FileManager.default.homeDirectoryForCurrentUser,
-                                              runningBundleIDs: runningBundleIDs(), includeNameMatches: includeNameMatches)
+                plan = try AppUninstaller.plan(
+                    target, home: FileManager.default.homeDirectoryForCurrentUser,
+                    runningBundleIDs: runningBundleIDs(), includeNameMatches: includeNameMatches)
             } catch UninstallError.systemApp {
-                throw UserError("\(target.name) is part of macOS (sealed system volume). It can only be removed at the Extreme level, which isn't built yet.")
+                throw UserError(
+                    "\(target.name) is part of macOS (sealed system volume). It can only be removed at the Extreme level, which isn't built yet."
+                )
             } catch UninstallError.appleApp {
                 throw UserError("\(target.name) is a built-in Apple app, not an App Store download, so it's left alone.")
             } catch UninstallError.running(let name) {
@@ -136,7 +142,10 @@ struct Apps: ParsableCommand {
             if !unknown.isEmpty { throw UserError("Unknown ID: \(unknown.sorted().joined(separator: ", "))") }
             let paths = chosen.flatMap(\.paths)
             paths.forEach { print("  \($0.path)") }
-            guard yes || askYes("Move these \(paths.count) items to the undo folder?") else { print("Nothing changed."); return }
+            guard yes || askYes("Move these \(paths.count) items to the undo folder?") else {
+                print("Nothing changed.")
+                return
+            }
             let batch = try UndoStore().stash(paths, reason: "leftovers: \(chosen.map(\.id).joined(separator: ", "))")
             print("\nMoved \(batch.items.count) items. Undo with: macx undo restore \(batch.id)")
         }

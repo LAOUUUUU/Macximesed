@@ -21,9 +21,10 @@ public struct ProcessSample: Sendable, Equatable {
         psOutput.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true)
             guard parts.count == 4,
-                  let pid = Int32(parts[0]),
-                  let cpu = Double(parts[1]),
-                  let rssKB = UInt64(parts[2]) else { return nil }
+                let pid = Int32(parts[0]),
+                let cpu = Double(parts[1]),
+                let rssKB = UInt64(parts[2])
+            else { return nil }
             return ProcessSample(pid: pid, cpuPercent: cpu, memoryBytes: rssKB * 1024, path: String(parts[3]))
         }
     }
@@ -74,8 +75,9 @@ public struct DiskUsage: Sendable, Equatable {
     public static func startupVolume() -> DiskUsage? {
         let url = URL(fileURLWithPath: "/")
         guard let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]),
-              let total = values.volumeTotalCapacity,
-              let available = values.volumeAvailableCapacityForImportantUsage else { return nil }
+            let total = values.volumeTotalCapacity,
+            let available = values.volumeAvailableCapacityForImportantUsage
+        else { return nil }
         return DiskUsage(totalBytes: UInt64(total), availableBytes: UInt64(max(available, 0)))
     }
 }

@@ -1,14 +1,15 @@
 import Foundation
 import Testing
+
 @testable import MacxCore
 
 @Suite("Process list parsing")
 struct ProcessListTests {
     @Test func parsesPsLines() {
         let out = """
-        43227  45.0  29776 /usr/libexec/searchpartyuseragent
-          912   3.1 739136 /Applications/Some Game.app/Contents/MacOS/Some Game
-        """
+            43227  45.0  29776 /usr/libexec/searchpartyuseragent
+              912   3.1 739136 /Applications/Some Game.app/Contents/MacOS/Some Game
+            """
         let procs = ProcessSample.parse(psOutput: out)
         #expect(procs.count == 2)
         #expect(procs[0].pid == 43227)

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import MacxCore
 
 /// A throwaway folder per test, removed afterwards.
@@ -39,8 +40,10 @@ struct UndoStoreTests {
         let store = UndoStore(root: tmp.url.appendingPathComponent("undo"))
 
         let batch = try store.stash(
-            [tmp.url.appendingPathComponent("home/Library/Caches/AppA"),
-             tmp.url.appendingPathComponent("home/Library/Logs/app.log")],
+            [
+                tmp.url.appendingPathComponent("home/Library/Caches/AppA"),
+                tmp.url.appendingPathComponent("home/Library/Logs/app.log"),
+            ],
             reason: "test clean"
         )
         #expect(!tmp.exists("home/Library/Caches/AppA"))

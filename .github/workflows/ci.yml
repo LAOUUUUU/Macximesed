@@ -4,21 +4,117 @@ on:
   push:
     branches: [main, dev]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  lint:
+    name: Format lint
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Show toolchain
-        run: swift --version
-      - name: Build
-        run: swift build -c release
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: swift format lint --strict
+        run: swift format lint --strict --recursive Sources Tests Package.swift
+
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported macOS, current macOS on Apple silicon, and an Intel Mac.
+        os: [macos-15, macos-26, macos-26-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain
+        run: |
+          sw_vers
+          uname -m
+          swift --version
+      - name: Build (warnings are errors)
+        run: swift build -Xswiftc -warnings-as-errors
       - name: Test
         run: swift test
-      - name: Smoke test macx scan
-        run: .build/release/macx scan --top 3
+      - name: Release build
+        run: swift build -c release
+      - name: Smoke test (read-only commands)
+        run: |
+          set -euo pipefail
+          M=.build/release/macx
+          $M --version
+          $M scan --top 3
+          $M clean --dry-run
+          $M apps
+          $M apps leftovers
+          $M undo list
+
+  sanitizers:
+    name: Sanitizer (${{ matrix.sanitizer }})
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread]
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: swift test --sanitize=${{ matrix.sanitizer }}
+        run: swift test --sanitize=${{ matrix.sanitizer }}
+
+  coverage:
+    name: Coverage
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test with coverage
+        run: swift test --enable-code-coverage
+      - name: Coverage summary
+        run: |
+          set -euo pipefail
+          BIN=$(swift build --show-bin-path)
+          PROF="$BIN/codecov/default.profdata"
+          XCTEST=$(find "$BIN" -maxdepth 1 -name '*.xctest' | head -1)
+          EXE="$XCTEST/Contents/MacOS/$(basename "$XCTEST" .xctest)"
+          REPORT=$(xcrun llvm-cov report "$EXE" -instr-profile "$PROF" -ignore-filename-regex '(\.build|Tests)/')
+          echo "$REPORT"
+          {
+            echo '## Coverage (MacxCore and macx)'
+            echo '```'
+            echo "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  universal:
+    name: Universal binary
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build arm64 + x86_64
+        run: swift build -c release --arch arm64 --arch x86_64
+      - name: Check both architectures
+        run: |
+          set -euo pipefail
+          BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+          lipo -archs "$BIN/macx" | tee /dev/stderr | grep -q 'x86_64 arm64'
+          "$BIN/macx" --version
+          mkdir -p dist
+          cp "$BIN/macx" dist/
+          tar -C dist -czf macx-universal.tar.gz macx
+          shasum -a 256 macx-universal.tar.gz > macx-universal.tar.gz.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macx-universal
+          path: |
+            macx-universal.tar.gz
+            macx-universal.tar.gz.sha256
+          retention-days: 14

@@ -15,8 +15,8 @@ public enum Ownership: Sendable, Equatable {
 
     public var label: String {
         switch self {
-        case let .app(name, _): name
-        case let .tool(tool): tool
+        case .app(let name, _): name
+        case .tool(let tool): tool
         case .system: "macOS"
         case .unknown: "unknown owner"
         }
@@ -42,7 +42,7 @@ public enum CleanupCatalog {
         let toolByPath = Dictionary(ctx.toolCaches.map { ($0.url.standardizedFileURL.path, $0.tool) }, uniquingKeysWith: { a, _ in a })
 
         func inUse(_ paths: [URL], owner: Ownership) -> String? {
-            if case let .app(name, id) = owner, ctx.runningBundleIDs.contains(id) { return name }
+            if case .app(let name, let id) = owner, ctx.runningBundleIDs.contains(id) { return name }
             for p in paths {
                 if let f = OpenFiles.holder(of: p, in: ctx.openFiles) { return "\(f.process) (pid \(f.pid))" }
             }
@@ -52,8 +52,10 @@ public enum CleanupCatalog {
         func add(_ id: String, _ title: String, _ paths: [URL], owner: Ownership) {
             let bytes = paths.reduce(0) { $0 + allocatedSize(of: $1) }
             guard !paths.isEmpty, bytes > 0 else { return }
-            items.append(CleanupItem(id: id, title: title, tier: .safe, paths: paths, bytes: bytes,
-                                     owner: owner, inUseBy: inUse(paths, owner: owner)))
+            items.append(
+                CleanupItem(
+                    id: id, title: title, tier: .safe, paths: paths, bytes: bytes,
+                    owner: owner, inUseBy: inUse(paths, owner: owner)))
         }
 
         let caches = ctx.library.appendingPathComponent("Caches", isDirectory: true)
@@ -68,14 +70,17 @@ public enum CleanupCatalog {
         add("logs:user", "Your app logs and crash reports", children(of: ctx.library.appendingPathComponent("Logs")), owner: .system)
         let derived = ctx.derivedData ?? ctx.library.appendingPathComponent("Developer/Xcode/DerivedData")
         add("xcode:derived-data", "Xcode build data (DerivedData)", children(of: derived), owner: .tool("Xcode"))
-        add("xcode:device-support", "Xcode iOS device support files",
+        add(
+            "xcode:device-support", "Xcode iOS device support files",
             children(of: ctx.library.appendingPathComponent("Developer/Xcode/iOS DeviceSupport")), owner: .tool("Xcode"))
-        add("simulator:caches", "Simulator caches",
+        add(
+            "simulator:caches", "Simulator caches",
             children(of: ctx.library.appendingPathComponent("Developer/CoreSimulator/Caches")), owner: .tool("Xcode"))
 
         // Tool caches outside ~/Library/Caches (npm, pnpm...). Ones inside it were handled above.
         for tc in ctx.toolCaches where !tc.url.standardizedFileURL.path.hasPrefix(caches.standardizedFileURL.path + "/") {
-            add("\(tc.tool):cache", "\(tc.tool) download cache", FileManager.default.fileExists(atPath: tc.url.path) ? [tc.url] : [],
+            add(
+                "\(tc.tool):cache", "\(tc.tool) download cache", FileManager.default.fileExists(atPath: tc.url.path) ? [tc.url] : [],
                 owner: .tool(tc.tool))
         }
         return items

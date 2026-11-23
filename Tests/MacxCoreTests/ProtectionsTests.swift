@@ -1,4 +1,5 @@
 import Testing
+
 @testable import MacxCore
 
 @Suite("Protection status parsing")
@@ -13,11 +14,11 @@ struct ProtectionsTests {
 
     @Test func sipCustomConfigurationCountsAsPartial() {
         let out = """
-        System Integrity Protection status: unknown (Custom Configuration).
+            System Integrity Protection status: unknown (Custom Configuration).
 
-        Configuration:
-        \tFilesystem Protections: disabled
-        """
+            Configuration:
+            \tFilesystem Protections: disabled
+            """
         #expect(Protections.parseSIP(out) == .partial)
     }
 

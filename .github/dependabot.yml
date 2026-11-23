@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Keep the pinned action SHAs current.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Swift package dependencies (swift-argument-parser).
+  - package-ecosystem: swift
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly

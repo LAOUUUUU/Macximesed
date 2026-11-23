@@ -1,0 +1,64 @@
+name: Release
+
+# Runs when a version tag (v0.2.0, v1.0.0, ...) is pushed. Tags are made on main
+# once a batch of work is merged, so every release is a tested state.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the tag matches macx --version
+        run: |
+          set -euo pipefail
+          WANT="${GITHUB_REF_NAME#v}"
+          HAVE=$(grep -Eo 'version: "[^"]+"' Sources/macx/Macx.swift | cut -d'"' -f2)
+          echo "tag $WANT, code $HAVE"
+          [ "$WANT" = "$HAVE" ]
+      - name: Test
+        run: swift test
+      - name: Build universal binary
+        run: |
+          set -euo pipefail
+          swift build -c release --arch arm64 --arch x86_64
+          BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+          lipo -archs "$BIN/macx"
+          mkdir -p dist
+          cp "$BIN/macx" dist/
+          NAME="macx-${GITHUB_REF_NAME}-macos-universal.tar.gz"
+          tar -C dist -czf "$NAME" macx
+          shasum -a 256 "$NAME" > "$NAME.sha256"
+          echo "ASSET=$NAME" >> "$GITHUB_ENV"
+      - name: Release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          # The section for this version, up to the next "## [" heading.
+          awk -v v="$VER" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "See CHANGELOG.md." > notes.md; fi
+          cat >> notes.md <<'EOF'
+
+          ---
+          The binary is unsigned. After downloading, check the `.sha256` file, then run it from Terminal:
+          `tar -xzf macx-*.tar.gz && xattr -d com.apple.quarantine macx && ./macx --help`.
+          EOF
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" \
+            --title "Macximesed $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

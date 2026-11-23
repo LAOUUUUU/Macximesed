@@ -9,7 +9,14 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `STATUS.md` (job list) and `CHANGELOG.md` (history).
 - Swift package: `MacxCore` library, `macx` command-line tool, tests.
 - `macx scan`: read-only report of protections, top processes, disk use and thermal state.
-- GitHub Actions CI: build and test on macOS.
+- GitHub Actions CI:
+  - format lint;
+  - a test matrix on macOS 15, macOS 26 Apple silicon and macOS 26 Intel, building with warnings as errors and smoke-running every read-only command;
+  - Address and Thread Sanitizer runs;
+  - a line-coverage summary;
+  - a universal (arm64 + x86_64) binary artifact.
+- CodeQL security analysis (on push and weekly), Dependabot for actions and Swift packages, and a release workflow that publishes a universal binary with notes from this file when a `v*.*.*` tag is pushed.
+- `.swift-format` config. The code is formatted to it.
 - Undo store: cleanups move files into `~/Library/Application Support/Macximesed/Undo/<batch>/` with a manifest. `macx undo list`, `macx undo restore <id>` (never overwrites anything new), and `macx undo purge --days 7` (the only real delete, asks first).
 - `macx clean` with the **Safe** tier: third-party caches (one item per folder), user logs, Xcode DerivedData and DeviceSupport, Simulator caches and the npm cache, with `--dry-run`, `--only`, `--include-in-use` and `-y`. Caches of running apps are skipped. Apple caches, `~/.cache` and empty items are never included.
 - `macx apps`: lists apps with size, architecture (Apple silicon, Intel or Universal, read from the Mach-O header) and last use (Spotlight, or `~` estimated from the app's own files). Filters: `--unused [--days]`, `--intel`, plus `--sort`.

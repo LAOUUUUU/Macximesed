@@ -98,7 +98,10 @@ struct Undo: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Show undo batches.")
         func run() throws {
             let batches = try UndoStore().batches()
-            if batches.isEmpty { print("Nothing in the undo folder."); return }
+            if batches.isEmpty {
+                print("Nothing in the undo folder.")
+                return
+            }
             let df = DateFormatter()
             df.dateStyle = .medium
             df.timeStyle = .short
@@ -129,10 +132,16 @@ struct Undo: ParsableCommand {
             let store = UndoStore()
             let cutoff = Date().addingTimeInterval(-Double(max(days, 0)) * 86400)
             let old = try store.batches().filter { $0.createdAt < cutoff }
-            if old.isEmpty { print("No batches older than \(days) days."); return }
+            if old.isEmpty {
+                print("No batches older than \(days) days.")
+                return
+            }
             let total = old.reduce(0) { $0 + $1.totalBytes }
             print("\(old.count) batches, \(formatBytes(total)), older than \(days) days. This can't be undone.")
-            guard yes || askYes("Delete them for good?") else { print("Nothing changed."); return }
+            guard yes || askYes("Delete them for good?") else {
+                print("Nothing changed.")
+                return
+            }
             let purged = try store.purge(olderThan: Double(max(days, 0)) * 86400)
             print("Deleted \(purged.count) batches.")
         }
