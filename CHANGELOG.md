@@ -56,6 +56,17 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
   - **History scan:** zsh extended or plain history (with zsh's metafied bytes decoded), Terminal's `~/.zsh_sessions`, bash with optional timestamps, fish, and `$HISTFILE`. Base64 payloads are decoded and checked too.
   - **`clipboard`** checks what's on the clipboard, and **`check -- CMD`** checks one command (exit code 2 for dangerous).
   - **Opt-in zsh hook** (`guard install` / `uninstall` / `status`): it stops a dangerous command once on Enter, and Enter again runs it.
+- `macx watch`: live watch through `eslogger` (`exec`, `create`, `rename`, `deleteextattr`, `btm_launch_item_add`).
+  - **Rules:**
+    - download-to-shell and base64 payloads (decoded);
+    - password prompts and `dscl -authonly` checks (the password is masked);
+    - quarantine removal;
+    - new launch items, critical when they're fake `com.apple.*` ones;
+    - hidden `.com.apple.*` folders;
+    - new background items running unsigned programs;
+    - unsigned programs starting from hidden or temp folders.
+  - **Options:** `--suspend` freezes the process behind a critical alert, and alerts are logged to `~/Library/Logs/Macximesed/watch.jsonl` (owned by the user under sudo). `--replay FILE` checks a saved log.
+  - **Parser:** follows Apple's `es_message_t` field names and treats every field as optional.
 
 ### Changed
 - **No more guessing from names.**

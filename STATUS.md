@@ -5,7 +5,7 @@ The job list: what is being built now and what comes next. Finished work moves t
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
 ## Now
-- [ ] **9. Live watch**: eslogger (root + Full Disk Access) feeding the step 4 and 6 rules live. Pulled ahead of 7 and 8 to finish the antivirus side first (Lao, 2026-11-23).
+- [ ] **Try `sudo macx watch` on a real Mac** for a few minutes and check its alerts against real eslogger output (the parser was built from Apple's header field names).
 
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
@@ -21,6 +21,7 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [x] **4. Persistence scan**, `macx persist` with `--baseline` / `--diff` and the AMOS rules (2026-11-23).
 - [x] **5. File check**, `macx check` (2026-11-23): apps, packages (install scripts read), disk images (mounted read-only), scripts, AppleScript; optional MalwareBazaar.
 - [x] **6. Paste-to-shell guard**, `macx guard` (2026-11-23): history scan with base64 decoding, clipboard check, opt-in zsh Enter-key hook.
+- [x] **9. Live watch**, `sudo macx watch [--suspend]` and `--replay` (2026-11-23). This finishes the antivirus side, apart from running it in the background (step 11).
 - [x] **No privacy popups** and `macx privacy` (2026-11-23): guarded folders skipped without Full Disk Access; the installed binary owns its permissions.
 
 See [CHANGELOG.md](CHANGELOG.md) for details.
@@ -28,6 +29,6 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 ## Open questions
 - Should purging old undo batches happen automatically? It's manual for now (`macx undo purge`), because it's the only real delete.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
-- How much CPU does eslogger use with `open` events on? Measure before step 9.
+- `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.
 - `sfltool dumpbtm` is undocumented. The parser keeps unknown keys and types and skips what it can't read; re-check on each macOS release.
 - Configuration profiles: `profiles` needs root to list them, so the persistence scan doesn't cover them yet.

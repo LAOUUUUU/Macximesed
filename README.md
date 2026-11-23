@@ -2,7 +2,7 @@
 
 Squeeze more speed out of macOS and catch stealer-style malware (like AMOS, the Atomic macOS Stealer) that XProtect misses.
 
-> **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps`, `macx check`, `macx persist`, `macx guard`, `macx privacy` and `macx undo` exist so far. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
+> **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps`, the antivirus side (`macx check`, `macx persist`, `macx guard`, `macx watch`) is done. Cleanup so far is `macx scan`, `macx clean` (Safe tier) and `macx apps`, plus `macx privacy` and `macx undo`. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
 
 ## What it will do
 - **Speed:** clean caches and leftovers, remove apps you don't use, a Boost mode that pushes background work aside for the app you're using, a heat/throttle view, and game profiles.
@@ -62,6 +62,8 @@ swift build -c release
 | `macx guard clipboard` | Checks the clipboard before you paste it into Terminal. Exit code 2 if it's dangerous. | No |
 | `macx guard check -- COMMAND` | Checks one command. Exit code 2 if it's dangerous. | No |
 | `macx guard install` / `uninstall` / `status` | Adds a zsh hook: when you press Enter on a dangerous command, it's stopped with an explanation, and pressing Enter again runs it anyway. It's one marked block in `.zshrc` (or `$ZDOTDIR/.zshrc`) that sources `~/.config/macximesed/guard.zsh`, and uninstalling removes exactly that. | No |
+| `sudo macx watch [--suspend] [--min-severity medium]` | **Live watch** through Apple's `eslogger`. It checks every program start, launch-item write, quarantine removal and new background item as it happens: pasted download-and-run or base64 commands (decoded), fake password prompts, `dscl -authonly` password checks (the password is masked), fake `com.apple.*` launch items and folders, and unsigned programs starting from hidden or temp folders. `--suspend` freezes (SIGSTOP) the process behind a critical alert. Alerts are saved to `~/Library/Logs/Macximesed/watch.jsonl`. Needs Full Disk Access for macx (see *Permissions*). | **Yes** |
+| `macx watch --replay FILE` | Runs the same rules over a saved eslogger JSON Lines file. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
@@ -86,6 +88,9 @@ It never cleans:
 - `~/.cache`, which often holds virtual environments and runtimes.
 - Macximesed's own data.
 - Empty items.
+
+### What the live watch can and can't do
+It can't stop a program *before* it starts. That needs Apple's restricted Endpoint Security entitlement, which Apple hands out slowly, so macx uses `eslogger` instead. What it does is see each step as it happens and, with `--suspend`, freeze the process at once. AMOS's steps all come before the theft finishes: the pasted command, the fake password prompt, the password check, the launch daemon and the hidden folder. eslogger's output format isn't a stable API, so the parser reads every field as optional and works out the event type from the event's name.
 
 ### What `macx persist` flags
 Each rule comes from how AMOS and similar stealers stay on a Mac:
