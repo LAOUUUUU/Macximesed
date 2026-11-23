@@ -1,0 +1,46 @@
+name: Detection report
+description: macx persist flagged something harmless, missed something, or got the severity wrong.
+labels: [detection]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This helps tune the rules. **Never attach malware or files from an infected Mac here.** If you found live malware, a SHA-256 hash and a link to a public write-up are enough. Remove your username from paths.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - False positive (harmless item was flagged)
+        - Missed detection (something bad wasn't flagged)
+        - Wrong severity
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Rule ID
+      description: The ID in square brackets in the output, for example `missing-program`.
+      placeholder: missing-program
+  - type: textarea
+    id: item
+    attributes:
+      label: The item
+      description: The line from `macx persist` (or `macx persist --all`) for this item, cleaned of personal details.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it's wrong
+      description: For example "this is the official Docker helper, signed by Docker", or a link to a write-up of the malware it missed.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: macx and macOS versions
+      placeholder: "macx 0.1.0, macOS 27.0.1, Apple silicon"
+    validations:
+      required: true

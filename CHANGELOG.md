@@ -40,6 +40,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `scripts/install.sh` installs one stable `macx` (`~/.local/bin` by default).
   - The installed copy relaunches itself as its own responsible process (`responsibility_spawnattrs_setdisclaim`), so Full Disk Access is granted to macx itself, not to the terminal.
   - Development builds in `.build/` keep the terminal's access.
+- Community files:
+  - `CONTRIBUTING.md`: setup, branches, test-first workflow and the rules the code keeps;
+  - `SECURITY.md`: private reporting, scope, and what to do if your Mac is infected;
+  - `CODE_OF_CONDUCT.md`;
+  - issue forms for bugs, detection reports and feature requests, with security reports sent to private reporting;
+  - a pull request template;
+  - `.editorconfig`.
 
 ### Changed
 - **No more guessing from names.**

@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest something Macximesed should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Check STATUS.md first; it may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What's slow, risky or annoying today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd like
+      description: How it should work, and which risk tier (Safe, Medium, Risky, Extreme) it belongs in, if it changes anything.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: How macOS really behaves here (Apple docs, a write-up, a command's output). Macximesed decides from facts, not guesses.

@@ -138,5 +138,10 @@ Each [release](https://github.com/LAOUUUUU/Macximesed/releases) has a universal 
 tar -xzf macx-*-macos-universal.tar.gz && xattr -d com.apple.quarantine macx && ./macx --help
 ```
 
+## Contributing
+Pull requests go to `dev`. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers setup, the test-first workflow, and the rules the code keeps (no guessing, nothing deleted without an undo, no privacy popups). Report security problems privately as described in [SECURITY.md](SECURITY.md). Everyone is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+If `macx persist` flags something harmless or misses something, open a **Detection report** issue.
+
 ## License
 [MIT](LICENSE)

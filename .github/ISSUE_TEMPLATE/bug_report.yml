@@ -1,0 +1,60 @@
+name: Bug report
+description: macx crashed, did the wrong thing, or printed something wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Remove your username and anything personal from paths and output before posting.** Security problems go through private reporting (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+      placeholder: "I ran `macx clean --dry-run` and ..."
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The command's output (cleaned of personal details).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: macx version
+      description: Output of `macx --version`.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Output of `sw_vers -productVersion`.
+    validations:
+      required: true
+  - type: dropdown
+    id: mac
+    attributes:
+      label: Mac
+      options:
+        - Apple silicon
+        - Intel
+    validations:
+      required: true
+  - type: dropdown
+    id: fda
+    attributes:
+      label: Full Disk Access
+      description: Output of `macx privacy` (first three lines).
+      options:
+        - "No"
+        - "Yes"
+        - Not sure
+  - type: checkboxes
+    id: undo
+    attributes:
+      label: Undo
+      options:
+        - label: If files were moved, I checked `macx undo list` and they're still there to restore.
