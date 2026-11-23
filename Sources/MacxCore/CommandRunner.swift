@@ -57,18 +57,19 @@ public struct ProcessRunner: CommandRunner {
         process.terminationHandler = { _ in finished.signal() }
         try process.run()
 
-        // Read the pipes on their own threads so a chatty tool can't fill one and block.
+        // Read the pipes on dedicated threads so a chatty tool can't fill one and block. (Not the shared
+        // dispatch pool: under load its threads can all be busy, and a reader that starts late misses its window.)
         nonisolated(unsafe) var outData = Data()
         nonisolated(unsafe) var errData = Data()
         let reading = DispatchGroup()
         reading.enter()
-        DispatchQueue.global().async {
+        Thread.detachNewThread {
             outData = out.fileHandleForReading.readDataToEndOfFile()
             reading.leave()
         }
         if keepStderr {
             reading.enter()
-            DispatchQueue.global().async {
+            Thread.detachNewThread {
                 errData = err.fileHandleForReading.readDataToEndOfFile()
                 reading.leave()
             }
@@ -80,7 +81,7 @@ public struct ProcessRunner: CommandRunner {
             throw CommandError.timedOut(executable)
         }
         // The tool has exited; give the readers a moment to drain (a leftover grandchild could keep a pipe open).
-        _ = reading.wait(timeout: .now() + 2)
+        _ = reading.wait(timeout: .now() + 10)
         return CapturedOutput(
             status: process.terminationStatus, stdout: String(decoding: outData, as: UTF8.self),
             stderr: String(decoding: errData, as: UTF8.self))
