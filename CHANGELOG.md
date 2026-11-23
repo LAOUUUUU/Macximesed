@@ -87,6 +87,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - System tools run with `LANG=C` and `LC_ALL=C`, so output is the same on any language setting.
 - Architecture labels depend on the Mac's CPU, so Intel Macs see "Intel" and "Apple silicon only (can't run here)".
 
+- **Unknowns.** Inspection reports code it can't resolve as *unknown*, which keeps the verdict above "ok": `eval` or `sh -c` of a variable, downloads from links computed at run time, programs downloaded and run, and scripts written then run. In pastes, a variable set from a download is followed back to that download.
+- **Combination scoring.** A single browser, keychain or wallet touch is *high*. Credentials plus an upload, or a password prompt plus `dscl` or credentials, is a critical `stealer-pattern`.
+- **Verified running.** `guard inspect` checks the saved copy's SHA-256 again before running it. Pipe-form scripts are fed to the interpreter on stdin, and everything else runs from a fresh private copy that's deleted afterwards.
+- **Whole-tree suspend.** `watch --suspend` freezes the flagged process and all its descendants top-down (re-reading the tree for late children), and shows who started it.
+- The README has a table of what the live watch observes and what it can't prevent.
+- CodeQL runs on `main`, pull requests and weekly, not on every `dev` push, because it was holding the scarce macOS runners.
+
 ### Fixed
 - Errors are printed without the usage text underneath.
 - Apps in folders whose names contain dots (for example `Cisco Packet Tracer 9.0.1/`) are found.

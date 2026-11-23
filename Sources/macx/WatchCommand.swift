@@ -132,11 +132,20 @@ struct Watch: ParsableCommand {
         if let d = a.detail { d.split(separator: "\n").forEach { print("           \($0)") } }
     }
 
+    /// Stops the process and everything it started, top-down, and shows who started it.
     static func freeze(_ a: WatchAlert) {
         guard let pid = a.pid, pid > 1, pid != Int(getpid()) else { return }
-        if kill(pid_t(pid), SIGSTOP) == 0 {
-            print("           Froze pid \(pid). Resume with: sudo kill -CONT \(pid)   End it with: sudo kill -KILL \(pid)")
+        let before = ProcessTree.snapshot()
+        let chain = ProcessTree.ancestry(of: pid, in: before).dropFirst().prefix(6)
+        let frozen = ProcessTree.freeze(root: pid)
+        guard !frozen.isEmpty else { return }
+        let list = frozen.map(String.init).joined(separator: " ")
+        print("           Froze \(frozen.count) process\(frozen.count == 1 ? "" : "es"): \(list)")
+        if !chain.isEmpty {
+            print(
+                "           Started by: " + chain.map { "\(($0.path as NSString).lastPathComponent) (\($0.pid))" }.joined(separator: " ← "))
         }
+        print("           Resume: sudo kill -CONT \(list)    End them: sudo kill -KILL \(list)")
     }
 
     /// The real user behind sudo, so ~/ paths and the log file are theirs, not root's.

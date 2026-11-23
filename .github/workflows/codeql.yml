@@ -1,8 +1,10 @@
 name: CodeQL
 
+# macOS runners are scarce on free accounts, so CodeQL runs on releases (main), pull requests and
+# weekly, not on every dev push; CI covers dev.
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
   schedule:
     - cron: "23 6 * * 1" # Mondays 06:23 UTC
@@ -10,6 +12,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

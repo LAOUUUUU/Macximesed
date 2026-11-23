@@ -211,31 +211,63 @@ struct Guard: ParsableCommand {
         }
 
         /// Runs the exact bytes that were inspected: with the named interpreter, the script's own `#!`, or directly for a program.
+        /// The bytes are read once and their SHA-256 checked against the inspection. A script is then
+        /// fed to its interpreter on stdin, as `curl … | sh` does, so there's no file to swap. Anything
+        /// that has to be a file (a program, or an interpreter with no stdin mode) is written to a fresh
+        /// private folder, run, and deleted.
         func execute(_ r: InspectedRun) throws {
-            guard let saved = r.savedCopy, let kind = r.inspection?.kind else { return }
+            guard let saved = r.savedCopy, let inspection = r.inspection else { return }
+            let bytes: Data
+            do { bytes = try VerifiedCopy.bytes(at: saved, sha256: inspection.sha256) } catch let e as VerifiedCopy.Mismatch {
+                throw UserError("Not run: \(e.description). Inspect it again.")
+            }
+            let fm = FileManager.default
             let p = Process()
-            if kind == .binary {
-                let exe = saved.deletingLastPathComponent().appendingPathComponent(saved.lastPathComponent + ".run")
-                try? FileManager.default.removeItem(at: exe)
-                try FileManager.default.copyItem(at: saved, to: exe)
-                try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: exe.path)
-                p.executableURL = exe
+            var stdinData: Data?
+            var scratch: URL?
+            defer { if let scratch { try? fm.removeItem(at: scratch) } }
+
+            func privateFile(mode: Int) throws -> URL {
+                let dir = fm.temporaryDirectory.appendingPathComponent("macx-run-\(UUID().uuidString)", isDirectory: true)
+                try fm.createDirectory(at: dir, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+                scratch = dir
+                let f = dir.appendingPathComponent(saved.lastPathComponent)
+                guard fm.createFile(atPath: f.path, contents: bytes, attributes: [.posixPermissions: mode]) else {
+                    throw UserError("Couldn't prepare the copy to run.")
+                }
+                return f
+            }
+
+            if inspection.kind == .binary {
+                p.executableURL = try privateFile(mode: 0o500)
                 p.arguments = r.run.arguments
             } else {
-                let interpreter = r.run.interpreter.flatMap { ["source", ".", "eval"].contains($0) ? nil : $0 } ?? shebang(saved) ?? "sh"
+                let named = r.run.interpreter.flatMap { ["source", ".", "eval"].contains($0) ? nil : $0 }
+                let interpreter = named ?? shebang(bytes) ?? "sh"
                 p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                p.arguments = [interpreter, saved.path] + r.run.arguments
+                if let stdinArgs = VerifiedCopy.stdinArguments(for: interpreter, scriptArgs: r.run.arguments), r.run.form == .pipe {
+                    p.arguments = [interpreter] + stdinArgs
+                    stdinData = bytes
+                } else {
+                    p.arguments = [interpreter, try privateFile(mode: 0o400).path] + r.run.arguments
+                }
             }
-            print("\nRunning the inspected copy (\(saved.lastPathComponent))…\n")
+
+            let input = Pipe()
+            if stdinData != nil { p.standardInput = input }
+            print("\nRunning the inspected copy (SHA-256 \(inspection.sha256.prefix(12))… verified)…\n")
             fflush(stdout)  // so the report comes before the script's own output
             try p.run()
+            if let stdinData {
+                input.fileHandleForWriting.write(stdinData)
+                try? input.fileHandleForWriting.close()
+            }
             p.waitUntilExit()
             if p.terminationStatus != 0 { throw ExitCode(p.terminationStatus) }
         }
 
-        func shebang(_ file: URL) -> String? {
-            guard let h = try? FileHandle(forReadingFrom: file), let d = try? h.read(upToCount: 200) else { return nil }
-            let first = String(decoding: d, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
+        func shebang(_ bytes: Data) -> String? {
+            let first = String(decoding: bytes.prefix(200), as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
             guard first.hasPrefix("#!") else { return nil }
             let parts = first.dropFirst(2).split(separator: " ").map(String.init)
             if let p = parts.first, (p as NSString).lastPathComponent == "env" { return parts.dropFirst().first }

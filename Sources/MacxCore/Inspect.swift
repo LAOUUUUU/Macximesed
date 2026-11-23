@@ -170,11 +170,14 @@ public struct Inspection: Sendable {
     public var behaviours: [CheckFinding]
     /// Facts about where it came from and how it's written.
     public var facts: [CheckFinding]
+    /// What it does that can't be read from the text (eval of a variable, a computed link, a script it
+    /// writes and runs, a program it downloads). Never treated as safe.
+    public var unknowns: [CheckFinding] = []
     public var nestedDownloads: [DownloadRun]
     /// Inspections of the nested downloads (one level).
     public var nested: [Inspection] = []
 
-    public var findings: [CheckFinding] { behaviours + facts + nested.flatMap(\.findings) }
+    public var findings: [CheckFinding] { behaviours + facts + unknowns + nested.flatMap(\.findings) }
     public var verdict: Verdict { Verdict.from(findings) }
 }
 
@@ -187,14 +190,14 @@ public enum ScriptInspector {
             #"\bdscl\s+\.\s+-authonly\b"#
         ),
         (
-            "keychain-read", .critical, "Reads passwords from the keychain",
+            "keychain-read", .high, "Reads passwords from the keychain",
             #"\bsecurity\s+(?:find-(?:generic|internet)-password|dump-keychain|export)\b|login\.keychain"#
         ),
         (
-            "browser-data", .critical, "Touches browser password or cookie files",
+            "browser-data", .high, "Touches browser password or cookie files",
             #"Login\\? Data|Web\\? Data|Local\\? State|\bCookies\b|key4\.db|logins\.json|cookies\.sqlite"#
         ),
-        ("wallet-data", .critical, "Touches crypto wallet files", #"(?i)\b(?:wallet\.dat|Exodus/exodus\.wallet|Electrum/wallets)\b"#),
+        ("wallet-data", .high, "Touches crypto wallet files", #"(?i)\b(?:wallet\.dat|Exodus/exodus\.wallet|Electrum/wallets)\b"#),
         (
             "uploads-files", .high, "Uploads files to a server",
             #"\bcurl\b[^\n]*(?:\s-F\s|\s--form\s|\s-T\s|--upload-file|--data-binary\s+@|\s-d\s+@)"#
@@ -225,6 +228,7 @@ public enum ScriptInspector {
         let kind = classify(data)
         var behaviours: [CheckFinding] = []
         var facts: [CheckFinding] = []
+        var unknowns: [CheckFinding] = []
         var nested: [DownloadRun] = []
 
         if kind == .script {
@@ -252,6 +256,23 @@ public enum ScriptInspector {
                         rule: "decodes-hidden-code", severity: .high, title: "Decodes hidden (base64) code",
                         detail: decoded.map { String($0.prefix(160)) }.joined(separator: "\n")))
             }
+            // Several sensitive steps together are what a stealer does; any one of them alone can be ordinary.
+            let ids = Set(behaviours.map(\.rule))
+            let credentials = ids.intersection(["browser-data", "keychain-read", "wallet-data"])
+            if !credentials.isEmpty, ids.contains("uploads-files") {
+                behaviours.insert(
+                    CheckFinding(
+                        rule: "stealer-pattern", severity: .critical, title: "Collects passwords or browser data and uploads them",
+                        detail: credentials.sorted().joined(separator: " + ") + " + uploads-files"), at: 0)
+            } else if ids.contains("password-prompt"), ids.contains("password-check") || !credentials.isEmpty {
+                let parts = ["password-prompt"] + (ids.contains("password-check") ? ["password-check"] : []) + credentials.sorted()
+                behaviours.insert(
+                    CheckFinding(
+                        rule: "stealer-pattern", severity: .critical, title: "Asks for your password and then uses it",
+                        detail: parts.joined(separator: " + ")), at: 0)
+            }
+            unknowns = Self.unknowns(in: lines)
+
             if text.range(of: #"[A-Za-z0-9+/]{200,}={0,2}"#, options: .regularExpression) != nil {
                 facts.append(
                     CheckFinding(rule: "encoded-blob", severity: .medium, title: "Contains a long encoded block (hard to read on purpose)"))
@@ -300,7 +321,68 @@ public enum ScriptInspector {
 
         return Inspection(
             url: url, finalURL: finalURL, kind: kind, bytes: data.count, sha256: sha256(data), behaviours: behaviours,
-            facts: facts, nestedDownloads: nested)
+            facts: facts, unknowns: unknowns, nestedDownloads: nested)
+    }
+
+    static let shellNames = #"(?:ba|z|k|da)?sh"#
+    /// `eval "$x"` / `sh -c "$x"`: a variable whose content isn't visible. `eval "$(brew shellenv)"` runs a
+    /// visible command instead, so it doesn't count.
+    static let evalOfVariable = #"\beval\s+["']?\$\{?[A-Za-z_]|\b(?:ba|z|k|da)?sh\s+-c\s+["']?\$\{?[A-Za-z_]"#
+
+    /// Code whose effect can't be read from the text. Each is reported as unknown (medium), so the
+    /// verdict can't be "ok" while part of the script is unseen.
+    static func unknowns(in lines: [String]) -> [CheckFinding] {
+        var out: [CheckFinding] = []
+        func add(_ rule: String, _ title: String, _ n: Int) {
+            guard !out.contains(where: { $0.rule == rule }) else { return }
+            out.append(
+                CheckFinding(
+                    rule: rule, severity: .medium, title: title,
+                    detail: "line \(n + 1): \(lines[n].trimmingCharacters(in: .whitespaces).prefix(200))"))
+        }
+        func has(_ line: String, _ pattern: String) -> Bool { line.range(of: pattern, options: .regularExpression) != nil }
+
+        for (n, raw) in lines.enumerated() {
+            let l = raw.trimmingCharacters(in: .whitespaces)
+            if l.hasPrefix("#") { continue }
+            if has(l, evalOfVariable) {
+                add("runs-unresolved-code", "Runs code held in a variable, so what it runs can't be read here", n)
+            }
+            let downloads = has(l, #"\b(?:curl|wget)\b"#)
+            let computedURL =
+                has(l, #"(?:https?|ftp)://[^\s"']*\$"#) || (!has(l, #"(?:https?|ftp)://"#) && has(l, #"\$\{?[A-Za-z_]"#))
+            let runsOrSaves = has(l, #"\|\s*(?:sudo\s+)?"# + shellNames + #"\b|\s-o\s|\s-O\b"#)
+            if downloads, computedURL, runsOrSaves {
+                add("computed-download", "Downloads from a link worked out while it runs, so it can't be checked first", n)
+            }
+        }
+
+        // A program downloaded and then run directly can't be read as text.
+        let text = lines.joined(separator: "\n")
+        if let n = lines.firstIndex(where: { has($0, #"\b(?:curl|wget)\b"#) }),
+            DownloadRuns.findDirect(in: text).contains(where: { $0.form == .downloadThenRun && $0.interpreter == nil })
+        {
+            add("downloads-program-to-run", "Downloads a program and runs it (the program itself can't be read as text)", n)
+        }
+
+        // A script written from changing content and then run.
+        if let re = try? NSRegularExpression(pattern: #"\b(?:echo|printf|cat)\b[^\n]*\$[^\n]*>\s*([^\s;&|]+)"#) {
+            for (n, line) in lines.enumerated() {
+                guard let m = re.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                    let r = Range(m.range(at: 1), in: line)
+                else { continue }
+                let file = String(line[r]).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                let runsIt = lines[(n + 1)...].contains { later in
+                    let w = ShellWords.split(later)
+                    guard let first = w.first else { return false }
+                    let viaShell = DownloadRuns.shells.contains((first as NSString).lastPathComponent) || first == "source" || first == "."
+                    let target = viaShell ? (w.count > 1 ? w[1] : "") : first
+                    return target == file
+                }
+                if runsIt { add("runs-generated-script", "Writes a script from changing content and then runs it", n) }
+            }
+        }
+        return out
     }
 
     static func classify(_ data: Data) -> FetchedKind {
@@ -502,5 +584,39 @@ public struct PasteInspector: Sendable {
         try data.write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         return file
+    }
+}
+
+// MARK: - Running exactly what was inspected
+
+public enum VerifiedCopy {
+    public struct Mismatch: Error, CustomStringConvertible {
+        public var expected: String
+        public var found: String
+        public var description: String {
+            "the saved copy changed after it was inspected (expected SHA-256 \(expected.prefix(12))…, found \(found.prefix(12))…)"
+        }
+    }
+
+    /// Reads the saved copy and checks it still has the inspected SHA-256. Callers run these bytes,
+    /// never the file again, so nothing can swap it between the check and the run.
+    public static func bytes(at file: URL, sha256 expected: String) throws -> Data {
+        let data = try Data(contentsOf: file)
+        let found = sha256(data)
+        guard found == expected else { throw Mismatch(expected: expected, found: found) }
+        return data
+    }
+
+    /// Arguments that make an interpreter read its script from standard input, as `curl … | sh` does.
+    /// Nil when the interpreter has no such mode.
+    public static func stdinArguments(for interpreter: String, scriptArgs: [String]) -> [String]? {
+        switch interpreter {
+        case "sh", "bash", "zsh", "dash", "ksh":
+            return scriptArgs.isEmpty ? ["-s"] : ["-s", "--"] + scriptArgs
+        case "python", "python3", "perl", "ruby", "node":
+            return ["-"] + scriptArgs
+        default:
+            return nil
+        }
     }
 }

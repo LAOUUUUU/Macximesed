@@ -137,7 +137,9 @@ public struct GuardResult: Sendable, Equatable {
     public var decoded: [String]
     /// Downloads in the command that get run: these can be fetched and read first (`macx guard inspect`).
     public var downloads: [DownloadRun] = []
-    public var isDangerous: Bool { !patterns.isEmpty || !downloads.isEmpty }
+    /// Parts whose effect can't be worked out, such as `eval "$x"` with x unknown.
+    public var unknowns: Set<String> = []
+    public var isDangerous: Bool { !patterns.isEmpty || !downloads.isEmpty || !unknowns.isEmpty }
     public var needsInspection: Bool { !downloads.isEmpty }
 }
 
@@ -160,7 +162,12 @@ public enum PasteGuard {
         }
         let downloads = DownloadRuns.find(in: text)
         if !downloads.isEmpty { patterns.insert(.downloadToShell) }
-        return GuardResult(patterns: patterns, decoded: decoded, downloads: downloads)
+        // After normalising, a variable that is still `$x` couldn't be resolved from the paste itself.
+        var unknowns: Set<String> = []
+        if normalized.range(of: ScriptInspector.evalOfVariable, options: .regularExpression) != nil {
+            unknowns.insert("runs-unresolved-code")
+        }
+        return GuardResult(patterns: patterns, decoded: decoded, downloads: downloads, unknowns: unknowns)
     }
 
     public static func scanHistory(home: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> [HistoryHit] {
