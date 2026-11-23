@@ -7,7 +7,7 @@ struct Macx: ParsableCommand {
         commandName: "macx",
         abstract: "Macximesed: speed up macOS and watch for stealer-style malware.",
         version: "0.1.0",
-        subcommands: [Scan.self, Clean.self, Undo.self]
+        subcommands: [Scan.self, Clean.self, Apps.self, Undo.self]
     )
 }
 

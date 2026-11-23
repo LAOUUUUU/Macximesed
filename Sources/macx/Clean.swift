@@ -22,6 +22,12 @@ func currentlyRunning() -> [RunningApp] {
     return apps
 }
 
+/// A plain message for the user. Unlike ValidationError, ArgumentParser prints it without the usage text.
+struct UserError: Error, CustomStringConvertible {
+    let description: String
+    init(_ message: String) { description = message }
+}
+
 /// Reads one line from the terminal. Returns false when there's no terminal to ask.
 func askYes(_ question: String) -> Bool {
     guard isatty(STDIN_FILENO) != 0 else { return false }
@@ -52,12 +58,12 @@ struct Clean: ParsableCommand {
 
     func run() throws {
         guard tier == .safe else {
-            throw ValidationError("The \(tier.rawValue) tier isn't built yet. See STATUS.md.")
+            throw UserError("The \(tier.rawValue) tier isn't built yet. See STATUS.md.")
         }
         let all = CleanupCatalog.safe(home: FileManager.default.homeDirectoryForCurrentUser, running: currentlyRunning())
         let unknown = Set(only).subtracting(all.map(\.id))
         if !unknown.isEmpty {
-            throw ValidationError("Unknown item ID: \(unknown.sorted().joined(separator: ", ")). Run with --dry-run to see the IDs.")
+            throw UserError("Unknown item ID: \(unknown.sorted().joined(separator: ", ")). Run with --dry-run to see the IDs.")
         }
         let chosen = CleanupCatalog.select(all, only: Set(only), includeInUse: includeInUse)
         let chosenIDs = Set(chosen.map(\.id))

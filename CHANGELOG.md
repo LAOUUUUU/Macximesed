@@ -12,3 +12,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - GitHub Actions CI: build and test on macOS.
 - Undo store: cleanups move files into `~/Library/Application Support/Macximesed/Undo/<batch>/` with a manifest. `macx undo list`, `macx undo restore <id>` (never overwrites anything new), and `macx undo purge --days 7` (the only real delete, asks first).
 - `macx clean` with the **Safe** tier: third-party caches (one item per folder), user logs, Xcode DerivedData and DeviceSupport, Simulator caches and the npm cache, with `--dry-run`, `--only`, `--include-in-use` and `-y`. Caches of running apps are skipped. Apple caches, `~/.cache` and empty items are never included.
+- `macx apps`: lists apps with size, architecture (Apple silicon, Intel or Universal, read from the Mach-O header) and last use (Spotlight, or `~` estimated from the app's own files). Filters: `--unused [--days]`, `--intel`, plus `--sort`.
+- `macx apps remove`: uninstalls an app and its exact-match leftovers into the undo folder. Refuses running apps, apps on the sealed system volume, and built-in Apple apps, but allows Apple's App Store apps.
+- `macx apps leftovers`: finds files of apps that are gone, by vendor of reverse-DNS names, and can move them to the undo folder.
+
+### Fixed
+- Errors are printed without the usage text underneath.

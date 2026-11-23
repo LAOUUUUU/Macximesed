@@ -5,10 +5,9 @@ The job list: what is being built now and what comes next. Finished work moves t
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
 ## Now
-- [ ] **3. Apps**: list apps with size, last use and arm64/Intel; mark unused ones (90 days); uninstall with leftovers (and find leftovers of apps already removed); undo through the undo store.
+- [ ] **4. Persistence scan**: snapshot and diff LaunchDaemons/Agents, background items, login items, cron, shell rc files, profiles and hidden folders; AMOS rules (fake `com.apple.*` labels, hidden-folder loaders).
 
 ## Next
-- [ ] **4. Persistence scan**: snapshot and diff LaunchDaemons/Agents, background items, login items, cron, shell rc files, profiles and hidden folders; AMOS rules (fake `com.apple.*` labels, hidden-folder loaders).
 - [ ] **5. File check**: signature, team ID, notarization, quarantine, SHA-256, what a pkg/dmg/app installs. Optional MalwareBazaar hash lookup.
 - [ ] **6. Paste-to-shell guard (static)**: scan shell history and clipboard for `curl | sh`, `base64 -D | sh`, quarantine stripping.
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
@@ -21,6 +20,7 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 ## Done
 - [x] **1. `macx scan`** (2026-11-23).
 - [x] **2. Undo store + Safe cleanup**, `macx clean` / `macx undo` (2026-11-23). The Trash is left out on purpose: emptying it is a permanent delete.
+- [x] **3. Apps**, `macx apps` / `remove` / `leftovers` (2026-11-23). Last use is estimated from the app's own files when Spotlight has no date.
 
 See [CHANGELOG.md](CHANGELOG.md) for details.
 
