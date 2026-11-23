@@ -239,3 +239,45 @@ struct ChannelFormatTests {
         #expect(c.expires > c.published)
     }
 }
+
+@Suite("Updating inside the app bundle")
+struct AppBundleUpdateTests {
+    @Test func swapInsideAnAppKeepsTheBundleSignatureValidAndVersionCurrent() throws {
+        let tmp = try TempDir()
+        // A minimal Macximesed.app around a real Mach-O, ad-hoc signed like scripts/install.sh does.
+        let app = tmp.url.appendingPathComponent("Macximesed.app")
+        let exe = app.appendingPathComponent("Contents/MacOS/macx")
+        try FileManager.default.createDirectory(at: exe.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(atPath: "/bin/ls", toPath: exe.path)
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "dev.macximesed.macx", "CFBundleExecutable": "macx", "CFBundleName": "Macximesed",
+            "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.2.0", "LSUIElement": true,
+        ]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: app.appendingPathComponent("Contents/Info.plist"))
+        _ = try ProcessRunner().run("/usr/bin/codesign", ["--force", "--sign", "-", "--identifier", "dev.macximesed.macx", app.path])
+
+        // The update tarball: a different real Mach-O.
+        let pkg = tmp.url.appendingPathComponent("pkg")
+        try FileManager.default.createDirectory(at: pkg, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(atPath: "/bin/cat", toPath: pkg.appendingPathComponent("macx").path)
+        let tgz = tmp.url.appendingPathComponent("u.tar.gz")
+        _ = try ProcessRunner().run("/usr/bin/tar", ["-czf", tgz.path, "-C", pkg.path, "macx"])
+        let data = try Data(contentsOf: tgz)
+
+        try UpdateInstaller(versionOf: { _ in "0.3.0" }).install(
+            data, sha256: sha256(data), version: "0.3.0", over: exe, installed: SemVer("0.2.0")!)
+
+        // Re-signing rewrites the signature inside the binary, so compare what it is, not its bytes.
+        #expect(try Data(contentsOf: exe) != Data(contentsOf: URL(fileURLWithPath: "/bin/ls")))
+        #expect(!MachO.architectures(ofFile: exe).isEmpty)
+        let verify = ProcessRunner.capture("/usr/bin/codesign", ["--verify", "--strict", app.path])
+        #expect(verify?.status == 0, "\(verify?.stderr ?? "")")
+        let plist =
+            try PropertyListSerialization.propertyList(
+                from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any]
+        #expect(plist?["CFBundleShortVersionString"] as? String == "0.3.0")
+        // The previous binary is kept outside the bundle, so it doesn't break the seal.
+        #expect(!FileManager.default.fileExists(atPath: exe.deletingLastPathComponent().appendingPathComponent("macx.previous").path))
+    }
+}

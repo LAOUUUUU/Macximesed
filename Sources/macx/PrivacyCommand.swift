@@ -18,7 +18,10 @@ struct Privacy: ParsableCommand {
     func run() throws {
         let policy = PrivacyPolicy.current
         let exe = Responsibility.executablePath ?? CommandLine.arguments[0]
+        // What to add to Full Disk Access: the app when macx runs from inside it (needed on macOS 27).
+        let grantee = UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe))?.path ?? exe
         print("macx binary:       \(exe)")
+        if grantee != exe { print("Inside app:        \(grantee)") }
         print(
             "Permissions owner: \(Responsibility.isOwnResponsibleProcess ? "macx itself" : "the app that started it (terminal or editor)")")
         print("Full Disk Access:  \(policy.fullDiskAccess ? "yes" : "no")")
@@ -28,7 +31,7 @@ struct Privacy: ParsableCommand {
             print("\nTo include them:")
             if Responsibility.isOwnResponsibleProcess {
                 print("  1. Run `macx privacy --open`.")
-                print("  2. Click +, press Cmd-Shift-G, paste \(exe), then Open, and switch it on.")
+                print("  2. Click +, press Cmd-Shift-G, paste \(grantee), then Open, and switch it on.")
                 print("  Reinstalling macx makes a new binary, so switch it off and on again after an update.")
             } else {
                 print("  Install one stable copy with scripts/install.sh, then run `macx privacy --open` from that copy.")

@@ -20,7 +20,7 @@ It does not replace XProtect: keep that on. Without Apple's restricted Endpoint 
 scripts/install.sh
 ```
 
-This builds macx and installs one copy at `~/.local/bin/macx`. To install somewhere else, pass a folder: `scripts/install.sh /usr/local/bin`.
+This builds **`~/Applications/Macximesed.app`**, a background app with no Dock icon and macx inside it, and points `~/.local/bin/macx` at it, so the command is still just `macx`. To use other folders, pass them: `scripts/install.sh <bin-dir> <app-dir>`.
 
 ### Permissions (no popups)
 macOS guards some folders with privacy popups: Documents, Desktop, Downloads, Pictures, Movies, Music, other apps' containers, iCloud Drive and external disks. **Without Full Disk Access, macx never reads them, so it never sets off a popup.** It tells you what it skipped instead.
@@ -31,7 +31,7 @@ To include those folders, give the installed binary Full Disk Access once:
 macx privacy --open
 ```
 
-Then click **+**, press Cmd-Shift-G, paste `~/.local/bin/macx`, and switch it on.
+Then click **+**, choose **Macximesed** from the Applications folder in your home folder, and switch it on. On macOS 27 Full Disk Access only counts for the app, not the bare binary.
 
 The installed macx counts as **its own app** for privacy permissions. Normally macOS credits a command-line tool's access to the terminal that started it. macx relaunches itself with `responsibility_spawnattrs_setdisclaim`, the call LLDB uses for the programs it debugs, so the permission belongs to macx, not to Terminal or your editor. Development builds in `.build/` don't do this. To force it either way, set `MACX_OWN_RESPONSIBILITY=0` or `=1`.
 

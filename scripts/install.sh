@@ -1,28 +1,57 @@
 #!/bin/sh
-# Builds macx and installs one stable copy, so you grant it Full Disk Access once.
-# Usage: scripts/install.sh [install-dir]     (default: ~/.local/bin, no sudo needed)
+# Builds macx and installs it as ~/Applications/Macximesed.app, with ~/.local/bin/macx pointing into it.
+# On macOS 27 Full Disk Access isn't honoured for a bare command-line tool, so the app is what you add
+# to Full Disk Access (macx privacy --open). macx runs as its own app, so the grant belongs to it.
+# Usage: scripts/install.sh [bin-dir] [app-dir]   (defaults: ~/.local/bin and ~/Applications; no sudo needed)
 set -eu
 
-DIR="${1:-$HOME/.local/bin}"
+BIN_DIR="${1:-$HOME/.local/bin}"
+APP_DIR="${2:-$HOME/Applications}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP="$APP_DIR/Macximesed.app"
 
 echo "Building macx (release)..."
 swift build --package-path "$ROOT" -c release >/dev/null
 BIN="$(swift build --package-path "$ROOT" -c release --show-bin-path)/macx"
+VERSION=$(grep -Eo 'macxVersion = "[^"]+"' "$ROOT/Sources/MacxCore/Update.swift" | cut -d'"' -f2)
 
-mkdir -p "$DIR"
-# Replace, don't overwrite in place: a running copy keeps working and macOS sees one clean file.
-cp "$BIN" "$DIR/macx.new"
-codesign --force --sign - --identifier dev.macximesed.macx "$DIR/macx.new" 2>/dev/null
-mv -f "$DIR/macx.new" "$DIR/macx"
+# Build the new bundle next to the old one, then swap, so a running copy keeps working.
+mkdir -p "$APP_DIR" "$BIN_DIR"
+NEW="$APP_DIR/.Macximesed.app.new"
+rm -rf "$NEW"
+mkdir -p "$NEW/Contents/MacOS"
+cp "$BIN" "$NEW/Contents/MacOS/macx"
+cat > "$NEW/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>dev.macximesed.macx</string>
+  <key>CFBundleName</key><string>Macximesed</string>
+  <key>CFBundleExecutable</key><string>macx</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+codesign --force --sign - --identifier dev.macximesed.macx "$NEW" 2>/dev/null
+codesign --verify --strict "$NEW"
+rm -rf "$APP"
+mv "$NEW" "$APP"
 
-echo "Installed: $DIR/macx ($("$DIR/macx" --version))"
+# The command stays `macx`: a link into the app. An older plain copy is replaced.
+ln -sfn "$APP/Contents/MacOS/macx" "$BIN_DIR/macx"
+
+echo "Installed: $APP ($("$BIN_DIR/macx" --version))"
+echo "Command:   $BIN_DIR/macx → the app"
 case ":$PATH:" in
-  *":$DIR:"*) ;;
-  *) echo "Note: $DIR is not on your PATH. Add this to ~/.zshrc:  export PATH=\"$DIR:\$PATH\"" ;;
+  *":$BIN_DIR:"*) ;;
+  *) echo "Note: $BIN_DIR is not on your PATH. Add this to ~/.zshrc:  export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
 echo
-echo "Next: give this one binary Full Disk Access so it can include Documents, Downloads, containers and external disks:"
-echo "  $DIR/macx privacy --open"
-echo "Then click +, press Cmd-Shift-G, paste $DIR/macx and switch it on."
-echo "After a reinstall, switch it off and on again (each build is a new binary to macOS)."
+echo "Next: give the app Full Disk Access so macx watch can run and macx can include Documents, Downloads, etc.:"
+echo "  macx privacy --open    then  +  → Applications (your home folder's) → Macximesed → switch it on."
+echo "After a reinstall or update, switch it off and on again (ad-hoc signed: each build is new to macOS)."

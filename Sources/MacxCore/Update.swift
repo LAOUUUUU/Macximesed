@@ -235,14 +235,47 @@ public struct UpdateInstaller: Sendable {
         let staged = dir.appendingPathComponent(".macx.new-\(UUID().uuidString)")
         try fm.copyItem(at: binary, to: staged)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: staged.path)
+        let bundle = Self.enclosingApp(of: target)
         if fm.fileExists(atPath: target.path) {
-            let previous = dir.appendingPathComponent("macx.previous")
+            // Inside an app the previous binary can't sit next to the new one (it would break the bundle's seal).
+            let previousDir =
+                bundle == nil ? dir : fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Macximesed")
+            try? fm.createDirectory(at: previousDir, withIntermediateDirectories: true)
+            let previous = previousDir.appendingPathComponent("macx.previous")
             try? fm.removeItem(at: previous)
             try? fm.copyItem(at: target, to: previous)
         }
         guard rename(staged.path, target.path) == 0 else {
             try? fm.removeItem(at: staged)
             throw UpdateError.download("couldn't replace \(target.path)")
+        }
+        if let bundle { try Self.reseal(bundle, version: version) }
+    }
+
+    /// `…/Macximesed.app` when the binary is the app's main executable (`Contents/MacOS/...`).
+    public static func enclosingApp(of exe: URL) -> URL? {
+        let macos = exe.deletingLastPathComponent()
+        let contents = macos.deletingLastPathComponent()
+        let app = contents.deletingLastPathComponent()
+        return macos.lastPathComponent == "MacOS" && contents.lastPathComponent == "Contents" && app.pathExtension == "app" ? app : nil
+    }
+
+    /// After swapping the executable, update the bundle's version and sign the bundle again (ad-hoc), so
+    /// its signature covers the new binary and Info.plist.
+    static func reseal(_ app: URL, version: String) throws {
+        let infoURL = app.appendingPathComponent("Contents/Info.plist")
+        if let data = try? Data(contentsOf: infoURL),
+            var info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        {
+            info["CFBundleShortVersionString"] = version
+            info["CFBundleVersion"] = version
+            try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: infoURL, options: .atomic)
+        }
+        let id =
+            (try? PropertyListSerialization.propertyList(from: Data(contentsOf: infoURL), format: nil) as? [String: Any])?[
+                "CFBundleIdentifier"] as? String ?? "dev.macximesed.macx"
+        guard ProcessRunner.capture("/usr/bin/codesign", ["--force", "--sign", "-", "--identifier", id, app.path])?.status == 0 else {
+            throw UpdateError.download("updated, but couldn't re-sign \(app.path)")
         }
     }
 }

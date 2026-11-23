@@ -136,7 +136,10 @@ struct Watch: ParsableCommand {
             var hint = "eslogger stopped: \(message.isEmpty ? "exit \(es.terminationStatus)" : message)"
             if message.lowercased().contains("not permitted") || message.contains("TCC") || message.contains("Full Disk") {
                 hint += "\nGive Full Disk Access to "
-                hint += Responsibility.isOwnResponsibleProcess ? (Responsibility.executablePath ?? "macx") : "your terminal app"
+                let exe = Responsibility.executablePath ?? "macx"
+                hint +=
+                    Responsibility.isOwnResponsibleProcess
+                    ? (UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe))?.path ?? exe) : "your terminal app"
                 hint += " (macx privacy --open), then try again."
             }
             throw UserError(hint)
