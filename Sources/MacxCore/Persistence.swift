@@ -23,7 +23,7 @@ public enum SignatureInfo: Codable, Sendable, Equatable {
         case .adHoc: "ad-hoc (no identity)"
         case .unsigned: "unsigned"
         case .missing: "file missing"
-        case .unreadable: "can't read (root only)"
+        case .unreadable: "can't read (root only, or in a privacy-guarded folder)"
         }
     }
 }
@@ -304,7 +304,7 @@ public enum PersistenceScanner {
     static let shellFiles = [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".bash_profile", ".bashrc", ".profile"]
 
     public static func scan(
-        _ roots: PersistenceRoots, signatures: SignatureChecking = CodeSignatureChecker(),
+        _ roots: PersistenceRoots, signatures: SignatureChecking = GuardedSignatureChecker(),
         btm: [BTMRecord], cron: String?
     ) -> [PersistenceItem] {
         var items: [PersistenceItem] = []
@@ -455,7 +455,9 @@ public enum PersistenceRules {
             case .adHoc?:
                 add("adhoc-program", item.runsAsRoot ? .high : .medium, "Runs an ad-hoc signed program (no developer identity)")
             case .unreadable?:
-                add("unreadable-program", .info, "Program is readable only by root, so its signature can't be checked without sudo")
+                add(
+                    "unreadable-program", .info,
+                    "Program can't be read (root only, or in a privacy-guarded folder), so its signature wasn't checked")
             default: break
             }
 

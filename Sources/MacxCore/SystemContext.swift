@@ -108,7 +108,9 @@ public struct BundleIndex: Sendable, Equatable {
             if index.count > 0 { return index }
         }
         var names: [String: String] = [:]
-        for app in AppScanner.scan(AppScanner.fallbackFolders + [URL(fileURLWithPath: "/System/Applications")], lastUsed: { _ in nil }) {
+        let (folders, _) = AppScanner.split(
+            AppScanner.fallbackFolders + [URL(fileURLWithPath: "/System/Applications")], policy: .current)
+        for app in AppScanner.scan(folders, lastUsed: { _ in nil }) {
             names[app.bundleID] = app.name
         }
         return BundleIndex(names)
@@ -194,10 +196,12 @@ public struct SystemContext: Sendable {
     public var toolCaches: [ToolCache]
     /// Xcode's custom DerivedData folder, when the user set one.
     public var derivedData: URL?
+    /// Keeps cleanup out of privacy-guarded folders unless Full Disk Access is granted.
+    public var policy: PrivacyPolicy
 
     public init(
         home: URL, bundles: BundleIndex, runningBundleIDs: Set<String>, openFiles: [OpenFile],
-        toolCaches: [ToolCache], derivedData: URL?
+        toolCaches: [ToolCache], derivedData: URL?, policy: PrivacyPolicy = .current
     ) {
         self.home = home
         self.bundles = bundles
@@ -205,6 +209,7 @@ public struct SystemContext: Sendable {
         self.openFiles = openFiles
         self.toolCaches = toolCaches
         self.derivedData = derivedData
+        self.policy = policy
     }
 
     public var library: URL { home.appendingPathComponent("Library", isDirectory: true) }

@@ -45,6 +45,10 @@ jobs:
         run: swift test
       - name: Release build
         run: swift build -c release
+      - name: Install script
+        run: |
+          scripts/install.sh "$RUNNER_TEMP/bin"
+          "$RUNNER_TEMP/bin/macx" privacy | grep -q 'macx itself'
       - name: Smoke test (read-only commands)
         run: |
           set -euo pipefail
@@ -55,6 +59,8 @@ jobs:
           $M apps
           $M apps leftovers
           $M persist --all --min-severity info
+          $M privacy
+          MACX_OWN_RESPONSIBILITY=1 $M privacy | grep -q 'macx itself'
           $M undo list
 
   sanitizers:

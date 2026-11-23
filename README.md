@@ -15,7 +15,29 @@ It does not replace XProtect: keep that on. Without Apple's restricted Endpoint 
 - macOS 15 or later on Apple Silicon. Developed on macOS 27.
 - Xcode 16 or later (Swift 6).
 
-## Build and run
+## Install
+```bash
+scripts/install.sh
+```
+
+This builds macx and installs one copy at `~/.local/bin/macx`. To install somewhere else, pass a folder: `scripts/install.sh /usr/local/bin`.
+
+### Permissions (no popups)
+macOS guards some folders with privacy popups: Documents, Desktop, Downloads, Pictures, Movies, Music, other apps' containers, iCloud Drive and external disks. **Without Full Disk Access, macx never reads them, so it never sets off a popup.** It tells you what it skipped instead.
+
+To include those folders, give the installed binary Full Disk Access once:
+
+```bash
+macx privacy --open
+```
+
+Then click **+**, press Cmd-Shift-G, paste `~/.local/bin/macx`, and switch it on.
+
+The installed macx counts as **its own app** for privacy permissions. Normally macOS credits a command-line tool's access to the terminal that started it. macx relaunches itself with `responsibility_spawnattrs_setdisclaim`, the call LLDB uses for the programs it debugs, so the permission belongs to macx, not to Terminal or your editor. Development builds in `.build/` don't do this. To force it either way, set `MACX_OWN_RESPONSIBILITY=0` or `=1`.
+
+The binary is ad-hoc signed, so each reinstall looks new to macOS. After updating, switch Full Disk Access off and on again.
+
+## Build from source
 ```bash
 swift build -c release
 ```
@@ -35,6 +57,7 @@ swift build -c release
 | `macx apps leftovers [--remove ID ...] [-y]` | Lists files named after a bundle ID that no app or helper on this Mac has, skipping app-group IDs and empty items. Can move chosen groups to the undo folder. | No |
 | `macx persist [--all] [--min-severity low]` | Finds everything set to start by itself and flags what looks like malware. It reads launch daemons and agents (system and yours), login items and background tasks (from `sfltool dumpbtm`), cron, shell startup files, and hidden folders in Application Support. Read-only. | No |
 | `macx persist --baseline` / `--diff` | Saves what's there now, then later shows what was added, removed or changed since, with findings for the new items. | No |
+| `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
 | `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. This is the only command that really deletes, and it asks first. | No |

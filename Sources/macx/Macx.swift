@@ -2,12 +2,19 @@ import ArgumentParser
 import MacxCore
 
 @main
+enum Entry {
+    static func main() {
+        Responsibility.becomeOwnResponsibleProcessIfNeeded()
+        Macx.main()
+    }
+}
+
 struct Macx: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "macx",
         abstract: "Macximesed: speed up macOS and watch for stealer-style malware.",
         version: "0.1.0",
-        subcommands: [Scan.self, Clean.self, Apps.self, Persist.self, Undo.self]
+        subcommands: [Scan.self, Clean.self, Apps.self, Persist.self, Privacy.self, Undo.self]
     )
 }
 

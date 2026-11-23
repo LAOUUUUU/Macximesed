@@ -31,7 +31,8 @@ struct Apps: ParsableCommand {
         var sort: String = "size"
 
         func run() throws {
-            var apps = AppScanner.discover(home: FileManager.default.homeDirectoryForCurrentUser)
+            let found = AppScanner.discover(home: FileManager.default.homeDirectoryForCurrentUser)
+            var apps = found.apps
             if unused { apps = AppScanner.unused(apps, olderThanDays: days) }
             if intel { apps = apps.filter { !$0.architectures.contains(.arm64) && $0.architectures.contains(.x86_64) } }
             switch sort {
@@ -50,6 +51,10 @@ struct Apps: ParsableCommand {
             }
             let total = apps.reduce(0) { $0 + $1.bytes }
             print("\n  \(apps.count) apps, \(formatBytes(total)).")
+            if found.skippedGuarded > 0 {
+                print("  \(found.skippedGuarded) more apps are in privacy-guarded folders (Documents, Desktop, external disks) and were")
+                print("  skipped so macOS doesn't ask. To include them, give macx Full Disk Access: macx privacy")
+            }
             if apps.contains(where: \.lastUsedIsEstimate) {
                 print("  ~ means Spotlight had no date, so it's estimated from when the app last changed its own files.")
             }
@@ -72,7 +77,7 @@ struct Apps: ParsableCommand {
         var yes = false
 
         func run() throws {
-            let apps = AppScanner.discover(includeSystem: true, lastUsed: { _ in nil })
+            let apps = AppScanner.discover(includeSystem: true, lastUsed: { _ in nil }).apps
             let matches = apps.filter {
                 $0.bundleID.caseInsensitiveCompare(app) == .orderedSame || $0.name.caseInsensitiveCompare(app) == .orderedSame
             }

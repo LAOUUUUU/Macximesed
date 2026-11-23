@@ -49,7 +49,8 @@ public enum CleanupCatalog {
             return nil
         }
 
-        func add(_ id: String, _ title: String, _ paths: [URL], owner: Ownership) {
+        func add(_ id: String, _ title: String, _ candidates: [URL], owner: Ownership) {
+            let paths = candidates.filter { ctx.policy.allows($0) }
             let bytes = paths.reduce(0) { $0 + allocatedSize(of: $1) }
             guard !paths.isEmpty, bytes > 0 else { return }
             items.append(

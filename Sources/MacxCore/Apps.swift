@@ -79,6 +79,12 @@ public enum MachO {
 
 // MARK: - Apps
 
+public struct AppDiscovery: Sendable {
+    public var apps: [AppInfo]
+    /// Apps found in privacy-guarded folders and left unread (no Full Disk Access).
+    public var skippedGuarded: Int
+}
+
 public struct AppInfo: Sendable, Equatable {
     public var url: URL
     public var bundleID: String
@@ -127,18 +133,29 @@ public enum AppScanner {
         return out
     }
 
-    /// Every app on the Mac, wherever it is: asks Spotlight, falls back to scanning folders.
+    /// Every app on the Mac, wherever it is: asks Spotlight, falls back to scanning folders. Apps in
+    /// privacy-guarded folders (Documents, Desktop, external disks...) are skipped and counted unless
+    /// the policy allows them, so listing apps never causes a privacy prompt.
     public static func discover(
         includeSystem: Bool = false, runner: CommandRunner = ProcessRunner(),
-        lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil
-    ) -> [AppInfo] {
+        lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil, policy: PrivacyPolicy = .current
+    ) -> AppDiscovery {
         if let out = try? runner.run("/usr/bin/mdfind", ["kMDItemContentTypeTree == 'com.apple.application-bundle'"]) {
-            let urls = parseAppPaths(out, includeSystem: includeSystem)
-            if !urls.isEmpty { return build(urls, lastUsed: lastUsed, home: home) }
+            let (urls, skipped) = split(parseAppPaths(out, includeSystem: includeSystem), policy: policy)
+            if !urls.isEmpty {
+                return AppDiscovery(apps: build(urls, lastUsed: lastUsed, home: home, policy: policy), skippedGuarded: skipped)
+            }
         }
         var folders = fallbackFolders
         if includeSystem { folders.append(URL(fileURLWithPath: "/System/Applications")) }
-        return scan(folders, lastUsed: lastUsed, home: home)
+        let (allowed, skipped) = split(folders, policy: policy)
+        return AppDiscovery(apps: scan(allowed, lastUsed: lastUsed, home: home, policy: policy), skippedGuarded: skipped)
+    }
+
+    /// Splits paths into ones that are safe to read and a count of guarded ones.
+    public static func split(_ urls: [URL], policy: PrivacyPolicy) -> (kept: [URL], skipped: Int) {
+        let kept = urls.filter { policy.allows($0) }
+        return (kept, urls.count - kept.count)
     }
 
     /// Keeps standalone apps: drops apps inside other bundles, in a Library folder (helpers), in the Trash,
@@ -156,7 +173,9 @@ public enum AppScanner {
 
     /// Finds `.app` bundles directly in each folder and one plain folder down (e.g. `/Applications/Vendor/Tool.app`).
     /// `home`, when given, is used to estimate the last use of apps Spotlight has no date for.
-    public static func scan(_ folders: [URL], lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil) -> [AppInfo] {
+    public static func scan(
+        _ folders: [URL], lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil, policy: PrivacyPolicy = .current
+    ) -> [AppInfo] {
         var found: [URL] = []
         for folder in folders {
             for child in CleanupCatalog.children(of: folder) {
@@ -167,13 +186,13 @@ public enum AppScanner {
                 }
             }
         }
-        return build(found, lastUsed: lastUsed, home: home)
+        return build(found, lastUsed: lastUsed, home: home, policy: policy)
     }
 
-    static func build(_ found: [URL], lastUsed: (URL) -> Date?, home: URL?) -> [AppInfo] {
+    static func build(_ found: [URL], lastUsed: (URL) -> Date?, home: URL?, policy: PrivacyPolicy) -> [AppInfo] {
         found.compactMap { url -> AppInfo? in
             guard var app = read(url, lastUsed: lastUsed) else { return nil }
-            if app.lastUsed == nil, let home, let estimate = estimateLastUse(app, home: home) {
+            if app.lastUsed == nil, let home, let estimate = estimateLastUse(app, home: home, policy: policy) {
                 app.lastUsed = estimate
                 app.lastUsedIsEstimate = true
             }
@@ -218,10 +237,10 @@ public enum AppScanner {
 
     /// Newest change date among the app's own files (settings, saved state, support folders and
     /// their direct contents). Apps write these while running, so it's a fair guess at the last use.
-    static func estimateLastUse(_ app: AppInfo, home: URL) -> Date? {
+    static func estimateLastUse(_ app: AppInfo, home: URL, policy: PrivacyPolicy) -> Date? {
         func modified(_ url: URL) -> Date? { try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
         var dates: [Date] = []
-        for path in AppLeftovers.find(for: app, home: home) {
+        for path in AppLeftovers.find(for: app, home: home, policy: policy) {
             if let d = modified(path) { dates.append(d) }
             dates += CleanupCatalog.children(of: path).compactMap(modified)
         }
@@ -254,11 +273,13 @@ public enum AppLeftovers {
     /// Files in the home Library that belong to this app by its bundle ID: exact names, plus
     /// `<id>.` prefixes for preferences, saved state and launch agents. `com.example.gamepad`
     /// never matches `com.example.game`.
-    public static func find(for app: AppInfo, home: URL) -> [URL] {
+    public static func find(for app: AppInfo, home: URL, policy: PrivacyPolicy = .current) -> [URL] {
         let fm = FileManager.default
         let id = app.bundleID
         var out: [URL] = []
-        func add(_ url: URL) { if fm.fileExists(atPath: url.path), !out.contains(url) { out.append(url) } }
+        func add(_ url: URL) {
+            if policy.allows(url), fm.fileExists(atPath: url.path), !out.contains(url) { out.append(url) }
+        }
 
         for dir in byID { add(home.appendingPathComponent(dir).appendingPathComponent(id)) }
         add(home.appendingPathComponent("Library/Preferences").appendingPathComponent("\(id).plist"))
@@ -273,18 +294,18 @@ public enum AppLeftovers {
 
     /// Folders named exactly like the app ("Application Support/Steam"). Another program could use
     /// the same name, so these are only included when asked for.
-    public static func nameMatches(for app: AppInfo, home: URL) -> [URL] {
+    public static func nameMatches(for app: AppInfo, home: URL, policy: PrivacyPolicy = .current) -> [URL] {
         guard !app.isApple else { return [] }
         return byName.map { home.appendingPathComponent($0).appendingPathComponent(app.name) }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+            .filter { policy.allows($0) && FileManager.default.fileExists(atPath: $0.path) }
     }
 
     /// Entries named like a bundle ID (`com.vendor.app`, `com.vendor.app.plist`) that no bundle on
     /// this Mac owns and that take up space. Plain names ("SomeFolder") are never listed: there's no way to know who owns them.
-    public static func orphans(home: URL, bundles: BundleIndex) -> [OrphanGroup] {
+    public static func orphans(home: URL, bundles: BundleIndex, policy: PrivacyPolicy = .current) -> [OrphanGroup] {
         var groups: [String: [URL]] = [:]
         let dirs = Set(byID + ["Library/Preferences", "Library/Saved Application State"])
-        for dir in dirs {
+        for dir in dirs where policy.allows(home.appendingPathComponent(dir)) {
             for child in CleanupCatalog.children(of: home.appendingPathComponent(dir)) {
                 let name = ReverseDNS.baseName(child.lastPathComponent)
                 // App-group IDs (group.*, systemgroup.*) are sharing permissions, not bundle IDs, so no bundle owns them by name.

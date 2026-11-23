@@ -32,6 +32,14 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
     - download-to-shell, base64-to-shell, quarantine stripping, and password prompts or checks.
   - **Signatures** are read through the Security framework, and root-only files are reported as unreadable, not unsigned.
   - **Baseline:** `--baseline` saves the current state, and `--diff` shows what changed since.
+- **No privacy popups.**
+  - Without Full Disk Access, macx stays out of every folder macOS guards: Documents, Desktop, Downloads, Pictures, Movies, Music, `~/Library/Containers`, Group Containers, iCloud Drive and `/Volumes`.
+  - It reports what it skipped instead. That covers app discovery, leftovers, cleanup and signature checks.
+  - Full Disk Access is detected without a prompt, by trying to open the TCC database.
+- `macx privacy [--open]` shows Full Disk Access status, who owns macx's permissions, and what's skipped. `--open` opens the Settings pane.
+- `scripts/install.sh` installs one stable `macx` (`~/.local/bin` by default).
+  - The installed copy relaunches itself as its own responsible process (`responsibility_spawnattrs_setdisclaim`), so Full Disk Access is granted to macx itself, not to the terminal.
+  - Development builds in `.build/` keep the terminal's access.
 
 ### Changed
 - **No more guessing from names.**
