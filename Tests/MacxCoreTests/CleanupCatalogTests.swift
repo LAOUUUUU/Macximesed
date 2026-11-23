@@ -2,130 +2,183 @@ import Foundation
 import Testing
 @testable import MacxCore
 
+@Suite("Bundle index")
+struct BundleIndexTests {
+    @Test func parsesSpotlightAttributeOutput() {
+        let out = """
+        /Applications/Docker.app   kMDItemCFBundleIdentifier = com.docker.docker
+        /Applications/My Game.app   kMDItemCFBundleIdentifier = com.example.game
+        /Applications/Broken.app   kMDItemCFBundleIdentifier = (null)
+        garbage line
+        """
+        let index = BundleIndex.parse(spotlightOutput: out)
+        #expect(index.name(of: "com.docker.docker") == "Docker")
+        #expect(index.name(of: "com.example.game") == "My Game")
+        #expect(index.count == 2)
+    }
+
+    @Test func ownerMatchesExactIDOrIDPlusDotAndPicksTheLongest() {
+        let index = BundleIndex(["com.example.game": "Game", "com.example.game.pro": "Game Pro", "com.other.app": "Other"])
+        #expect(index.owner(of: "com.example.game")?.bundleID == "com.example.game")
+        #expect(index.owner(of: "com.example.game.ShipIt")?.bundleID == "com.example.game")
+        #expect(index.owner(of: "com.example.game.pro.plist")?.bundleID == "com.example.game.pro")
+        #expect(index.owner(of: "com.example.gamepad") == nil)
+        #expect(index.owner(of: "Game") == nil) // names are never used
+    }
+}
+
+@Suite("Reverse-DNS names")
+struct ReverseDNSTests {
+    @Test func recognisesShapeWithoutAnyTLDList() {
+        #expect(ReverseDNS.isReverseDNS("com.example.game"))
+        #expect(ReverseDNS.isReverseDNS("io.github.someone.tool"))
+        #expect(ReverseDNS.isReverseDNS("xyz.weird-vendor.App_2"))
+        #expect(!ReverseDNS.isReverseDNS("com.example"))
+        #expect(!ReverseDNS.isReverseDNS("Some Folder"))
+        #expect(!ReverseDNS.isReverseDNS("PFSceneTaxonomyData_99.index"))
+        #expect(!ReverseDNS.isReverseDNS("Com.Example.Game")) // first part must look like a domain
+    }
+
+    @Test func stripsFileTypeExtensions() {
+        #expect(ReverseDNS.baseName("com.example.game.plist") == "com.example.game")
+        #expect(ReverseDNS.baseName("com.example.game.savedState") == "com.example.game")
+        #expect(ReverseDNS.baseName("com.example.game.binarycookies") == "com.example.game")
+        #expect(ReverseDNS.baseName("com.example.game") == "com.example.game")
+    }
+}
+
 @Suite("Safe cleanup catalogue")
 struct CleanupCatalogTests {
     func makeHome() throws -> TempDir {
         let tmp = try TempDir()
         try tmp.file("Library/Caches/com.spotify.client/data.bin", String(repeating: "s", count: 4000))
-        try tmp.file("Library/Caches/BraveSoftware/Cache/x", "b")
-        try tmp.file("Library/Caches/SomeTool/c", "c")
+        try tmp.file("Library/Caches/com.spotify.client.installer/x", "i")
         try tmp.file("Library/Caches/com.apple.Safari/keep", "apple")
+        try tmp.file("Library/Caches/GeoServices/x", "unknown owner")
+        try tmp.file("Library/Caches/BraveSoftware/Cache/x", "unknown owner")
+        try tmp.file("Library/Caches/Homebrew/downloads/x", "brew")
         try tmp.file("Library/Caches/Macximesed/own", "own")
+        try tmp.file("Library/Caches/com.gone.app/x", "no app")
         try tmp.file("Library/Logs/tool.log", "log")
-        try tmp.file("Library/Logs/DiagnosticReports/crash.ips", "crash")
         try tmp.file("Library/Developer/Xcode/DerivedData/App-abc/Build/x", "dd")
-        try tmp.file("Library/Developer/Xcode/iOS DeviceSupport/18.0/x", "ds")
+        try tmp.file("Elsewhere/DerivedData/Other-xyz/x", "custom dd")
         try tmp.file(".npm/_cacache/index", "npm")
         try tmp.file(".cache/some-venv/bin/python", "venv")
         return tmp
     }
 
-    @Test func listsEachThirdPartyCacheFolderSeparately() throws {
-        let home = try makeHome()
-        let items = CleanupCatalog.safe(home: home.url, running: [])
-        let ids = Set(items.map(\.id))
-        #expect(ids.contains("cache:com.spotify.client"))
-        #expect(ids.contains("cache:BraveSoftware"))
-        #expect(ids.contains("cache:SomeTool"))
-        #expect(items.allSatisfy { $0.tier == .safe })
+    func context(_ home: TempDir, running: Set<String> = [], open: [OpenFile] = [],
+                 derivedData: URL? = nil) -> SystemContext {
+        SystemContext(
+            home: home.url,
+            bundles: BundleIndex(["com.spotify.client": "Spotify", "com.apple.Safari": "Safari"]),
+            runningBundleIDs: running,
+            openFiles: open,
+            toolCaches: [ToolCache(tool: "brew", url: home.url.appendingPathComponent("Library/Caches/Homebrew")),
+                         ToolCache(tool: "npm", url: home.url.appendingPathComponent(".npm/_cacache"))],
+            derivedData: derivedData
+        )
     }
 
-    @Test func neverTouchesAppleCachesOurOwnFolderOrDotCache() throws {
+    func byID(_ items: [CleanupItem]) -> [String: CleanupItem] {
+        Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+    }
+
+    @Test func attributesCachesByExactBundleIDOrTool() throws {
         let home = try makeHome()
-        let paths = CleanupCatalog.safe(home: home.url, running: []).flatMap(\.paths).map(\.path)
+        let items = byID(CleanupCatalog.safe(context(home)))
+        #expect(items["cache:com.spotify.client"]?.owner == .app(name: "Spotify", bundleID: "com.spotify.client"))
+        #expect(items["cache:com.spotify.client.installer"]?.owner == .app(name: "Spotify", bundleID: "com.spotify.client"))
+        #expect(items["cache:Homebrew"]?.owner == .tool("brew"))
+        #expect(items["npm:cache"]?.owner == .tool("npm"))
+        #expect(items["cache:GeoServices"]?.owner == .unknown)
+        #expect(items["cache:BraveSoftware"]?.owner == .unknown)
+        #expect(items["cache:com.gone.app"]?.owner == .unknown)
+    }
+
+    @Test func neverListsAppleCachesOurOwnFolderOrDotCache() throws {
+        let home = try makeHome()
+        let paths = CleanupCatalog.safe(context(home)).flatMap(\.paths).map(\.path)
         #expect(!paths.contains { $0.contains("com.apple.") })
         #expect(!paths.contains { $0.hasSuffix("/Macximesed") })
         #expect(!paths.contains { $0.contains("/.cache") })
     }
 
-    @Test func groupsLogsXcodeAndNpm() throws {
+    @Test func inUseComesFromOpenFilesAndRunningBundleIDs() throws {
         let home = try makeHome()
-        let byID = Dictionary(uniqueKeysWithValues: CleanupCatalog.safe(home: home.url, running: []).map { ($0.id, $0) })
-        #expect(byID["logs:user"]?.paths.count == 2)
-        #expect(byID["xcode:derived-data"]?.paths.map(\.lastPathComponent) == ["App-abc"])
-        #expect(byID["xcode:device-support"]?.paths.map(\.lastPathComponent) == ["18.0"])
-        #expect(byID["npm:cache"]?.paths.map(\.lastPathComponent) == ["_cacache"])
+        let open = [OpenFile(path: home.url.appendingPathComponent("Library/Caches/BraveSoftware/Cache/x").path, process: "Brave Browser", pid: 42)]
+        let items = byID(CleanupCatalog.safe(context(home, running: ["com.spotify.client"], open: open)))
+        #expect(items["cache:BraveSoftware"]?.inUseBy == "Brave Browser (pid 42)")
+        #expect(items["cache:com.spotify.client"]?.inUseBy == "Spotify")
+        #expect(items["cache:GeoServices"]?.inUseBy == nil)
     }
 
-    @Test func dropsEmptyOrMissingGroups() throws {
-        let tmp = try TempDir()
-        try FileManager.default.createDirectory(at: tmp.url.appendingPathComponent("Library/Logs"), withIntermediateDirectories: true)
-        #expect(CleanupCatalog.safe(home: tmp.url, running: []).isEmpty)
-    }
-
-    @Test func measuresSize() throws {
+    @Test func defaultSelectionTakesKnownOwnersOnlyAndNothingInUse() throws {
         let home = try makeHome()
-        let spotify = CleanupCatalog.safe(home: home.url, running: []).first { $0.id == "cache:com.spotify.client" }
-        #expect((spotify?.bytes ?? 0) >= 4000)
+        let items = CleanupCatalog.safe(context(home, running: ["com.spotify.client"]))
+        let picked = Set(CleanupCatalog.select(items, only: [], includeInUse: false, includeUnknown: false).map(\.id))
+        #expect(picked.contains("cache:Homebrew"))
+        #expect(picked.contains("logs:user"))
+        #expect(!picked.contains("cache:com.spotify.client")) // running
+        #expect(!picked.contains("cache:GeoServices")) // unknown owner
+
+        let withUnknown = Set(CleanupCatalog.select(items, only: [], includeInUse: false, includeUnknown: true).map(\.id))
+        #expect(withUnknown.contains("cache:GeoServices"))
+
+        // Naming an item with --only is an explicit choice, so unknown owners are allowed.
+        let named = CleanupCatalog.select(items, only: ["cache:BraveSoftware"], includeInUse: false, includeUnknown: false)
+        #expect(named.map(\.id) == ["cache:BraveSoftware"])
     }
 
-    @Test func marksCachesOfRunningAppsAsInUse() throws {
+    @Test func usesXcodesCustomDerivedDataLocationWhenSet() throws {
         let home = try makeHome()
-        let running = [
-            RunningApp(name: "Spotify", bundleID: "com.spotify.client"),
-            RunningApp(name: "Brave Browser", bundleID: "com.brave.Browser"),
-        ]
-        let byID = Dictionary(uniqueKeysWithValues: CleanupCatalog.safe(home: home.url, running: running).map { ($0.id, $0) })
-        #expect(byID["cache:com.spotify.client"]?.inUseBy == "Spotify")
-        #expect(byID["cache:BraveSoftware"]?.inUseBy == "Brave Browser")
-        #expect(byID["cache:SomeTool"]?.inUseBy == nil)
+        let custom = home.url.appendingPathComponent("Elsewhere/DerivedData")
+        let items = byID(CleanupCatalog.safe(context(home, derivedData: custom)))
+        #expect(items["xcode:derived-data"]?.paths.map(\.lastPathComponent) == ["Other-xyz"])
+        let standard = byID(CleanupCatalog.safe(context(home)))
+        #expect(standard["xcode:derived-data"]?.paths.map(\.lastPathComponent) == ["App-abc"])
     }
 
-    @Test func appleAppsAndSystemProcessesNeverCountAsOwners() throws {
-        let home = try makeHome()
-        try home.file("Library/Caches/Docker Desktop/x", "d")
-        try home.file("Library/Caches/com.openai.codex/x", "o")
-        let running = [
-            RunningApp(name: "Dock", bundleID: "com.apple.dock"),
-            RunningApp(name: "Open and Save Panel Service (Discord)", bundleID: "com.apple.appkit.xpc.openAndSavePanelService"),
-        ]
-        let byID = Dictionary(uniqueKeysWithValues: CleanupCatalog.safe(home: home.url, running: running).map { ($0.id, $0) })
-        #expect(byID["cache:Docker Desktop"]?.inUseBy == nil)
-        #expect(byID["cache:com.openai.codex"]?.inUseBy == nil)
-    }
-
-    @Test func skipsAppleFrameworkCachesWithoutTheComApplePrefix() throws {
-        let home = try makeHome()
-        for name in ["GeoServices", "CloudKit", "PassKit", "Animoji", "GameKit", "FamilyCircle",
-                     "softwareupdate", "PFSceneTaxonomyData_99.index", "AMSDataMigratorTool"] {
-            try home.file("Library/Caches/\(name)/x", "a")
-        }
-        let ids = CleanupCatalog.safe(home: home.url, running: []).map(\.id)
-        #expect(!ids.contains { $0.contains("GeoServices") || $0.contains("CloudKit") || $0.contains("PassKit")
-            || $0.contains("Animoji") || $0.contains("GameKit") || $0.contains("FamilyCircle")
-            || $0.contains("softwareupdate") || $0.contains("PFScene") || $0.contains("AMSData") })
-    }
-
-    @Test func dropsItemsThatTakeNoSpace() throws {
+    @Test func dropsEmptyItems() throws {
         let home = try makeHome()
         try FileManager.default.createDirectory(at: home.url.appendingPathComponent("Library/Caches/EmptyApp"), withIntermediateDirectories: true)
-        #expect(!CleanupCatalog.safe(home: home.url, running: []).map(\.id).contains("cache:EmptyApp"))
-    }
-
-    @Test func selectionHonoursOnlyAndSkipsInUse() throws {
-        let home = try makeHome()
-        let items = CleanupCatalog.safe(home: home.url, running: [RunningApp(name: "Spotify", bundleID: "com.spotify.client")])
-        let all = CleanupCatalog.select(items, only: [], includeInUse: false)
-        #expect(!all.map(\.id).contains("cache:com.spotify.client"))
-        #expect(all.map(\.id).contains("cache:SomeTool"))
-
-        let one = CleanupCatalog.select(items, only: ["cache:SomeTool"], includeInUse: false)
-        #expect(one.map(\.id) == ["cache:SomeTool"])
-
-        let forced = CleanupCatalog.select(items, only: ["cache:com.spotify.client"], includeInUse: true)
-        #expect(forced.map(\.id) == ["cache:com.spotify.client"])
+        #expect(!CleanupCatalog.safe(context(home)).map(\.id).contains("cache:EmptyApp"))
     }
 
     @Test func runningCleanupStashesSelectedItemsSoTheyCanBeRestored() throws {
         let home = try makeHome()
         let store = UndoStore(root: home.url.appendingPathComponent("undo-root"))
-        let items = CleanupCatalog.select(CleanupCatalog.safe(home: home.url, running: []), only: ["cache:SomeTool", "npm:cache"], includeInUse: false)
+        let items = CleanupCatalog.select(CleanupCatalog.safe(context(home)), only: ["cache:Homebrew", "npm:cache"],
+                                          includeInUse: false, includeUnknown: false)
         let batch = try CleanupCatalog.run(items, store: store)
-        #expect(!home.exists("Library/Caches/SomeTool"))
+        #expect(!home.exists("Library/Caches/Homebrew"))
         #expect(!home.exists(".npm/_cacache"))
         #expect(home.exists("Library/Caches/com.spotify.client"))
         _ = try store.restore(id: batch.id)
-        #expect(home.exists("Library/Caches/SomeTool/c"))
+        #expect(home.exists("Library/Caches/Homebrew/downloads/x"))
         #expect(home.exists(".npm/_cacache/index"))
+    }
+}
+
+@Suite("Open files")
+struct OpenFilesTests {
+    @Test func findsAFileThisProcessHasOpen() throws {
+        let tmp = try TempDir()
+        let f = try tmp.file("held/open.txt", "x")
+        let handle = try FileHandle(forReadingFrom: f)
+        defer { try? handle.close() }
+        let open = OpenFiles.snapshot()
+        #expect(open.contains { $0.path.hasSuffix("held/open.txt") && $0.pid == getpid() })
+        #expect(OpenFiles.holder(of: tmp.url.appendingPathComponent("held"), in: open) != nil)
+        #expect(OpenFiles.holder(of: tmp.url.appendingPathComponent("hel"), in: open) == nil) // path prefix, not string prefix
+    }
+}
+
+@Suite("Locale-proof commands")
+struct LocaleTests {
+    @Test func processRunnerForcesTheCLocale() throws {
+        let out = try ProcessRunner().run("/usr/bin/env", [])
+        #expect(out.contains("LC_ALL=C"))
+        #expect(out.contains("LANG=C"))
     }
 }

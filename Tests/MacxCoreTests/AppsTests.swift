@@ -62,15 +62,41 @@ struct MachOTests {
         #expect(MachO.architectures(of: Data()).isEmpty)
     }
 
-    @Test func kindLabels() {
-        #expect(AppArch.kind([.arm64]) == "Apple silicon")
-        #expect(AppArch.kind([.x86_64]) == "Intel (Rosetta)")
-        #expect(AppArch.kind([.arm64, .x86_64]) == "Universal")
-        #expect(AppArch.kind([]) == "unknown")
+    @Test func kindLabelsOnAppleSilicon() {
+        #expect(AppArch.kind([.arm64], hostIsARM: true) == "Apple silicon")
+        #expect(AppArch.kind([.x86_64], hostIsARM: true) == "Intel (Rosetta)")
+        #expect(AppArch.kind([.arm64, .x86_64], hostIsARM: true) == "Universal")
+        #expect(AppArch.kind([], hostIsARM: true) == "unknown")
+    }
+
+    @Test func kindLabelsOnIntelMacs() {
+        #expect(AppArch.kind([.x86_64], hostIsARM: false) == "Intel")
+        #expect(AppArch.kind([.arm64], hostIsARM: false) == "Apple silicon only (can't run here)")
+        #expect(AppArch.kind([.arm64, .x86_64], hostIsARM: false) == "Universal")
     }
 }
 
 // MARK: - Scanning
+
+@Suite("App discovery")
+struct AppDiscoveryTests {
+    @Test func keepsTopLevelAppsAnywhereAndDropsHelpersSystemLibraryAndTrash() {
+        let out = """
+        /Applications/Game.app
+        /Volumes/External/Apps/Editor.app
+        /Users/someone/Documents/Builds/MyTool.app
+        /Applications/Xcode.app/Contents/Developer/Applications/Simulator.app
+        /System/Applications/Chess.app
+        /Users/someone/Library/Application Support/Steam/Steam Helper.app
+        /Users/someone/.Trash/Old.app
+        /Users/someone/project/dist/thing.service
+        """
+        #expect(AppScanner.parseAppPaths(out).map(\.path) == [
+            "/Applications/Game.app", "/Volumes/External/Apps/Editor.app", "/Users/someone/Documents/Builds/MyTool.app",
+        ])
+        #expect(AppScanner.parseAppPaths(out, includeSystem: true).map(\.path).contains("/System/Applications/Chess.app"))
+    }
+}
 
 @Suite("App scanning")
 struct AppScanTests {
@@ -104,7 +130,7 @@ struct AppScanTests {
         let home = tmp.url.appendingPathComponent("home")
         try tmp.app("Applications/Steam.app", id: "com.valvesoftware.steam", name: "Steam")
         let prefs = try tmp.file("home/Library/Preferences/com.valvesoftware.steam.plist")
-        let support = try tmp.file("home/Library/Application Support/Steam/registry.vdf")
+        let support = try tmp.file("home/Library/Application Support/com.valvesoftware.steam/registry.vdf")
         let older = Date(timeIntervalSince1970: 1_780_000_000)
         let newer = Date(timeIntervalSince1970: 1_790_000_000)
         try FileManager.default.setAttributes([.modificationDate: older], ofItemAtPath: prefs.path)
@@ -180,24 +206,33 @@ struct AppUninstallTests {
         AppScanner.scan([tmp.url.appendingPathComponent("Applications")], lastUsed: { _ in nil })[0]
     }
 
-    @Test func findsLeftoversByBundleIDAndName() throws {
+    @Test func findsLeftoversByExactBundleIDOnlyByDefault() throws {
         let tmp = try homeWithLeftovers()
-        let paths = Set(AppLeftovers.find(for: game(tmp), home: tmp.url.appendingPathComponent("home")).map(\.lastPathComponent))
-        #expect(paths == [
-            "com.example.game", "Game", "com.example.game.plist", "com.example.game.1234-ABCD.plist",
+        let all = AppLeftovers.find(for: game(tmp), home: tmp.url.appendingPathComponent("home"))
+        #expect(Set(all.map(\.lastPathComponent)) == [
+            "com.example.game", "com.example.game.plist", "com.example.game.1234-ABCD.plist",
             "com.example.game.savedState", "com.example.game.updater.plist",
         ])
-        // The three com.example.game folders (Application Support, Caches, HTTPStorages, Containers) collapse in a Set; count them separately.
-        let all = AppLeftovers.find(for: game(tmp), home: tmp.url.appendingPathComponent("home"))
+        // Application Support, Caches, HTTPStorages and Containers each have a com.example.game folder.
         #expect(all.filter { $0.lastPathComponent == "com.example.game" }.count == 4)
         #expect(!all.contains { $0.path.contains("gamepad") || $0.path.contains("Gamer") })
+    }
+
+    @Test func nameMatchesAreSeparateAndOptIn() throws {
+        let tmp = try homeWithLeftovers()
+        let home = tmp.url.appendingPathComponent("home")
+        #expect(AppLeftovers.nameMatches(for: game(tmp), home: home).map(\.lastPathComponent) == ["Game"])
+        let plain = try AppUninstaller.plan(game(tmp), home: home, runningBundleIDs: [])
+        #expect(!plain.paths.contains { $0.lastPathComponent == "Game" })
+        let withNames = try AppUninstaller.plan(game(tmp), home: home, runningBundleIDs: [], includeNameMatches: true)
+        #expect(withNames.paths.contains { $0.lastPathComponent == "Game" })
     }
 
     @Test func uninstallMovesAppAndLeftoversAndUndoBringsThemBack() throws {
         let tmp = try homeWithLeftovers()
         let home = tmp.url.appendingPathComponent("home")
         let store = UndoStore(root: tmp.url.appendingPathComponent("undo"))
-        let plan = try AppUninstaller.plan(game(tmp), home: home, running: [])
+        let plan = try AppUninstaller.plan(game(tmp), home: home, runningBundleIDs: [])
         let batch = try AppUninstaller.run(plan, store: store)
         #expect(!tmp.exists("Applications/Game.app"))
         #expect(!tmp.exists("home/Library/Preferences/com.example.game.plist"))
@@ -212,21 +247,22 @@ struct AppUninstallTests {
         let home = tmp.url.appendingPathComponent("home")
         let sys = AppInfo(url: URL(fileURLWithPath: "/System/Applications/Chess.app"), bundleID: "com.apple.Chess", name: "Chess",
                           version: nil, bytes: 1, architectures: [], lastUsed: nil, isApple: true, fromAppStore: false)
-        #expect(throws: UninstallError.systemApp) { try AppUninstaller.plan(sys, home: home, running: []) }
+        #expect(throws: UninstallError.systemApp) { try AppUninstaller.plan(sys, home: home, runningBundleIDs: []) }
 
         let safari = AppInfo(url: URL(fileURLWithPath: "/Applications/Safari.app"), bundleID: "com.apple.Safari", name: "Safari",
                              version: nil, bytes: 1, architectures: [], lastUsed: nil, isApple: true, fromAppStore: false)
-        #expect(throws: UninstallError.appleApp) { try AppUninstaller.plan(safari, home: home, running: []) }
+        #expect(throws: UninstallError.appleApp) { try AppUninstaller.plan(safari, home: home, runningBundleIDs: []) }
 
-        let running = [RunningApp(name: "Game", bundleID: "com.example.game")]
-        #expect(throws: UninstallError.running("Game")) { try AppUninstaller.plan(game(tmp), home: home, running: running) }
+        #expect(throws: UninstallError.running("Game")) {
+            try AppUninstaller.plan(game(tmp), home: home, runningBundleIDs: ["com.example.game"])
+        }
     }
 
     @Test func allowsAppleAppStoreAppsLikeGarageBand() throws {
         let tmp = try TempDir()
         try tmp.app("Applications/GarageBand.app", id: "com.apple.garageband10", appStore: true)
         let gb = AppScanner.scan([tmp.url.appendingPathComponent("Applications")], lastUsed: { _ in nil })[0]
-        let plan = try AppUninstaller.plan(gb, home: tmp.url.appendingPathComponent("home"), running: [])
+        let plan = try AppUninstaller.plan(gb, home: tmp.url.appendingPathComponent("home"), runningBundleIDs: [])
         #expect(plan.paths.first == gb.url)
     }
 }
@@ -235,27 +271,25 @@ struct AppUninstallTests {
 
 @Suite("Orphaned leftovers")
 struct OrphanTests {
-    @Test func findsReverseDNSFoldersWhoseVendorHasNoInstalledApp() throws {
+    @Test func findsReverseDNSEntriesThatNoBundleOnDiskOwns() throws {
         let tmp = try TempDir()
         let home = tmp.url.appendingPathComponent("home")
         try tmp.file("home/Library/Application Support/com.gone.app/data")
         try tmp.file("home/Library/Preferences/com.gone.app.plist")
-        try tmp.file("home/Library/Application Support/com.example.helper/keep") // vendor still installed
+        try tmp.file("home/Library/HTTPStorages/com.gone.app.binarycookies")
+        try tmp.file("home/Library/Application Support/com.example.game.helper/keep") // owned: installed ID + "."
         try tmp.file("home/Library/Application Support/com.apple.something/keep") // Apple
-        try tmp.file("home/Library/Application Support/SomeFolder/keep") // not reverse-DNS, can't tell
+        try tmp.file("home/Library/Application Support/SomeFolder/keep") // not reverse-DNS: can't tell, never listed
         try tmp.file("home/Library/Preferences/com.example.game.plist")
-        let installed = ["com.example.game"]
+        try tmp.file("home/Library/Application Support/group.com.gone.shared/x") // app-group ID, not a bundle ID
+        try tmp.file("home/Library/Application Support/systemgroup.com.gone.thing/x")
+        try FileManager.default.createDirectory( // takes no space: nothing to gain
+            at: home.appendingPathComponent("Library/Application Support/com.empty.app"), withIntermediateDirectories: true)
+        let index = BundleIndex(["com.example.game": "Game"])
 
-        let orphans = AppLeftovers.orphans(home: home, installedBundleIDs: installed)
+        let orphans = AppLeftovers.orphans(home: home, bundles: index)
         #expect(orphans.map(\.id) == ["com.gone.app"])
-        #expect(orphans[0].paths.count == 2)
+        #expect(orphans[0].paths.count == 3)
         #expect(orphans[0].bytes > 0)
-    }
-
-    @Test func vendorIsTheFirstTwoParts() {
-        #expect(AppLeftovers.vendor(of: "com.example.game.plist") == "com.example")
-        #expect(AppLeftovers.vendor(of: "io.github.someone.tool") == "io.github.someone")
-        #expect(AppLeftovers.vendor(of: "SomeFolder") == nil)
-        #expect(AppLeftovers.vendor(of: "com.x") == nil)
     }
 }

@@ -9,7 +9,8 @@ public enum CommandError: Error, Equatable {
     case failed(String, Int32)
 }
 
-/// Runs real processes. Standard error is discarded; a non-zero exit throws.
+/// Runs real processes in the C locale, so output is the same on every language setting.
+/// Standard error is discarded; a non-zero exit throws.
 public struct ProcessRunner: CommandRunner {
     public init() {}
 
@@ -17,6 +18,10 @@ public struct ProcessRunner: CommandRunner {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        var env = ProcessInfo.processInfo.environment
+        env["LANG"] = "C"
+        env["LC_ALL"] = "C"
+        process.environment = env
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

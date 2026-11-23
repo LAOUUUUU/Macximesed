@@ -5,21 +5,9 @@ import MacxCore
 
 extension Tier: ExpressibleByArgument {}
 
-/// Apps from the Dock plus every running process name, so background tools count as "in use" too.
-func currentlyRunning() -> [RunningApp] {
-    var apps = NSWorkspace.shared.runningApplications.compactMap { app -> RunningApp? in
-        guard let name = app.localizedName else { return nil }
-        return RunningApp(name: name, bundleID: app.bundleIdentifier)
-    }
-    let procs = ProcessSample.sample(using: ProcessRunner())
-    let known = Set(apps.map { $0.name.lowercased() })
-    // Apple's own processes live under these folders; they never own a third-party cache.
-    let systemPrefixes = ["/System/", "/usr/", "/sbin/", "/bin/", "/Library/Apple/"]
-    let thirdParty = procs.filter { p in !systemPrefixes.contains { p.path.hasPrefix($0) } }
-    for name in Set(thirdParty.map(\.name)) where name.count >= 4 && !known.contains(name.lowercased()) {
-        apps.append(RunningApp(name: name, bundleID: nil))
-    }
-    return apps
+/// Bundle IDs of running apps, straight from the system.
+func runningBundleIDs() -> Set<String> {
+    Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
 }
 
 /// A plain message for the user. Unlike ValidationError, ArgumentParser prints it without the usage text.
@@ -50,8 +38,11 @@ struct Clean: ParsableCommand {
     @Option(name: .long, parsing: .upToNextOption, help: "Only these item IDs (from --dry-run).")
     var only: [String] = []
 
-    @Flag(name: .long, help: "Also clean caches of apps that are running right now.")
+    @Flag(name: .long, help: "Also clean items a running app or open file is using.")
     var includeInUse = false
+
+    @Flag(name: .long, help: "Also clean caches whose owner can't be identified (shown as \"unknown owner\").")
+    var includeUnknown = false
 
     @Flag(name: [.short, .long], help: "Don't ask before moving.")
     var yes = false
@@ -60,24 +51,27 @@ struct Clean: ParsableCommand {
         guard tier == .safe else {
             throw UserError("The \(tier.rawValue) tier isn't built yet. See STATUS.md.")
         }
-        let all = CleanupCatalog.safe(home: FileManager.default.homeDirectoryForCurrentUser, running: currentlyRunning())
+        let all = CleanupCatalog.safe(.current(runningBundleIDs: runningBundleIDs()))
         let unknown = Set(only).subtracting(all.map(\.id))
         if !unknown.isEmpty {
             throw UserError("Unknown item ID: \(unknown.sorted().joined(separator: ", ")). Run with --dry-run to see the IDs.")
         }
-        let chosen = CleanupCatalog.select(all, only: Set(only), includeInUse: includeInUse)
+        let chosen = CleanupCatalog.select(all, only: Set(only), includeInUse: includeInUse, includeUnknown: includeUnknown)
         let chosenIDs = Set(chosen.map(\.id))
 
         print("Safe cleanup (\(dryRun ? "dry run, nothing changes" : "items are moved to the undo folder"))\n")
         for item in all.sorted(by: { $0.bytes > $1.bytes }) {
             let mark = chosenIDs.contains(item.id) ? "+" : " "
             let size = formatBytes(item.bytes).padding(toLength: 9, withPad: " ", startingAt: 0)
-            var line = "  \(mark) \(size)  \(item.id)"
-            if let app = item.inUseBy, !chosenIDs.contains(item.id) { line += "   (skipped: \(app) is running)" }
+            var line = "  \(mark) \(size)  \(item.id.padding(toLength: 40, withPad: " ", startingAt: 0))  \(item.owner.label)"
+            if let user = item.inUseBy, !chosenIDs.contains(item.id) { line += "   (in use: \(user))" }
             print(line)
         }
         let total = chosen.reduce(0) { $0 + $1.bytes }
         print("\n  \(chosen.count) items, \(formatBytes(total)) to free. Lines marked + are included.")
+        if !includeUnknown, only.isEmpty, all.contains(where: { $0.owner == .unknown }) {
+            print("  Items with an unknown owner are left out; add them with --include-unknown or pick them with --only.")
+        }
 
         guard !dryRun, !chosen.isEmpty else { return }
         guard yes || askYes("Move these \(chosen.count) items to the undo folder?") else {

@@ -16,7 +16,7 @@ struct Apps: ParsableCommand {
     }
 
     struct List: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "List apps in /Applications and ~/Applications.")
+        static let configuration = CommandConfiguration(abstract: "List every app on this Mac, wherever it is (from Spotlight).")
 
         @Flag(help: "Only apps not opened in --days days. Apps with no known date are never listed as unused.")
         var unused = false
@@ -31,7 +31,7 @@ struct Apps: ParsableCommand {
         var sort: String = "size"
 
         func run() throws {
-            var apps = AppScanner.scan(AppScanner.defaultFolders, home: FileManager.default.homeDirectoryForCurrentUser)
+            var apps = AppScanner.discover(home: FileManager.default.homeDirectoryForCurrentUser)
             if unused { apps = AppScanner.unused(apps, olderThanDays: days) }
             if intel { apps = apps.filter { !$0.architectures.contains(.arm64) && $0.architectures.contains(.x86_64) } }
             switch sort {
@@ -41,9 +41,9 @@ struct Apps: ParsableCommand {
             }
             for a in apps {
                 let size = formatBytes(a.bytes).padding(toLength: 9, withPad: " ", startingAt: 0)
-                let kind = AppArch.kind(a.architectures).padding(toLength: 15, withPad: " ", startingAt: 0)
+                let kind = AppArch.kind(a.architectures).padding(toLength: 17, withPad: " ", startingAt: 0)
                 let used = ((a.lastUsedIsEstimate ? "~" : "") + Apps.lastUsedText(a.lastUsed)).padding(toLength: 14, withPad: " ", startingAt: 0)
-                print("  \(size)  \(kind)  \(used)  \(a.name)  [\(a.bundleID)]")
+                print("  \(size)  \(kind)  \(used)  \(a.name)  [\(a.bundleID)]  \((a.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)")
             }
             let total = apps.reduce(0) { $0 + $1.bytes }
             print("\n  \(apps.count) apps, \(formatBytes(total)).")
@@ -62,11 +62,14 @@ struct Apps: ParsableCommand {
         @Argument(help: "App name or bundle ID.")
         var app: String
 
+        @Flag(name: .long, help: "Also move folders named exactly like the app (another program could share the name).")
+        var includeNameMatches = false
+
         @Flag(name: [.short, .long], help: "Don't ask first.")
         var yes = false
 
         func run() throws {
-            let apps = AppScanner.scan(AppScanner.defaultFolders + [URL(fileURLWithPath: "/System/Applications")], lastUsed: { _ in nil })
+            let apps = AppScanner.discover(includeSystem: true, lastUsed: { _ in nil })
             let matches = apps.filter {
                 $0.bundleID.caseInsensitiveCompare(app) == .orderedSame || $0.name.caseInsensitiveCompare(app) == .orderedSame
             }
@@ -76,7 +79,8 @@ struct Apps: ParsableCommand {
             }
             let plan: UninstallPlan
             do {
-                plan = try AppUninstaller.plan(target, home: FileManager.default.homeDirectoryForCurrentUser, running: currentlyRunning())
+                plan = try AppUninstaller.plan(target, home: FileManager.default.homeDirectoryForCurrentUser,
+                                              runningBundleIDs: runningBundleIDs(), includeNameMatches: includeNameMatches)
             } catch UninstallError.systemApp {
                 throw UserError("\(target.name) is part of macOS (sealed system volume). It can only be removed at the Extreme level, which isn't built yet.")
             } catch UninstallError.appleApp {
@@ -87,6 +91,12 @@ struct Apps: ParsableCommand {
 
             print("Uninstall \(target.name) \(target.version ?? "") (\(formatBytes(plan.bytes)) in total):")
             plan.paths.forEach { print("  \($0.path)") }
+            let byName = AppLeftovers.nameMatches(for: target, home: FileManager.default.homeDirectoryForCurrentUser)
+                .filter { !plan.paths.contains($0) }
+            if !byName.isEmpty {
+                print("  Not included (only the name matches, add --include-name-matches to move them too):")
+                byName.forEach { print("    \($0.path)") }
+            }
             guard yes || askYes("Move these \(plan.paths.count) items to the undo folder?") else {
                 print("Nothing changed.")
                 return
@@ -112,15 +122,13 @@ struct Apps: ParsableCommand {
         var yes = false
 
         func run() throws {
-            let installed = AppScanner.scan(AppScanner.defaultFolders + [URL(fileURLWithPath: "/System/Applications")],
-                                            lastUsed: { _ in nil }).map(\.bundleID)
-            let orphans = AppLeftovers.orphans(home: FileManager.default.homeDirectoryForCurrentUser, installedBundleIDs: installed)
+            let orphans = AppLeftovers.orphans(home: FileManager.default.homeDirectoryForCurrentUser, bundles: .current())
             if remove.isEmpty {
                 for o in orphans.sorted(by: { $0.bytes > $1.bytes }) {
                     print("  \(formatBytes(o.bytes).padding(toLength: 9, withPad: " ", startingAt: 0))  \(o.id)  (\(o.paths.count) items)")
                 }
-                print("\n  \(orphans.count) groups whose maker has no installed app. Check each before removing:")
-                print("  some belong to tools that aren't .app bundles. Remove with --remove <ID> ...")
+                print("\n  \(orphans.count) groups named after a bundle ID that no app or helper on this Mac has.")
+                print("  Some belong to command-line tools or web apps, so check each. Remove with --remove <ID> ...")
                 return
             }
             let chosen = orphans.filter { remove.contains($0.id) }

@@ -16,5 +16,19 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx apps remove`: uninstalls an app and its exact-match leftovers into the undo folder. Refuses running apps, apps on the sealed system volume, and built-in Apple apps, but allows Apple's App Store apps.
 - `macx apps leftovers`: finds files of apps that are gone, by vendor of reverse-DNS names, and can move them to the undo folder.
 
+### Changed
+- **No more guessing from names.**
+  - Cache and leftover owners now come from Spotlight's index of every bundle ID on disk (an exact ID, or the ID plus a dot), and tool caches from the tools themselves (`brew`, `npm`, `pip3`, `yarn`, `pnpm`).
+  - Unattributed caches are labelled "unknown owner" and need `--include-unknown` or `--only`.
+  - "In use" now means a process has a file open inside the item (through libproc), or its app is running (by exact bundle ID).
+  - Removed: the hand-made list of Apple cache names, matching on words in app names, and the list of top-level domains.
+- Apps are found anywhere through Spotlight, falling back to `/Applications`, `~/Applications` and `Applications` on each mounted volume. `macx apps` shows each app's folder.
+- `macx apps remove` only moves exact bundle-ID leftovers. Folders matched by name are listed, and moved only with `--include-name-matches`.
+- `macx apps leftovers` skips app-group IDs (`group.*`, `systemgroup.*`) and empty items.
+- Xcode DerivedData uses the custom location set in Xcode's settings, if there is one.
+- System tools run with `LANG=C` and `LC_ALL=C`, so output is the same on any language setting.
+- Architecture labels depend on the Mac's CPU, so Intel Macs see "Intel" and "Apple silicon only (can't run here)".
+
 ### Fixed
 - Errors are printed without the usage text underneath.
+- Apps in folders whose names contain dots (for example `Cisco Packet Tracer 9.0.1/`) are found.

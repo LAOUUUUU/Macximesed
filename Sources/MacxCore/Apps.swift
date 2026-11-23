@@ -8,13 +8,27 @@ public enum AppArch: String, Sendable, Equatable, Comparable, Codable {
 
     public static func < (a: AppArch, b: AppArch) -> Bool { a.rawValue < b.rawValue }
 
-    /// How the app runs on Apple silicon.
-    public static func kind(_ archs: [AppArch]) -> String {
-        switch (archs.contains(.arm64), archs.contains(.x86_64)) {
-        case (true, true): "Universal"
-        case (true, false): "Apple silicon"
-        case (false, true): "Intel (Rosetta)"
-        case (false, false): "unknown"
+    /// The CPU this Mac has.
+    public static var hostIsARM: Bool {
+        #if arch(arm64)
+        true
+        #else
+        // An Intel build can still be running under Rosetta on Apple silicon.
+        var translated: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0 && translated == 1
+        #endif
+    }
+
+    /// How the app runs on this Mac.
+    public static func kind(_ archs: [AppArch], hostIsARM: Bool = AppArch.hostIsARM) -> String {
+        switch (archs.contains(.arm64), archs.contains(.x86_64), hostIsARM) {
+        case (true, true, _): "Universal"
+        case (true, false, true): "Apple silicon"
+        case (true, false, false): "Apple silicon only (can't run here)"
+        case (false, true, true): "Intel (Rosetta)"
+        case (false, true, false): "Intel"
+        case (false, false, _): "unknown"
         }
     }
 }
@@ -92,9 +106,40 @@ public struct AppInfo: Sendable, Equatable {
 }
 
 public enum AppScanner {
-    public static var defaultFolders: [URL] {
-        [URL(fileURLWithPath: "/Applications"),
-         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
+    /// Used only when Spotlight can't answer: the standard app folders, plus `Applications` on every mounted volume.
+    public static var fallbackFolders: [URL] {
+        var out = [URL(fileURLWithPath: "/Applications"),
+                   FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
+        let volumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) ?? []
+        for v in volumes where v.path != "/" {
+            out.append(v.appendingPathComponent("Applications"))
+        }
+        return out
+    }
+
+    /// Every app on the Mac, wherever it is: asks Spotlight, falls back to scanning folders.
+    public static func discover(includeSystem: Bool = false, runner: CommandRunner = ProcessRunner(),
+                                lastUsed: (URL) -> Date? = spotlightLastUsed, home: URL? = nil) -> [AppInfo] {
+        if let out = try? runner.run("/usr/bin/mdfind", ["kMDItemContentTypeTree == 'com.apple.application-bundle'"]) {
+            let urls = parseAppPaths(out, includeSystem: includeSystem)
+            if !urls.isEmpty { return build(urls, lastUsed: lastUsed, home: home) }
+        }
+        var folders = fallbackFolders
+        if includeSystem { folders.append(URL(fileURLWithPath: "/System/Applications")) }
+        return scan(folders, lastUsed: lastUsed, home: home)
+    }
+
+    /// Keeps standalone apps: drops apps inside other bundles, in a Library folder (helpers), in the Trash,
+    /// and on the system volume unless asked.
+    public static func parseAppPaths(_ out: String, includeSystem: Bool = false) -> [URL] {
+        out.split(separator: "\n").map(String.init).filter { path in
+            guard path.hasSuffix(".app") else { return false }
+            let parent = (path as NSString).deletingLastPathComponent
+            let parts = parent.split(separator: "/")
+            if parts.contains(where: { $0.hasSuffix(".app") || $0 == "Library" || $0 == ".Trash" }) { return false }
+            if path.hasPrefix("/System/") { return includeSystem }
+            return true
+        }.map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
     /// Finds `.app` bundles directly in each folder and one plain folder down (e.g. `/Applications/Vendor/Tool.app`).
@@ -110,7 +155,11 @@ public enum AppScanner {
                 }
             }
         }
-        return found.compactMap { url -> AppInfo? in
+        return build(found, lastUsed: lastUsed, home: home)
+    }
+
+    static func build(_ found: [URL], lastUsed: (URL) -> Date?, home: URL?) -> [AppInfo] {
+        found.compactMap { url -> AppInfo? in
             guard var app = read(url, lastUsed: lastUsed) else { return nil }
             if app.lastUsed == nil, let home, let estimate = estimateLastUse(app, home: home) {
                 app.lastUsed = estimate
@@ -180,15 +229,16 @@ public struct OrphanGroup: Sendable, Equatable {
 }
 
 public enum AppLeftovers {
-    /// Library folders apps write to, and whether entries there are named after the bundle ID, the app name, or both.
+    /// Library folders where apps keep files named exactly after their bundle ID.
     static let byID = [
         "Library/Application Support", "Library/Caches", "Library/HTTPStorages", "Library/WebKit",
         "Library/Containers", "Library/Application Scripts", "Library/Logs",
     ]
     static let byName = ["Library/Application Support", "Library/Logs", "Library/Caches"]
 
-    /// Files in the home Library that belong to this app. Matches are exact (or `<id>.` prefixes for
-    /// plists, saved state and launch agents), so `com.example.gamepad` never matches `com.example.game`.
+    /// Files in the home Library that belong to this app by its bundle ID: exact names, plus
+    /// `<id>.` prefixes for preferences, saved state and launch agents. `com.example.gamepad`
+    /// never matches `com.example.game`.
     public static func find(for app: AppInfo, home: URL) -> [URL] {
         let fm = FileManager.default
         let id = app.bundleID
@@ -196,50 +246,42 @@ public enum AppLeftovers {
         func add(_ url: URL) { if fm.fileExists(atPath: url.path), !out.contains(url) { out.append(url) } }
 
         for dir in byID { add(home.appendingPathComponent(dir).appendingPathComponent(id)) }
-        // Names like "Game" are only used when they're specific enough to be safe.
-        if app.name.count >= 4, !app.isApple {
-            for dir in byName { add(home.appendingPathComponent(dir).appendingPathComponent(app.name)) }
-        }
-        let prefixed: [(String, String)] = [
-            ("Library/Preferences", "\(id).plist"),
-            ("Library/Saved Application State", "\(id).savedState"),
-        ]
-        for (dir, name) in prefixed { add(home.appendingPathComponent(dir).appendingPathComponent(name)) }
+        add(home.appendingPathComponent("Library/Preferences").appendingPathComponent("\(id).plist"))
+        add(home.appendingPathComponent("Library/Saved Application State").appendingPathComponent("\(id).savedState"))
         for (dir, prefix) in [("Library/Preferences/ByHost", "\(id)."), ("Library/LaunchAgents", "\(id).")] {
-            let folder = home.appendingPathComponent(dir)
-            for child in CleanupCatalog.children(of: folder) where child.lastPathComponent.hasPrefix(prefix) {
+            for child in CleanupCatalog.children(of: home.appendingPathComponent(dir)) where child.lastPathComponent.hasPrefix(prefix) {
                 add(child)
             }
         }
         return out
     }
 
-    /// `com.example.game.plist` → `com.example`. Nil for names that aren't reverse-DNS.
-    static func vendor(of name: String) -> String? {
-        let parts = name.split(separator: ".")
-        guard parts.count >= 3, ["com", "org", "net", "io", "app", "dev", "co", "me", "ru", "de", "fr", "uk"].contains(parts[0]) else {
-            return nil
-        }
-        // io.github.<user>.<tool>: the user is part of the vendor.
-        if parts.count >= 4, parts[1] == "github" || parts[1] == "gitlab" { return parts.prefix(3).joined(separator: ".") }
-        return parts.prefix(2).joined(separator: ".")
+    /// Folders named exactly like the app ("Application Support/Steam"). Another program could use
+    /// the same name, so these are only included when asked for.
+    public static func nameMatches(for app: AppInfo, home: URL) -> [URL] {
+        guard !app.isApple else { return [] }
+        return byName.map { home.appendingPathComponent($0).appendingPathComponent(app.name) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    /// Reverse-DNS entries whose vendor has no installed app. Plain names are skipped: there's no way to tell who owns them.
-    public static func orphans(home: URL, installedBundleIDs: [String]) -> [OrphanGroup] {
-        let vendors = Set(installedBundleIDs.compactMap { vendor(of: $0 + ".x") })
+    /// Entries named like a bundle ID (`com.vendor.app`, `com.vendor.app.plist`) that no bundle on
+    /// this Mac owns and that take up space. Plain names ("SomeFolder") are never listed: there's no way to know who owns them.
+    public static func orphans(home: URL, bundles: BundleIndex) -> [OrphanGroup] {
         var groups: [String: [URL]] = [:]
         let dirs = Set(byID + ["Library/Preferences", "Library/Saved Application State"])
         for dir in dirs {
             for child in CleanupCatalog.children(of: home.appendingPathComponent(dir)) {
-                var name = child.lastPathComponent
-                for ext in [".plist", ".savedState"] where name.hasSuffix(ext) { name.removeLast(ext.count) }
-                guard !name.hasPrefix("com.apple."), let v = vendor(of: name), !vendors.contains(v) else { continue }
+                let name = ReverseDNS.baseName(child.lastPathComponent)
+                // App-group IDs (group.*, systemgroup.*) are sharing permissions, not bundle IDs, so no bundle owns them by name.
+                guard ReverseDNS.isReverseDNS(name), !name.hasPrefix("com.apple."),
+                      !name.hasPrefix("group."), !name.hasPrefix("systemgroup."),
+                      bundles.owner(of: name) == nil else { continue }
                 groups[name, default: []].append(child)
             }
         }
         return groups.map { OrphanGroup(id: $0.key, paths: $0.value.sorted { $0.path < $1.path },
                                         bytes: $0.value.reduce(0) { $0 + allocatedSize(of: $1) }) }
+            .filter { $0.bytes > 0 }
             .sorted { $0.id < $1.id }
     }
 }
@@ -260,12 +302,14 @@ public struct UninstallPlan: Sendable, Equatable {
 }
 
 public enum AppUninstaller {
-    public static func plan(_ app: AppInfo, home: URL, running: [RunningApp]) throws -> UninstallPlan {
+    public static func plan(_ app: AppInfo, home: URL, runningBundleIDs: Set<String>,
+                            includeNameMatches: Bool = false) throws -> UninstallPlan {
         if app.isOnSystemVolume { throw UninstallError.systemApp }
         // Apple's App Store apps (GarageBand, iMovie, Pages...) can be downloaded again; built-in ones can't.
         if app.isApple, !app.fromAppStore { throw UninstallError.appleApp }
-        if let r = running.first(where: { $0.bundleID == app.bundleID }) { throw UninstallError.running(r.name) }
-        let leftovers = AppLeftovers.find(for: app, home: home)
+        if runningBundleIDs.contains(app.bundleID) { throw UninstallError.running(app.name) }
+        var leftovers = AppLeftovers.find(for: app, home: home)
+        if includeNameMatches { leftovers += AppLeftovers.nameMatches(for: app, home: home).filter { !leftovers.contains($0) } }
         return UninstallPlan(app: app, paths: [app.url] + leftovers,
                              bytes: app.bytes + leftovers.reduce(0) { $0 + allocatedSize(of: $1) })
     }
