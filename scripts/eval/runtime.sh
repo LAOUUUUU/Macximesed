@@ -211,8 +211,11 @@ PY
 }
 echo "Benchmarking eslogger (20 s each)…"
 kill "$SAMPLER" 2>/dev/null
-BENCH="$(bench "macx's events (exec, create, rename, deleteextattr, btm_launch_item_add)" exec create rename deleteextattr btm_launch_item_add)
-$(bench "the same plus open" exec create rename deleteextattr btm_launch_item_add open)"
+# (Two plain assignments: macOS's bash 3.2 misreads an apostrophe inside "$( ... )".)
+B1=$(bench "macx events (exec, create, rename, deleteextattr, btm_launch_item_add)" exec create rename deleteextattr btm_launch_item_add)
+B2=$(bench "the same plus open" exec create rename deleteextattr btm_launch_item_add open)
+BENCH="$B1
+$B2"
 echo "$BENCH"
 
 mkdir -p "$(dirname "$OUT")"
