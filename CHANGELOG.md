@@ -93,6 +93,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - **Benign persistence suite:** 10 launch items modelled on common legitimate software, each with its real kind of signature. No high or critical findings allowed. The one known medium is Homebrew's ad-hoc signed services.
 - **eslogger benchmark** in `scripts/eval/runtime.sh`: CPU, memory and events per second with macx's events, and with `open` added.
 - **Decision log** in the research brief: the final Extreme decision, and network polling marked as not built yet.
+- **First runtime evaluation results** (`research/evaluation/runtime-results.md`). All 7 simulated steps alerted in 47–245 ms, each freeze followed within 5–9 ms, children were frozen, and overhead was about 2% CPU. It also measured the cost of `open` events.
 
 ### Changed
 - **No more guessing from names.**

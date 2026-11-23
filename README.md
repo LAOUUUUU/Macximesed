@@ -129,7 +129,7 @@ Stealer sites and IP addresses change all the time, so a list is always out of d
 | **Evidence** | every critical alert | A case is recorded right after the freeze, while the process still exists (see `macx incident`). Under sudo it's owned by you, not root. |
 | **After the fact** | `--suspend` | Stops (SIGSTOP) the flagged process and everything it started, top-down, so a stopped parent can't start new children. It re-reads the process tree until no new child appears, and shows who started the process. |
 
-eslogger ignores processes in its own process group, so anything started from the same shell job as `macx watch` is invisible to it. Run the watcher in its own terminal tab. How long a flagged process runs before it's stopped is measured by `scripts/eval/runtime.sh`, but hasn't been measured on a real Mac yet. That's the runtime simulation step in [STATUS.md](STATUS.md). Until there are numbers, treat `--suspend` as damage limitation, not prevention. AMOS's steps all come before the theft finishes: the pasted command, the fake password prompt, the password check, the launch daemon and the hidden folder. eslogger's output format isn't a stable API, so the parser reads every field as optional and works out the event type from the event's name.
+eslogger ignores processes in its own process group, so anything started from the same shell job as `macx watch` is invisible to it. Run the watcher in its own terminal tab. How long a flagged process runs before it's stopped is measured by `scripts/eval/runtime.sh`. On the first real run that was 0.15–0.25 s from action to freeze; see *Evaluation*. That's the runtime simulation step in [STATUS.md](STATUS.md). Until there are numbers, treat `--suspend` as damage limitation, not prevention. AMOS's steps all come before the theft finishes: the pasted command, the fake password prompt, the password check, the launch daemon and the hidden folder. eslogger's output format isn't a stable API, so the parser reads every field as optional and works out the event type from the event's name.
 
 ### What `macx persist` flags
 Each rule comes from how AMOS and similar stealers stay on a Mac:
@@ -177,7 +177,15 @@ These measure what macx catches and what it gets wrong. They don't test individu
   - macx and eslogger CPU and memory, idle and busy;
   - a benchmark of eslogger's CPU, memory and events per second with macx's event set, and with `open` added, under the same file load.
 
-  It writes [research/evaluation/runtime-results.md](research/evaluation/runtime-results.md). It needs root and Full Disk Access for macx, so it has to be run on a real Mac by hand.
+  It writes [research/evaluation/runtime-results.md](research/evaluation/runtime-results.md). It needs root and Full Disk Access, so it has to be run on a real Mac by hand.
+
+  **First run (macOS 27.0.1, M3 MacBook Air):**
+  - **Detection:** all 7 simulated steps alerted, 47–245 ms after the action.
+  - **Freezing:** each freeze followed its alert within 5–9 ms. A busy loop got through about 5,400 steps (roughly 0.2 s of work) before it stopped, and a child started before the alert was frozen too.
+  - **Overhead:** macx and eslogger together used about 0.6% CPU idle and 2% during the run, with 41 MB and 7 MB of memory.
+  - **The `open` cost:** adding `open` events took eslogger from 5.5% CPU and 8 MB to 94% CPU and 706 MB under the same file load (300 → 10,500 events/s), which is why `macx watch` leaves them out.
+  - **False positives:** none from normal background activity during the run.
+  - **What this means:** `--suspend` limits damage, it doesn't prevent it. A fast stealer still gets about 0.2 s.
 
 ### CI
 Every push and pull request runs these on GitHub-hosted Macs (free for public repos):

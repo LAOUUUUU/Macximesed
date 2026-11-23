@@ -5,7 +5,6 @@ The job list: what is being built now and what comes next. Finished work moves t
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
 ## Now
-- [ ] **Run `sudo scripts/eval/runtime.sh`** on a real Mac (needs root + Full Disk Access for macx). It measures detection, alert and freeze delay, work done before the freeze, child freezing and overhead, and checks the eslogger parser against real output.
 - [ ] **Network watching** (`nettop`/`lsof` polling): not built. Test first how many short connections a poll misses.
 - [ ] **Configuration profiles** in `persist` (needs root to list).
 - [ ] **`sfltool dumpbtm` stopped answering on this Mac on 2026-11-23** (it answered earlier that day). Find out whether it's waiting for an authorization prompt.
@@ -31,6 +30,7 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 - [x] **Paste inspection**, `macx guard inspect` plus disguise-undoing (2026-11-23): reads what a pasted link serves and runs only the inspected copy.
 - [x] **Fixes from review** (2026-11-23): unknowns never count as safe (new *partly unknown* verdict), combination scoring, SHA-256 checked again before running, pipe scripts fed on stdin, whole-tree suspend.
 - [x] **Static evaluation** (`scripts/eval/static.sh`): 17/17 simulated attacks flagged (12 dangerous), 0/11 real installers marked dangerous.
+- [x] **Runtime evaluation** (2026-11-23, macOS 27.0.1): 7/7 steps alerted in 47–245 ms, freeze 5–9 ms after the alert, children frozen, about 2% CPU. `open` events cost 94% CPU and 706 MB, so they stay off. The eslogger parser works on real output.
 - [x] **Wider persistence coverage** (2026-11-23): authorization plugins, login hooks, PAM, DYLD injection, periodic, sudoers.d, at, and app, system, kernel and browser extensions.
 - [x] **Incident response**, `macx incident` (2026-11-23): case folders with evidence, hashes, process tree and timeline; containment into the undo store; rotation checklist.
 - [x] **Auto-update** through a signed GitHub Pages channel with a forced security floor (2026-11-23). It goes live with the first release.
