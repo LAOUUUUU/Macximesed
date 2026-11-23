@@ -52,6 +52,10 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
   - **Content scan:** scripts, package scripts, compiled AppleScript and the files inside disk images are scanned for stealer patterns, and base64 payloads are decoded and shown.
   - **Disk images** are mounted read-only and hidden with `diskutil image attach`, falling back to `hdiutil` on older macOS, then ejected.
   - **Result:** one of three verdicts, with exit code 2 for dangerous. Optional `--online` MalwareBazaar lookup (hash only).
+- `macx guard`: the paste-to-shell guard.
+  - **History scan:** zsh extended or plain history (with zsh's metafied bytes decoded), Terminal's `~/.zsh_sessions`, bash with optional timestamps, fish, and `$HISTFILE`. Base64 payloads are decoded and checked too.
+  - **`clipboard`** checks what's on the clipboard, and **`check -- CMD`** checks one command (exit code 2 for dangerous).
+  - **Opt-in zsh hook** (`guard install` / `uninstall` / `status`): it stops a dangerous command once on Enter, and Enter again runs it.
 
 ### Changed
 - **No more guessing from names.**
