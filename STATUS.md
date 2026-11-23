@@ -9,7 +9,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 
 - [x] **A. Signed hash feed** (built 2026-11-23; goes live with the first release) on GitHub Pages: listed in the signed channel, cached locally, checked offline by `macx check` and `macx watch`.
 - [ ] **B. Runs in the background** without a terminal open: a launchd daemon running `macx watch`, with a way to see alerts. This depends on solving Full Disk Access below; a launchd daemon is one of the untried routes.
-- [ ] **C. Network watching** for flagged processes (`nettop`/`lsof` polling), with a measured miss rate for short connections.
+- [x] **C. Network watching** for flagged processes (2026-11-23): libproc polling every 20 ms, `macx net`; miss rate in [research/evaluation/network-results.md](research/evaluation/network-results.md).
 - [ ] **D. Configuration profiles** in the persistence checks (root: done inside the daemon or `sudo macx persist`).
 - [ ] **E. `sfltool` stall understood**, or login items read another way.
 - [ ] **F. CI green** on the final commit, and both evaluations re-run on it.

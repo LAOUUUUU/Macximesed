@@ -38,6 +38,16 @@ public enum ProcessTree {
         return n > 0 ? String(decoding: buf.prefix(Int(n)).map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
     }
 
+    /// Direct children of one process, asked of the kernel for that process only (cheap enough to poll).
+    public static func children(of pid: Int) -> [Int] {
+        let n = proc_listchildpids(pid_t(pid), nil, 0)
+        guard n > 0 else { return [] }
+        var buf = [pid_t](repeating: 0, count: Int(n) + 16)
+        let got = proc_listchildpids(pid_t(pid), &buf, Int32(buf.count * MemoryLayout<pid_t>.stride))
+        guard got > 0 else { return [] }
+        return buf.prefix(Int(got)).filter { $0 > 0 }.map(Int.init)
+    }
+
     public static func descendants(of pid: Int, in table: [Entry]) -> [Int] {
         var children: [Int: [Int]] = [:]
         for e in table { children[e.ppid, default: []].append(e.pid) }

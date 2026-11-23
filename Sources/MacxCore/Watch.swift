@@ -88,6 +88,15 @@ public struct WatchAlert: Sendable, Equatable {
     /// The process to stop if the user asked to suspend on alerts.
     public var pid: Int?
     public var processPath: String?
+
+    public init(rule: String, severity: Severity, title: String, detail: String?, pid: Int?, processPath: String?) {
+        self.rule = rule
+        self.severity = severity
+        self.title = title
+        self.detail = detail
+        self.pid = pid
+        self.processPath = processPath
+    }
 }
 
 /// The live versions of the persistence and paste rules: they fire as things happen, not on the next scan.

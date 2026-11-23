@@ -30,6 +30,9 @@ struct Watch: ParsableCommand {
     @Option(help: "Check a saved eslogger JSON Lines file instead of watching live (no sudo needed).", completion: .file())
     var replay: String?
 
+    @Option(help: "Milliseconds between looks at the network connections of flagged processes (0 = off).")
+    var netInterval: Int = 20
+
     @Option(help: "Write alerts to this JSON Lines file instead of ~/Library/Logs/Macximesed/watch.jsonl.", completion: .file())
     var log: String?
 
@@ -96,6 +99,17 @@ struct Watch: ParsableCommand {
         if suspend { print("Critical alerts freeze the process behind them.") }
         print("Alerts are also saved to \(log.file.path)\n")
 
+        // Network: follow each process behind a high or critical alert, and what it starts, for 5 minutes.
+        let net = NetFollower(intervalMS: netInterval) { e in
+            let c = e.connection
+            let a = WatchAlert(
+                rule: "network", severity: .high, title: "A flagged program connected out",
+                detail: "\(c.proto.rawValue) \(c.endpoint)\(c.state.map { " (\($0))" } ?? "")\n  watched because of [\(e.reason)]",
+                pid: e.pid, processPath: e.path)
+            log.append(a)
+            if a.severity >= minimum { Self.printAlert(a) }
+        }
+
         let handle = out.fileHandleForReading
         var buffer = Data()
         let started = Date()
@@ -111,6 +125,7 @@ struct Watch: ParsableCommand {
                 seen += 1
                 for a in rules.evaluate(e) {
                     log.append(a)
+                    if a.severity >= .high, let pid = a.pid { net?.watch(pid: pid, reason: a.rule, path: a.processPath ?? "") }
                     guard a.severity >= minimum else { continue }
                     Self.printAlert(a)
                     // Critical: stop it first (if asked), then keep the evidence while the process is still there.
@@ -182,6 +197,28 @@ struct Watch: ParsableCommand {
             return (URL(fileURLWithPath: String(cString: dir)), pw.pointee.pw_uid, pw.pointee.pw_gid)
         }
         return (FileManager.default.homeDirectoryForCurrentUser, getuid(), getgid())
+    }
+}
+
+/// Runs a NetTracker on its own queue, so the eslogger loop never waits on it.
+final class NetFollower: @unchecked Sendable {
+    let queue = DispatchQueue(label: "macx.net")
+    var tracker = NetTracker()
+    let timer: DispatchSourceTimer
+
+    init?(intervalMS: Int, report: @escaping @Sendable (NetEvent) -> Void) {
+        guard intervalMS > 0 else { return nil }
+        timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(intervalMS), leeway: .milliseconds(10))
+        timer.setEventHandler { [unowned self] in
+            guard !self.tracker.watched.isEmpty else { return }
+            for e in self.tracker.poll() { report(e) }
+        }
+        timer.resume()
+    }
+
+    func watch(pid: Int, reason: String, path: String) {
+        queue.async { self.tracker.watch(pid: pid, reason: reason, path: path) }
     }
 }
 

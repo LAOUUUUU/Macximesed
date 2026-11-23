@@ -58,4 +58,14 @@ struct ProcessTreeTests {
         ProcessTree.thaw(frozen)
         #expect(!ProcessTree.isStopped(Int(p.processIdentifier)))
     }
+
+    @Test func listsDirectChildrenOfOneProcess() throws {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        p.arguments = ["5"]
+        try p.run()
+        defer { p.terminate() }
+        #expect(ProcessTree.children(of: Int(getpid())).contains(Int(p.processIdentifier)))
+        #expect(ProcessTree.children(of: Int(p.processIdentifier)).isEmpty)
+    }
 }
