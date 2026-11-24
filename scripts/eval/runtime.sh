@@ -65,8 +65,12 @@ if ! kill -0 "$WATCH" 2>/dev/null || grep -q "eslogger stopped" "$WORK/watch.out
   exit 1
 fi
 
-ES=$(pgrep -P "$WATCH" eslogger || pgrep -x eslogger | head -1)
-MACXPID=$(pgrep -f "$MACX watch" | tail -1)
+# The installed macx re-launches itself (to own its permissions), so the working macx is the started
+# process's macx child when there is one, and eslogger is that one's child. Never fall back to "any
+# eslogger": the background daemon runs its own.
+MACXPID=$(pgrep -P "$WATCH" -f 'macx watch' | head -1); MACXPID=${MACXPID:-$WATCH}
+ES=$(pgrep -P "$MACXPID" -x eslogger | head -1)
+if [ -z "$ES" ]; then echo "Couldn't find this run's eslogger under macx (pid $MACXPID)." >&2; exit 1; fi
 sample() { ps -o %cpu=,rss= -p "$1" 2>/dev/null | awk '{c+=$1; r+=$2} END {printf "%.1f %d\n", c, r}'; }
 ( while kill -0 "$WATCH" 2>/dev/null; do echo "$(sample "$MACXPID") $(sample "$ES")" >> "$SAMPLES"; sleep 1; done ) &
 SAMPLER=$!
@@ -106,11 +110,12 @@ echo "Running simulations…"
 # 1. Pasted base64-to-shell, then a busy counter: how far does it get before it's frozen?
 CNT="$WORK/count1"; touch "$CNT"; chmod 666 "$CNT"
 start=$(now)
-as_user /bin/zsh -c "echo ZWNobyBzaW0= | base64 -D | zsh; i=0; while true; do i=\$((i+1)); echo \$i > $CNT; done # macx-sim-1" &
+as_user /bin/zsh -c "echo ZWNobyBzaW0= | base64 -D | zsh; i=0; while true; do i=\$((i+1)); echo \$i >> $CNT; done # macx-sim-1" &
 SIM=$!
 sleep 3
 read -r got ms fms <<< "$(alert_ms base64-to-shell "$start")"
-ops=$(cat "$CNT" 2>/dev/null || echo 0); sleep 0.5; ops2=$(cat "$CNT" 2>/dev/null || echo 0)
+# Appended, not rewritten: a rewrite empties the file for an instant, and the freeze can land right there.
+ops=$(wc -l < "$CNT" | tr -d ' '); sleep 0.5; ops2=$(wc -l < "$CNT" | tr -d ' ')
 still=$([ "$ops" = "$ops2" ] && echo "stopped at $ops" || echo "**kept running** ($ops → $ops2)")
 row "Pasted base64 into zsh" base64-to-shell "$got" "$ms" "$fms" "$still" "n/a"
 pkill -KILL -f "macx-sim-1"; kill -KILL $SIM 2>/dev/null
@@ -192,17 +197,22 @@ load() { local end=$((SECONDS + 20)); while [ $SECONDS -lt $end ]; do cat "$LOAD
 bench() {
   local label=$1; shift
   set -m
-  /usr/bin/eslogger "$@" > "$WORK/bench.jsonl" 2>/dev/null &
-  local ES_PID=$!
+  # Through macx, so eslogger's Full Disk Access check is about Macximesed.app, not the terminal running this.
+  "$MACX" eslogger "$@" > "$WORK/bench.jsonl" 2>/dev/null &
+  local WRAP=$!
   set +m
   sleep 2
+  local ES_PID; ES_PID=$(pgrep -nx eslogger)
+  if [ "$(wc -l < "$WORK/bench.jsonl")" -eq 0 ] && ! kill -0 "$ES_PID" 2>/dev/null; then
+    echo "| $label | eslogger didn't start (Full Disk Access) | - | - |"; kill $WRAP 2>/dev/null; return
+  fi
   : > "$WORK/bench-cpu.txt"
   ( while kill -0 $ES_PID 2>/dev/null; do ps -o %cpu=,rss= -p $ES_PID >> "$WORK/bench-cpu.txt"; sleep 1; done ) &
   local SAMP=$!
   local before; before=$(wc -l < "$WORK/bench.jsonl")
   load
   local after; after=$(wc -l < "$WORK/bench.jsonl")
-  kill $ES_PID 2>/dev/null; kill $SAMP 2>/dev/null; wait $ES_PID 2>/dev/null
+  kill $WRAP 2>/dev/null; kill $SAMP 2>/dev/null; wait $WRAP 2>/dev/null
   /usr/bin/python3 -I - "$WORK/bench-cpu.txt" "$label" $((after - before)) <<'PY'
 import sys
 rows = [l.split() for l in open(sys.argv[1]) if len(l.split()) == 2]

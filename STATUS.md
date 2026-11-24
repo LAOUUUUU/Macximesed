@@ -12,8 +12,8 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **C. Network watching** for flagged processes (2026-11-23): libproc polling every 20 ms, `macx net`; miss rate in [research/evaluation/network-results.md](research/evaluation/network-results.md).
 - [x] **D. Configuration profiles** in `macx persist` (2026-11-23): yours without root, computer-wide ones with `sudo`; rules by payload type. Not yet checked against a real installed profile (CI runners can't install one: the `profiles` tool no longer installs).
 - [x] **E. `sfltool` stall understood** (2026-11-23): without root it asks for an admin password (`system.privilege.admin`) and waits on the dialog; as root it answers at once. It now runs only as root. Reading the BTM file directly is no better: its folder needs Full Disk Access.
-- [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
-  - [ ] The daemon stops on SIGTERM: after `sudo macx daemon restart`, `daemon.log` shows "Stopped watching." and launchd's log has no "Sending SIGKILL". (The 19:33 restart force-killed a build from before the fix, so that one doesn't count.)
+- [x] **F. Evaluations re-run** (2026-11-24, macOS 27.0.1, M3, with Macximesed's own Full Disk Access): static 17/17 attacks flagged (12 dangerous), 0/11 installers dangerous; runtime 7/7 steps alerted in 31–257 ms, frozen 5–6 ms after the alert, children frozen. CI on the final commit: see below.
+  - [x] The daemon stops on SIGTERM: `daemon.log` shows "Stopped watching.", and launchd sent no SIGKILL (2026-11-23 19:39).
 
 - [x] **Full Disk Access for macx itself: solved** (2026-11-23). The Full Disk Access entry kept the code requirement from when it was first added (ad-hoc), and switching it off and on never refreshed it. tccd logged `Failed to match existing code requirement`. Fix: `sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx`, then add the signed app again.
   - [x] Survives rebuilds: after three reinstalls, `sudo macx daemon restart` still reports *watching* (2026-11-23 19:31).
@@ -36,7 +36,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **Paste inspection**, `macx guard inspect` plus disguise-undoing (2026-11-23): reads what a pasted link serves and runs only the inspected copy.
 - [x] **Fixes from review** (2026-11-23): unknowns never count as safe (new *partly unknown* verdict), combination scoring, SHA-256 checked again before running, pipe scripts fed on stdin, whole-tree suspend.
 - [x] **Static evaluation** (`scripts/eval/static.sh`): 17/17 simulated attacks flagged (12 dangerous), 0/11 real installers marked dangerous.
-- [x] **Runtime evaluation** (2026-11-23, macOS 27.0.1): 7/7 steps alerted in 47–245 ms, freeze 5–9 ms after the alert, children frozen, about 2% CPU. `open` events cost 94% CPU and 706 MB, so they stay off. The eslogger parser works on real output.
+- [x] **Runtime evaluation** (re-run 2026-11-24, macOS 27.0.1): 7/7 steps alerted in 31–257 ms, freeze 5–6 ms after the alert, children frozen, a busy loop got 9,441 steps before it stopped. macx about 0.5% CPU idle and 2.7% during the simulations. eslogger with macx's events: 5.9% CPU under file load; adding `open` costs 88% CPU and 286 MB, so it stays off.
 - [x] **Wider persistence coverage** (2026-11-23): authorization plugins, login hooks, PAM, DYLD injection, periodic, sudoers.d, at, and app, system, kernel and browser extensions.
 - [x] **Incident response**, `macx incident` (2026-11-23): case folders with evidence, hashes, process tree and timeline; containment into the undo store; rotation checklist.
 - [x] **Auto-update** through a signed GitHub Pages channel with a forced security floor (2026-11-23). It goes live with the first release.
