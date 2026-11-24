@@ -17,7 +17,7 @@ struct Macx: ParsableCommand {
         version: macxVersion,
         subcommands: [
             Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Daemon.self, Alerts.self, Net.self,
-            Chamber.self, ESPassthrough.self,
+            Chamber.self, Top.self, BoostCommand.self, ESPassthrough.self,
             Incident.self, Privacy.self,
             Update.self,
             Undo.self,
