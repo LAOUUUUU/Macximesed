@@ -133,6 +133,23 @@ public struct UndoStore: Sendable {
         return old
     }
 
+    /// Permanently deletes every batch, however new: the user's "empty the undo folder".
+    @discardableResult
+    public func empty() throws -> [UndoBatch] {
+        let all = try batches()
+        for batch in all {
+            try FileManager.default.removeItem(at: root.appendingPathComponent(batch.id, isDirectory: true))
+        }
+        return all
+    }
+
+    /// How many batches there are and the disk space they really take.
+    public func usage() -> UndoUsage {
+        let all = (try? batches()) ?? []
+        let bytes = all.reduce(UInt64(0)) { $0 + allocatedSize(of: root.appendingPathComponent($1.id, isDirectory: true)) }
+        return UndoUsage(batches: all.count, bytes: bytes)
+    }
+
     // MARK: - Manifest
 
     private func write(_ batch: UndoBatch, to dir: URL) throws {
@@ -175,4 +192,14 @@ public func allocatedSize(of url: URL) -> UInt64 {
         }
     }
     return total
+}
+
+public struct UndoUsage: Sendable, Equatable {
+    public var batches: Int
+    public var bytes: UInt64
+
+    public init(batches: Int, bytes: UInt64) {
+        self.batches = batches
+        self.bytes = bytes
+    }
 }

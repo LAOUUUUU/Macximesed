@@ -366,6 +366,7 @@ struct CleanView: View {
     @Bindable var model: AppModel
     @State private var lastBatch: UndoBatch?
     @State private var note: String?
+    @State private var held = UndoUsage(batches: 0, bytes: 0)
 
     var total: UInt64 { (model.cleanItems ?? []).filter { model.cleanChosen.contains($0.id) }.reduce(0) { $0 + $1.bytes } }
 
@@ -379,6 +380,10 @@ struct CleanView: View {
             ) {
                 if let lastBatch {
                     Button("Undo last clean") { undo(lastBatch) }.buttonStyle(PlainButtonStyle())
+                }
+                if held.batches > 0 {
+                    Button("Empty undo folder (\(ByteCountFormatter.file(held.bytes)))…") { emptyUndo() }
+                        .buttonStyle(PlainButtonStyle())
                 }
                 if model.cleanItems != nil {
                     Button("Clean \(ByteCountFormatter.file(total))…") { clean() }
@@ -435,6 +440,7 @@ struct CleanView: View {
     }
 
     func scan() {
+        held = UndoStore().usage()
         let running = runningBundleIDs()
         Task.detached(priority: .userInitiated) {
             let all = CleanupCatalog.safe(.current(runningBundleIDs: running)).filter { $0.bytes > 0 }
@@ -466,6 +472,25 @@ struct CleanView: View {
         } catch {
             note = "Couldn't clean: \(error.localizedDescription)"
         }
+    }
+
+    /// The only way the app deletes anything for good: what earlier cleans, removals and quarantines moved aside.
+    func emptyUndo() {
+        let use = UndoStore().usage()
+        guard
+            confirm(
+                "Empty the undo folder?",
+                "\(use.batches) earlier cleans, removed apps and quarantined files (\(ByteCountFormatter.file(use.bytes))) are deleted for good. They can't be put back after this.",
+                action: "Empty")
+        else { return }
+        do {
+            try UndoStore().empty()
+            note = "Freed \(ByteCountFormatter.file(use.bytes)). The undo folder is empty."
+            lastBatch = nil
+        } catch {
+            note = "Couldn't empty the undo folder: \(error.localizedDescription)"
+        }
+        held = UndoStore().usage()
     }
 
     func undo(_ batch: UndoBatch) {

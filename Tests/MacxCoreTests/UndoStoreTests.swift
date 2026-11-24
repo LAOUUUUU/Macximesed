@@ -129,6 +129,30 @@ struct UndoStoreTests {
         #expect(try later.batches().map(\.id) == [new.id])
     }
 
+    @Test func emptyDeletesEveryBatchAndSaysHowMuch() throws {
+        let tmp = try TempDir()
+        try tmp.file("a/one.txt", String(repeating: "1", count: 9000))
+        try tmp.file("a/two.txt", "2")
+        let store = UndoStore(root: tmp.url.appendingPathComponent("undo"))
+        try store.stash([tmp.url.appendingPathComponent("a/one.txt")], reason: "clean")
+        try store.stash([tmp.url.appendingPathComponent("a/two.txt")], reason: "clean")  // made this very second: still emptied
+
+        let before = store.usage()
+        #expect(before.batches == 2)
+        #expect(before.bytes >= 9000)
+        let gone = try store.empty()
+        #expect(gone.count == 2)
+        #expect(try store.batches().isEmpty)
+        #expect(store.usage() == UndoUsage(batches: 0, bytes: 0))
+    }
+
+    @Test func emptyingAnEmptyOrMissingStoreIsFine() throws {
+        let tmp = try TempDir()
+        let store = UndoStore(root: tmp.url.appendingPathComponent("never-made"))
+        #expect(try store.empty().isEmpty)
+        #expect(store.usage() == UndoUsage(batches: 0, bytes: 0))
+    }
+
     @Test func sizeCountsNestedFiles() throws {
         let tmp = try TempDir()
         try tmp.file("d/a.txt", String(repeating: "a", count: 5000))

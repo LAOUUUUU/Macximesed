@@ -89,8 +89,8 @@ struct Clean: ParsableCommand {
 
 struct Undo: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "List, restore or purge what cleanups moved aside.",
-        subcommands: [List.self, Restore.self, Purge.self],
+        abstract: "List, restore, purge or empty what cleanups moved aside.",
+        subcommands: [List.self, Restore.self, Purge.self, Empty.self],
         defaultSubcommand: List.self
     )
 
@@ -128,6 +128,27 @@ struct Undo: ParsableCommand {
                 print("Kept \(r.skipped.count) in the undo folder because something new is already at the original place:")
                 r.skipped.forEach { print("  \($0)") }
             }
+        }
+    }
+
+    struct Empty: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Permanently delete everything in the undo folder, to get the space back.")
+        @Flag(name: [.short, .long], help: "Don't ask first.") var yes = false
+        func run() throws {
+            let store = UndoStore()
+            let use = store.usage()
+            if use.batches == 0 {
+                print("Nothing in the undo folder.")
+                return
+            }
+            print("\(use.batches) batches, \(formatBytes(use.bytes)). After this they can't be put back.")
+            guard yes || askYes("Delete them for good?") else {
+                print("Nothing changed.")
+                return
+            }
+            let gone = try store.empty()
+            print("Deleted \(gone.count) batches and freed \(formatBytes(use.bytes)).")
         }
     }
 

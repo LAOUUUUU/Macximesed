@@ -151,7 +151,8 @@ swift build -c release
 | `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
-| `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. This is the only command that really deletes, and it asks first. | No |
+| `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. It asks first. | No |
+| `macx undo empty [-y]` | **Permanently** deletes everything in the undo folder to get the space back, and says how much it freed. It asks first. In the app: Clean > *Empty undo folder*. Purge and empty are the only things that really delete. | No |
 
 ### No guessing
 Macximesed decides from facts the system reports, so it works the same whatever your folder layout, language or CPU:

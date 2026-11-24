@@ -6,6 +6,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ### Added
 - **Updates in the Mac app:** Settings > Updates now says whether a new version is out (or that yours has a security problem) and has an *Install* button, then *Restart the app*. It runs the app's own `macx update`, so it has the same signature checks, rollback and Full Disk Access guards as the CLI. The hash feed line moved behind the ⓘ.
+- **Empty the undo folder:** `macx undo empty` and Clean > *Empty undo folder (size)…* in the app delete every batch for good, after a confirmation that says how much space comes back. Cleaned files used to stay there until `macx undo purge` (older than 7 days only), and the app had no way to clear them.
 
 ### Fixed
 - The Updates row showed the hash feed line ("1 known samples") instead of whether an update was available.
