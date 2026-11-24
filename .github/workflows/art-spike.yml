@@ -1,0 +1,39 @@
+name: ART spike
+
+# Throwaway: can eslogger run on GitHub's macOS runners? (deleted with the branch)
+on:
+  push:
+    branches: [claude/art-spike]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: Facts
+        run: |
+          sw_vers; uname -m; csrutil status || true; whoami; command -v pwsh && pwsh -v || true
+          sudo -n true && echo "passwordless sudo: yes"
+      - name: eslogger exec + create + tcc_modify + btm_launch_item_add for 15 s
+        run: |
+          set +e
+          sudo /usr/bin/eslogger exec create tcc_modify btm_launch_item_add > es.jsonl 2> es.err &
+          sleep 4
+          /bin/echo hello-from-spike
+          mkdir -p "$HOME/Library/LaunchAgents"
+          printf '<?xml version="1.0"?><plist version="1.0"><dict><key>Label</key><string>dev.spike.t</string><key>ProgramArguments</key><array><string>/usr/bin/true</string></array></dict></plist>' > "$HOME/Library/LaunchAgents/dev.spike.t.plist"
+          launchctl load "$HOME/Library/LaunchAgents/dev.spike.t.plist"
+          sleep 8
+          sudo pkill -TERM -x eslogger
+          sleep 1
+          echo "--- stderr"; cat es.err
+          echo "--- events: $(wc -l < es.jsonl)"
+          grep -c hello-from-spike es.jsonl
+          python3 -c 'import json,collections,sys; c=collections.Counter(json.loads(l)["event_type"] for l in open("es.jsonl")); print(dict(c))'
