@@ -3,6 +3,8 @@
 [![CI](https://github.com/LAOUUUUU/Macximesed/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/LAOUUUUU/Macximesed/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/LAOUUUUU/Macximesed/actions/workflows/codeql.yml/badge.svg?branch=dev)](https://github.com/LAOUUUUU/Macximesed/actions/workflows/codeql.yml)
 [![Latest release](https://img.shields.io/github/v/release/LAOUUUUU/Macximesed)](https://github.com/LAOUUUUU/Macximesed/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/LAOUUUUU/Macximesed/total)](https://github.com/LAOUUUUU/Macximesed/releases)
+[![Views](https://hits.sh/github.com/LAOUUUUU/Macximesed.svg?label=views)](https://hits.sh/github.com/LAOUUUUU/Macximesed/)
 [![License: MIT](https://img.shields.io/github/license/LAOUUUUU/Macximesed)](LICENSE)
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
