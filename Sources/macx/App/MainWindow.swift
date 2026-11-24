@@ -328,8 +328,8 @@ struct SettingsView: View {
     @Bindable var model: AppModel
     @State private var loginItem = SMAppService.mainApp.status == .enabled
     @State private var update = UpdateState.load()
-    @State private var checking = false
-    @State private var updateNote: String?
+    @State private var busy: UpdateBusy?
+    @State private var report: UpdateReport?
 
     var allSet: Bool { model.fullDiskAccess && model.installed && model.state.glyph != .off }
 
@@ -389,15 +389,20 @@ struct SettingsView: View {
                     Hairline()
                     section("Updates") {
                         HStack(spacing: 4) {
-                            Text(updateNote ?? "Version \(macxVersion).").font(Fonts.sans(14))
-                            InfoButton(
-                                text: (update.lastCheck.map {
-                                    "Checked \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())) on the signed channel. "
-                                } ?? "")
-                                    + "Every update is checked against the Ed25519 key built into the app before it installs.")
+                            Text(updateSentence).font(Fonts.sans(14))
+                                .foregroundStyle(isUrgent ? Ink.signal : Ink.text)
+                            InfoButton(text: updateInfo)
                             Spacer()
-                            Button(checking ? "Checking…" : "Check now") { checkUpdates() }
-                                .buttonStyle(PlainButtonStyle()).disabled(checking)
+                            switch report?.status {
+                            case .available(let v), .urgent(let v, _):
+                                Button(busy == .installing ? "Installing…" : "Install \(v)") { runUpdate(install: true) }
+                                    .buttonStyle(PlainButtonStyle()).disabled(busy != nil)
+                            case .installed:
+                                Button("Restart the app") { relaunch() }.buttonStyle(PlainButtonStyle())
+                            default:
+                                Button(busy == .checking ? "Checking…" : "Check now") { runUpdate(install: false) }
+                                    .buttonStyle(PlainButtonStyle()).disabled(busy != nil)
+                            }
                         }
                     }
                     Hairline()
@@ -451,28 +456,72 @@ struct SettingsView: View {
         loginItem = SMAppService.mainApp.status == .enabled
     }
 
-    func checkUpdates() {
-        checking = true
+    enum UpdateBusy { case checking, installing }
+
+    var isUrgent: Bool {
+        if case .urgent = report?.status { return true }
+        return false
+    }
+
+    var updateSentence: String {
+        switch report?.status {
+        case nil: "Version \(macxVersion)."
+        case .upToDate: "Version \(macxVersion), up to date."
+        case .available(let v): "Version \(v) is out. You have \(macxVersion)."
+        case .urgent(let v, _): "Version \(macxVersion) has a security problem. Install \(v)."
+        case .installed(let v): "Updated to \(v). Restart the app to use it."
+        case .failed(let why): why
+        }
+    }
+
+    var updateInfo: String {
+        var parts: [String] = []
+        if case .urgent(_, let reason) = report?.status { parts.append("The problem: \(reason)") }
+        if let last = update.lastCheck {
+            parts.append("Checked \(RelativeDateTimeFormatter().localizedString(for: last, relativeTo: Date())) on the signed channel.")
+        }
+        if let feed = report?.feed { parts.append(feed) }
+        parts += report?.warnings ?? []
+        parts.append(
+            "Every update is checked against the Ed25519 key built into the app before it installs. "
+                + "The old version is kept, Full Disk Access stays on, and the background watch restarts on the new version by itself.")
+        return parts.joined(separator: " ")
+    }
+
+    /// Runs the app's own `macx update` (one code path with the CLI); with `install` it downloads and installs.
+    func runUpdate(install: Bool) {
+        busy = install ? .installing : .checking
         let exe = AppModel.executable
         Task.detached {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: exe)
-            p.arguments = ["update", "--check"]
+            p.arguments = install ? ["update"] : ["update", "--check"]
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe
             p.standardInput = FileHandle.nullDevice
             var out = ""
+            var code: Int32 = 1
             if (try? p.run()) != nil {
                 out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 p.waitUntilExit()
+                code = p.terminationStatus
             }
-            let first = out.split(separator: "\n").first.map(String.init) ?? "Couldn't check."
+            let result = UpdateReport.parse(out, exitCode: code)
             await MainActor.run {
-                checking = false
-                updateNote = first
+                busy = nil
+                report = result
                 update = UpdateState.load()
             }
         }
+    }
+
+    /// The new binary is already in the bundle; open the app again once this copy has quit.
+    func relaunch() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundleURL.path]
+        try? p.run()
+        NSApp.terminate(nil)
     }
 }

@@ -95,7 +95,7 @@ struct Update: ParsableCommand {
         try? state.save()
         let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: Date())
         decision.warnings.forEach { print($0) }
-        if let feed = try? HashFeed.refresh(from: channel) { print("Malware hash feed: \(feed.count) known samples (checked offline).") }
+        if let feed = try? HashFeed.refresh(from: channel) { print(HashFeedLine.text(count: feed.count)) }
 
         switch decision.action {
         case .none:

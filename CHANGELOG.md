@@ -4,6 +4,12 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Added
+- **Updates in the Mac app:** Settings > Updates now says whether a new version is out (or that yours has a security problem) and has an *Install* button, then *Restart the app*. It runs the app's own `macx update`, so it has the same signature checks, rollback and Full Disk Access guards as the CLI. The hash feed line moved behind the ⓘ.
+
+### Fixed
+- The Updates row showed the hash feed line ("1 known samples") instead of whether an update was available.
+
 ## [0.3.0] - 2026-11-24
 
 ### Added
