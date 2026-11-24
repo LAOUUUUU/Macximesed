@@ -73,6 +73,7 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Open questions
+- The `privacy-granted` alert (eslogger `tcc_modify`) has never been seen live. A 5-minute eslogger capture while Lao switched Screen Recording on and off got 0 events, and the background watch flagged nothing (2026-11-24, macOS 27.0.1). Either the toggle fell outside the capture or macOS doesn't send `tcc_modify` for Settings toggles. The `profile-added` alert was seen live (20:56 UTC). Trap: `sudo sh -c 'eslogger … & sleep N; kill -INT $p'` never stops eslogger (background jobs in sh ignore SIGINT); use plain `kill`.
 - Metal HUD via `open --env MTL_HUD_ENABLED=1` is untested on macOS 27, and doesn't reach games started by Steam or CrossOver.
 - `~/Library/Preferences/NSGlobalDomain.plist` (empty) was left by the global-domain bug on Lao's Mac (2026-11-24 00:31). It's harmless; remove it if Lao says so.
 - `macx persist` labels a program signed with the local self-signed certificate as "ad-hoc (no identity)". It should say self-signed.
