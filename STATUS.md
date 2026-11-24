@@ -44,6 +44,8 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [x] **11. Root daemon + menu bar app** (daemon 2026-11-23; app and menu bar 2026-11-24, design in [research/app-ui/RESEARCH.md](research/app-ui/RESEARCH.md)). Left:
   - [ ] Lao: reinstall (`scripts/install.sh`), then `sudo macx daemon restart` so the daemon runs the build that honours pause.
   - [ ] Check the menu bar glyph and panel on the real menu bar, in light and dark.
+  - [x] First-run setup and app notifications (2026-11-24, [research/app-onboarding/RESEARCH.md](research/app-onboarding/RESEARCH.md)).
+  - [ ] Check whether the daemon's osascript notifications show under Script Editor in System Settings > Notifications (the reason for app notifications; not confirmed).
   - [ ] Icon for the app bundle (it has none yet).
   - [ ] "Open at login" with SMAppService on an LSUIElement app: test after a reboot.
 - [ ] **12. Extreme**: deleting sealed-volume apps after the user turns SIP and authenticated-root off in Recovery. Off by default.

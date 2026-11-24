@@ -1,6 +1,7 @@
 import AppKit
 import MacxCore
 import SwiftUI
+import UserNotifications
 
 /// The Mac app: a menu bar item that is always there, and a window opened from it (or from Finder).
 @MainActor
@@ -17,15 +18,22 @@ enum MacxApp {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
     let model = AppModel()
     var window: NSWindow?
+    var setupWindow: NSWindow?
     var status: StatusController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         status = StatusController(model: model, openWindow: { [weak self] section in self?.showWindow(section) })
         let env = ProcessInfo.processInfo.environment
-        if env["MACX_APP_HIDDEN"] != "1" { showWindow(nil) }
+        UNUserNotificationCenter.current().delegate = self
+        model.runSetup = { [weak self] in self?.showSetup() }
+        if env["MACX_APP_SETUP"] == "1" || FirstRun.shouldShowSetup(finished: UserDefaults.standard.string(forKey: FirstRun.defaultsKey)) {
+            showSetup()
+        } else if env["MACX_APP_HIDDEN"] != "1" {
+            showWindow(nil)
+        }
         // For screenshots and checks: `open --env MACX_APP_PANEL=1 Macximesed.app` opens the menu bar panel too.
         if env["MACX_APP_PANEL"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.status?.showPanel() }
@@ -63,7 +71,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate()
     }
 
+    func showSetup() {
+        if setupWindow == nil {
+            let w = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 760, height: 560), styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered, defer: false)
+            w.titleVisibility = .hidden
+            w.titlebarAppearsTransparent = true
+            w.isMovableByWindowBackground = true
+            w.title = "Set up Macximesed"
+            w.backgroundColor = NSColor(Ink.paper)
+            w.contentView = NSHostingView(rootView: SetupView(model: model) { [weak self] in self?.finishSetup() })
+            w.isReleasedWhenClosed = false
+            w.delegate = self
+            w.center()
+            setupWindow = w
+        }
+        NSApp.setActivationPolicy(.regular)
+        setupWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    /// Finished or skipped: it doesn't open by itself again (Settings has "Run setup again").
+    func finishSetup() {
+        UserDefaults.standard.set(macxVersion, forKey: FirstRun.defaultsKey)
+        let w = setupWindow
+        setupWindow = nil
+        w?.close()
+        showWindow(.protection)
+    }
+
+    // Alerts the app posts show even while it's in front; clicking one opens Protection.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions { [.banner, .sound, .list] }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        await MainActor.run { showWindow(.protection) }
+    }
+
     func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === setupWindow {
+            // Closed with the red button: counts as skipped.
+            UserDefaults.standard.set(macxVersion, forKey: FirstRun.defaultsKey)
+            setupWindow = nil
+            if window?.isVisible != true { showWindow(nil) }
+            return
+        }
         NSApp.setActivationPolicy(.accessory)
     }
 

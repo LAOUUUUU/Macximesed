@@ -172,6 +172,11 @@ struct Daemon: ParsableCommand {
                 if info.status != 0 { print("  Start it: sudo macx daemon restart") }
             }
             if let until = WatchPause.activeUntil() { print("  Paused until \(WatchState.clock(until)) (sudo macx daemon resume)") }
+            if let user = WatchUser.resolve() ?? WatchUser.lookup(NSUserName()) {
+                print(
+                    "  Notifications: \(AppPresence.isAppRunning(userUID: user.uid) ? "shown by the Macximesed app (open)" : "shown through osascript (the app isn't open)")"
+                )
+            }
             print("  Log: \(DaemonPlan.logPath.path)    Alerts: macx alerts")
         }
     }

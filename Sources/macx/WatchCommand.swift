@@ -271,6 +271,8 @@ final class ScreenNotifier: @unchecked Sendable {
 
     func send(_ a: WatchAlert) {
         guard let user, effects.notify else { return }
+        // While the Mac app is open it shows alerts itself, under its own notification permission.
+        guard !AppPresence.isAppRunning(userUID: user.uid) else { return }
         let message = lock.withLock { throttle.offer(a.title) }
         if let message { AlertNotifier.notify(user: user, title: "Macximesed: \(a.severity.label)", message: message) }
     }

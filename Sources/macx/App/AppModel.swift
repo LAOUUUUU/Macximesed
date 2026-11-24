@@ -1,6 +1,7 @@
 import AppKit
 import MacxCore
 import Observation
+import UserNotifications
 
 /// What the window and the menu bar show, read from the real daemon: launchd's answer, the daemon's status file,
 /// the root-owned pause file and the alert log. Nothing here needs root; changes go through `runAdmin`.
@@ -28,6 +29,16 @@ final class AppModel {
     var lastSeenCritical: Date
     var adminError: String?
     var busy = false
+    var notifications: SetupFacts.Notifications = .notAsked
+    var chamber: ChamberJob = .unknown
+
+    enum ChamberJob: Equatable {
+        case unknown, notSetUp, settingUp, ready
+        case failed(String)
+    }
+
+    @ObservationIgnored var runSetup: (() -> Void)?
+    @ObservationIgnored private var notifier = AppNotifications(started: Date())
 
     // Scan results, kept while the app runs so going back to a screen doesn't scan again ("Scan again" does).
     var startupItems: [PersistenceItem]?
@@ -61,6 +72,8 @@ final class AppModel {
         lastSeenCritical = Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: "lastSeenCritical"))
         records = tail.readNew().suffix(20_000).map { $0 }
         refresh()
+        readNotificationStatus()
+        readChamber()
         let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
         RunLoop.main.add(t, forMode: .common)
         timer = t
@@ -70,6 +83,7 @@ final class AppModel {
     func refresh() {
         let new = tail.readNew()
         if !new.isEmpty { records = Array((records + new).suffix(20_000)) }
+        if !new.isEmpty, notifications == .allowed { post(notifier.offer(new)) }
         Task.detached(priority: .utility) {
             let snapshot = DaemonSnapshot.take()
             await MainActor.run { self.apply(snapshot) }
@@ -111,6 +125,78 @@ final class AppModel {
 
     func markExpected(_ g: AlertGroup) {
         try? expected.add(g)
+    }
+
+    // MARK: Notifications (shown by the app while it's open; the daemon uses osascript only when it isn't)
+
+    func readNotificationStatus() {
+        Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            notifications = Self.map(settings.authorizationStatus)
+        }
+    }
+
+    func requestNotifications() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+            notifications = Self.map(await center.notificationSettings().authorizationStatus)
+            if notifications == .denied {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
+            }
+        }
+    }
+
+    static func map(_ s: UNAuthorizationStatus) -> SetupFacts.Notifications {
+        switch s {
+        case .authorized, .provisional: .allowed
+        case .denied: .denied
+        default: .notAsked
+        }
+    }
+
+    private func post(_ notes: [AppNotifications.Note]) {
+        for n in notes {
+            let content = UNMutableNotificationContent()
+            content.title = n.title
+            content.body = n.body
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        }
+    }
+
+    // MARK: Extras
+
+    func readChamber() {
+        Task.detached(priority: .utility) {
+            let ready = (try? ChamberManifest.bundled()).map { ChamberStore().isInstalled(for: $0) } ?? false
+            await MainActor.run { if self.chamber == .unknown || self.chamber == .notSetUp { self.chamber = ready ? .ready : .notSetUp } }
+        }
+    }
+
+    /// `macx chamber setup --yes` as you (no root): about 50 MB from Alpine Linux, every file checked.
+    func setUpChamber() {
+        chamber = .settingUp
+        let exe = Self.executable
+        Task.detached(priority: .utility) {
+            let (status, out) = Self.runOwn(exe, ["chamber", "setup", "--yes"])
+            let last = out.split(separator: "\n").last.map(String.init) ?? ""
+            await MainActor.run { self.chamber = status == 0 ? .ready : .failed(last) }
+        }
+    }
+
+    nonisolated static func runOwn(_ exe: String, _ args: [String]) -> (Int32, String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: exe)
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        p.standardInput = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return (-1, "Couldn't start macx.") }
+        let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        p.waitUntilExit()
+        return (p.terminationStatus, out)
     }
 
     // MARK: Root actions (each asks for the administrator password)

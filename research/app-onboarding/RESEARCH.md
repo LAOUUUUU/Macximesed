@@ -1,6 +1,6 @@
 # Research: first-run welcome and setup
 **Date:** 2026-11-24
-**Status:** Waiting for Lao's approval (mockup linked at the end)
+**Status:** Approved by Lao 2026-11-24 and built
 **Researcher:** Claude Code
 
 ## Question

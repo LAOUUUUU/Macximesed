@@ -41,6 +41,14 @@ Open **Macximesed** from your Applications folder (or run `macx app`). It's the 
   - **Clean:** the Safe tier, with undo.
   - **Apps:** remove an app and its leftovers, with undo.
   - **Settings:** Full Disk Access, install or uninstall the watch, freeze on critical, updates, and open at login.
+- **First-run setup:** the first time you open the app, a short setup walks through four things, each checked live:
+  1. Full Disk Access;
+  2. installing the background watch;
+  3. notifications;
+  4. extras: open at login, the detonation chamber download (about 50 MB, off unless you choose it) and an update check.
+
+  Every step can be skipped. Settings > *Run setup again* brings it back.
+- **Notifications:** while the app is open, it shows alert notifications itself, under its own permission in System Settings > Notifications. When the app isn't open, the background watch shows them through `osascript` as before. It decides by looking for the app's process, not a file. `macx daemon status` says which one is showing them.
 - **Explanations sit behind the ⓘ buttons.**
 - **Pause, install, restart and uninstall ask for your administrator password**, because they run `sudo macx daemon …` underneath.
 - **"Expected"** hides a program's non-critical alerts in the app only. The watch still logs them and still notifies you. Critical alerts can't be hidden.

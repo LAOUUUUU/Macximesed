@@ -407,6 +407,12 @@ struct SettingsView: View {
                             Spacer()
                             TwoState(label: "Open at login", isOn: loginItem) { on in setLogin(on) }
                         }
+                        HStack {
+                            Text("The first-run setup")
+                            Spacer()
+                            Button("Run setup again") { model.runSetup?() }.buttonStyle(PlainButtonStyle())
+                        }
+                        .padding(.top, 14)
                     }
                 }
                 .padding(.horizontal, 48)

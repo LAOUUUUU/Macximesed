@@ -5,6 +5,20 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Added
+- **First-run setup** in the Mac app (research and design in `research/app-onboarding/RESEARCH.md`, approved 2026-11-24):
+  - **Screens:** welcome; then Full Disk Access, the background watch, notifications and extras; then a Ready summary.
+  - **Live checks:** every step checks every second, and Continue appears once the check passes. If eslogger is refused, the watch step sends you back to Full Disk Access.
+  - **Full Disk Access:** the app itself can be dragged into the list.
+  - **Password note:** before the prompt, the setup says that the "couldn't verify this script" line comes from macOS.
+  - **Motion:**
+    - the menu bar mark draws itself;
+    - steps slide in;
+    - the live checks breathe while waiting and fill when they pass;
+    - a progress line runs along the bottom.
+
+    With Reduce Motion it's plain fades.
+  - **Every step can be skipped**, and Settings has *Run setup again*.
+- **The app shows alert notifications itself while it's open** (`AppNotifications`, the same 10-second throttle, high and critical only), with its own permission. The background watch skips its `osascript` notification while the app runs. It checks the app's process (its path, `KERN_PROCARGS2` arguments and user id), not a file, so a stealer can't silence the fallback. `macx daemon status` shows which one is showing alerts.
 - **Updates can't cost Full Disk Access:** they never install as root, are held back if the signing identity is missing, and roll back if the app's designated requirement changed after re-signing (checked with the real codesign on a copy of the installed app). The background watch restarts itself on the new binary after an update (exit 75; launchd relaunches it), so no sudo restart is needed.
 - **`macx top`** (step 7): live throttle view with thermal state and pressure, a heat and load strip, and the busiest processes by real CPU time (libproc `proc_pid_rusage`).
 - **`macx boost`** (step 7): on, off, status, measure. Background priority for your busiest other apps (`setpriority PRIO_DARWIN_BG`, the call `taskpolicy -b` makes), App Nap off for the focus app, Reduce Transparency and Reduce Motion, caffeinate. A crash-safe ledger saves each change before it's made. Apple's and other users' processes are never touched. `measure` compares a CPU benchmark with and without Boost; on the first real run it found no difference (−1.8%, within noise), because nothing was competing hard.
