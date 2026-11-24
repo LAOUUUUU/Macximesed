@@ -1,5 +1,13 @@
 # Macximesed
 
+[![CI](https://github.com/LAOUUUUU/Macximesed/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/LAOUUUUU/Macximesed/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/LAOUUUUU/Macximesed/actions/workflows/codeql.yml/badge.svg?branch=dev)](https://github.com/LAOUUUUU/Macximesed/actions/workflows/codeql.yml)
+[![Latest release](https://img.shields.io/github/v/release/LAOUUUUU/Macximesed)](https://github.com/LAOUUUUU/Macximesed/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/LAOUUUUU/Macximesed)](LICENSE)
+![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/gKthUMyZgH)
+
 Squeeze more speed out of macOS and catch stealer-style malware (like AMOS, the Atomic macOS Stealer) that XProtect misses.
 
 > **Early work in progress.** `macx scan`, `macx clean` (Safe tier), `macx apps`, the antivirus side (`macx check`, `macx persist`, `macx guard`, `macx watch`) is done. Cleanup so far is `macx scan`, `macx clean` (Safe tier) and `macx apps`, plus `macx privacy` and `macx undo`. See [STATUS.md](STATUS.md) for what's being built and [CHANGELOG.md](CHANGELOG.md) for what's done.
@@ -232,6 +240,8 @@ tar -xzf macx-*-macos-universal.tar.gz && xattr -d com.apple.quarantine macx && 
 Pull requests go to `dev`. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers setup, the test-first workflow, and the rules the code keeps (no guessing, nothing deleted without an undo, no privacy popups). Report security problems privately as described in [SECURITY.md](SECURITY.md). Everyone is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
 
 If `macx persist` flags something harmless or misses something, open a **Detection report** issue.
+
+Questions, ideas or just want to follow along? Join the [Discord](https://discord.gg/gKthUMyZgH).
 
 ## License
 [MIT](LICENSE)
