@@ -57,8 +57,26 @@ jobs:
           cat >> notes.md <<'EOF'
 
           ---
-          The binary is unsigned. After downloading, check the `.sha256` file, then run it from Terminal:
-          `tar -xzf macx-*.tar.gz && xattr -d com.apple.quarantine macx && ./macx --help`.
+
+          # Macximesed is free, so it isn't signed by Apple
+
+          Apple charges developers $99 a year to sign and notarize apps. Macximesed doesn't pay that, so the first time you open it, macOS stops it with a message like *"Apple could not verify ... is free of malware"*. That's expected. Here's how to open it anyway.
+
+          ### .pkg installer or .dmg
+          1. Double-click the `.pkg`, or for the `.dmg`, drag Macximesed into Applications and double-click it there. macOS blocks it. Click **Done** (not *Move to Bin*).
+          2. Open **System Settings > Privacy & Security** and scroll down to **Security**.
+          3. Next to *"... was blocked to protect your Mac"*, click **Open Anyway**, then enter your password.
+          4. Open the file again and click **Open**.
+
+          Right-clicking and choosing *Open* no longer gets past this on current macOS. Use **Open Anyway**.
+
+          ### .tar.gz (command line only)
+          Check the `.sha256` file, then run this in Terminal:
+          ```
+          tar -xzf macx-*.tar.gz && xattr -d com.apple.quarantine macx && ./macx --help
+          ```
+
+          You only need to do this once per download.
           EOF
       - name: Publish GitHub release
         env:
