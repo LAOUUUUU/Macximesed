@@ -20,8 +20,9 @@ enum UpdateCheck {
         state.lastCheck = now  // even on failure: don't retry on every command
         defer { try? state.save() }
 
-        guard let channel = try? UpdateClient.fetchChannel(timeout: 4) else { return }
-        _ = try? HashFeed.refresh(from: channel)
+        guard let signed = try? UpdateClient.fetchSignedChannel(timeout: 4) else { return }
+        let channel = signed.channel
+        _ = try? HashFeed.refresh(from: signed)
         let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: now)
         state.lastSequence = max(state.lastSequence, channel.sequence)
         // Only the rollback warning here; "out of date" is shown by `macx update`, not before every command.
@@ -86,16 +87,17 @@ struct Update: ParsableCommand {
             return
         }
 
-        let channel: UpdateChannel
-        do { channel = try UpdateClient.fetchChannel(timeout: 15) } catch {
+        let signed: SignedChannel
+        do { signed = try UpdateClient.fetchSignedChannel(timeout: 15) } catch {
             throw UserError("Couldn't get the update channel: \(error)")
         }
+        let channel = signed.channel
         state.lastCheck = Date()
         state.lastSequence = max(state.lastSequence, channel.sequence)
         try? state.save()
         let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: Date())
         decision.warnings.forEach { print($0) }
-        if let feed = try? HashFeed.refresh(from: channel) { print(HashFeedLine.text(count: feed.count)) }
+        if let feed = try? HashFeed.refresh(from: signed) { print(HashFeedLine.text(count: feed.count)) }
 
         switch decision.action {
         case .none:

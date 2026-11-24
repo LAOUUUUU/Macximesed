@@ -126,6 +126,13 @@ public struct ChannelVerifier: Sendable {
     }
 }
 
+/// A channel file that passed verification, with the bytes that were signed.
+public struct SignedChannel: Sendable {
+    public var channel: UpdateChannel
+    public var json: Data
+    public var signature: Data
+}
+
 // MARK: - State and decisions
 
 public struct UpdateState: Codable, Sendable, Equatable {
@@ -354,9 +361,16 @@ public enum UpdateClient {
 
     /// Fetches the channel file and its signature, and verifies it. Short timeout: this runs before commands.
     public static func fetchChannel(timeout: TimeInterval = 5, verifier: ChannelVerifier = ChannelVerifier()) throws -> UpdateChannel {
+        try fetchSignedChannel(timeout: timeout, verifier: verifier).channel
+    }
+
+    /// The verified channel with the exact bytes and signature, so they can be saved and checked again later.
+    public static func fetchSignedChannel(timeout: TimeInterval = 5, verifier: ChannelVerifier = ChannelVerifier()) throws
+        -> SignedChannel
+    {
         let json = try get(channelURL, timeout: timeout)
         let sig = try get(channelURL.appendingPathExtension("sig"), timeout: timeout)
-        return try verifier.verify(json: json, signature: sig)
+        return SignedChannel(channel: try verifier.verify(json: json, signature: sig), json: json, signature: sig)
     }
 
     public static func get(_ url: URL, timeout: TimeInterval) throws -> Data {

@@ -49,8 +49,10 @@ struct Watch: ParsableCommand {
         }
         let user = Self.invokingUser()
         // The hash feed cached in the real user's home (not root's, under sudo).
-        let feed = HashFeed.loadCached(from: user.home.appendingPathComponent("Library/Application Support/Macximesed/hashfeed.json"))
-        let rules = WatchRules(home: user.home, feed: feed)
+        // Only a feed the saved signed channel vouches for: the folder is the user's, and this may run as root. It's
+        // looked at again every minute, so a newer feed is used without restarting the watch.
+        let feedSource = HashFeedSource(file: user.home.appendingPathComponent("Library/Application Support/Macximesed/hashfeed.json"))
+        let rules = WatchRules(home: user.home, feedSource: feedSource)
         let log = AlertLog(
             home: user.home, uid: user.uid, gid: user.gid,
             file: self.log.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) })
@@ -129,7 +131,7 @@ struct Watch: ParsableCommand {
         let notify: @Sendable (WatchAlert) -> Void = { screen.send($0) }
         let downloadsDir = user.home.appendingPathComponent("Downloads").path
         let downloads = DownloadChecker(
-            home: user.home, owner: (user.uid, user.gid), feed: feed, minimum: minimum, log: log, notify: notify)
+            home: user.home, owner: (user.uid, user.gid), feed: feedSource, minimum: minimum, log: log, notify: notify)
         if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
@@ -307,13 +309,13 @@ final class DownloadChecker: @unchecked Sendable {
     let queue = DispatchQueue(label: "macx.downloads", qos: .utility)
     let home: URL
     let owner: (uid: uid_t, gid: gid_t)
-    let feed: HashFeed?
+    let feed: HashFeedSource
     let minimum: Severity
     let log: AlertLog
     let notify: @Sendable (WatchAlert) -> Void
 
     init(
-        home: URL, owner: (uid: uid_t, gid: gid_t), feed: HashFeed?, minimum: Severity, log: AlertLog,
+        home: URL, owner: (uid: uid_t, gid: gid_t), feed: HashFeedSource, minimum: Severity, log: AlertLog,
         notify: @escaping @Sendable (WatchAlert) -> Void
     ) {
         self.home = home
@@ -328,7 +330,7 @@ final class DownloadChecker: @unchecked Sendable {
         queue.async { [self] in
             DownloadWatch.waitUntilSettled(file)
             guard FileManager.default.fileExists(atPath: file.path) else { return }
-            let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: feed)
+            let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: feed.current)
             guard let report = try? checker.check(file) else { return }
             if let sha = report.sha256, DownloadWatch.isAllowed(sha, home: home) { return }
             var alert = DownloadWatch.alert(for: report)

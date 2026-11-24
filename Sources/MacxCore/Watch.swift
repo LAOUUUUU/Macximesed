@@ -126,17 +126,21 @@ public struct WatchAlert: Sendable, Equatable {
 public struct WatchRules: Sendable {
     public var home: URL
     public var signatures: SignatureChecking
-    /// Known-malware hashes. Non-Apple programs are hashed as they start (cached by path and change time).
-    public var feed: HashFeed?
+    /// Known-malware hashes. Non-Apple programs are hashed as they start (cached by path and change time). The
+    /// background watch passes a source that picks up a newer signed feed without a restart.
+    public var feedSource: HashFeedSource
+    public var feed: HashFeed? { feedSource.current }
     let hashes = ExecHashCache()
 
     /// eslogger events the rules use. `open` is left out: it's far too noisy to watch live.
     public static let events = ["exec", "create", "rename", "deleteextattr", "btm_launch_item_add"]
 
-    public init(home: URL, signatures: SignatureChecking = GuardedSignatureChecker(), feed: HashFeed? = nil) {
+    public init(
+        home: URL, signatures: SignatureChecking = GuardedSignatureChecker(), feed: HashFeed? = nil, feedSource: HashFeedSource? = nil
+    ) {
         self.home = home
         self.signatures = signatures
-        self.feed = feed
+        self.feedSource = feedSource ?? HashFeedSource(fixed: feed)
     }
 
     public func evaluate(_ e: ESEvent) -> [WatchAlert] {
