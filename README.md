@@ -126,6 +126,28 @@ Add `-v` (or `-vv` for even more) to any command to see what it's doing, for exa
 - **Copies:** warnings and errors also go to the system log (subsystem `dev.macximesed.macx`), so `log show` and a sysdiagnose include them.
 - `/Library/Logs/Macximesed/daemon.log` still holds the background watch's printed output, the place to look if it ever crashes on start.
 
+### Bug and crash reports
+`macx report` (or *Report a problem…* in the app's Settings) builds a bug report on your Mac, shows you all of it, and only sends it if you say yes. `-m "what happened"` adds your own words, `--save FILE` and `--copy` work without the internet.
+
+What's in it:
+- **This Mac:** macx and macOS versions, the chip, how macx is installed, whether the watch and Full Disk Access are on.
+- **macx's crashes** from the last week, cut down to the crash itself: the exception, macx's part of the crashed thread, the macOS build. The per-Mac crash ID, process IDs and paths are left out. The background watch runs as root and has no screen to ask on, so it never sends anything: it leaves its crash summaries in `/Library/Logs/Macximesed/crashes` for the app and `macx report` to offer.
+- **The last 20 alerts:** time, severity and rule only. No paths, commands or details.
+- **The end of macx's own logs** (see *Logs*).
+
+What's taken out first, and counted at the top of the report:
+- your home folder (written as `~`), account name, full name and computer name;
+- file names in your folders (`~/Documents/….pdf`; `--file-names` keeps them);
+- app names (`/Applications/<app>.app`; `--program-names` keeps them);
+- IP and MAC addresses, emails and file hashes.
+
+Sending:
+- **Encrypted on your Mac** to the maintainer's key (HPKE: X25519, ChaCha20-Poly1305). A small relay ([scripts/report-relay](scripts/report-relay)) passes the unreadable file to a private channel and answers with a random report ID, which macx shows you. Mention it in a GitHub issue if you'd like a reply or want the report deleted.
+- **Anonymous as far as possible:** no name, email, install ID or Mac ID goes with a report. The relay keeps no IP addresses, but like any website it sees yours while the report arrives. What you write in the description is yours to keep anonymous.
+- **Reports are kept 90 days.**
+- **After a crash** the app asks once, showing the report. `macx report --ask-after-crash off` (or the switch in Settings) stops that; `macx report` still works any time.
+- **Sending is off until the relay is set up**: until then `macx report` and the app offer Save and Copy, and a link to open a GitHub issue yourself (public).
+
 ## Build from source
 ```bash
 swift build -c release
@@ -166,6 +188,7 @@ swift build -c release
 | `macx alerts [-n 20] [--min-severity low] [--follow]` | Shows saved alerts from the live and background watch. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
 | `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |
+| `macx report [-m TEXT] [--save FILE] [--copy] [--file-names] [--program-names]` | **Bug report:** builds a report from macx's logs, crashes and alerts with personal details taken out, shows all of it, then saves, copies or (when set up) sends it encrypted, only after you say yes. `--ask-after-crash on\|off`. See *Bug and crash reports*. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
 | `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. It asks first. | No |

@@ -98,7 +98,7 @@ public enum LogLine {
         time: Date, level: LogLevel, role: LogRole, pid: Int32, category: String, message: String, homes: [String]
     ) -> String {
         var m = message
-        for home in homes where home.count > 1 { m = tilde(m, home: home) }
+        for home in homes.filter({ $0.count > 1 }).sorted(by: { $0.count > $1.count }) { m = tilde(m, home: home) }
         // An entry can't make another one: newlines are written as \n.
         m = m.replacingOccurrences(of: "\r", with: "\\r").replacingOccurrences(of: "\n", with: "\\n")
         return "\(time.formatted(.iso8601)) \(level.name.uppercased()) \(role.rawValue)[\(pid)] \(category): \(m)\n"
@@ -106,7 +106,7 @@ public enum LogLine {
 
     /// `/Users/v/x` becomes `~/x`, but `/Users/vv` stays as it is.
     static func tilde(_ text: String, home: String) -> String {
-        let pattern = NSRegularExpression.escapedPattern(for: home) + #"(?=[/\s"'),;:\]]|$)"#
+        let pattern = #"(?<![\w.~/-])"# + NSRegularExpression.escapedPattern(for: home) + #"(?=[/\s"'),;:\]]|$)"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return text }
         return re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "~")
     }

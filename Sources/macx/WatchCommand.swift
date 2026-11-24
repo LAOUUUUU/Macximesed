@@ -125,7 +125,16 @@ struct Watch: ParsableCommand {
         let downloadsDir = user.home.appendingPathComponent("Downloads").path
         let downloads = DownloadChecker(
             home: user.home, owner: (user.uid, user.gid), feed: feed, minimum: minimum, log: log, notify: notify)
-        if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
+        if background {
+            try? DaemonStatus(state: .starting, message: "Starting eslogger.").write()
+            // macx crashes as root land in the computer's crash folder, which only admins can read. Leave short,
+            // redacted summaries where the app and `macx report` can offer them; nothing is sent from here.
+            let crashes = CrashReports.summaries(in: CrashReports.systemFolder, since: Date().addingTimeInterval(-7 * 86_400))
+            if !crashes.isEmpty {
+                Log.info("watch", "found \(crashes.count) macx crash report(s) from the last week")
+                try? CrashQueue().add(crashes, role: "background watch (or macx run with sudo)")
+            }
+        }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
         print("Alerts are also saved to \(log.file.path)\n")

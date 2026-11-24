@@ -40,8 +40,9 @@ enum Entry {
     /// Home folders are written as `~`: our own, and under sudo or in the daemon, the user macx works for.
     static func startLog(_ role: LogRole, _ settings: LogSettings) {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let homes = [WatchUser.resolve()?.home.path, home.path].compactMap { $0 }
-        Log.start(role: role, settings: settings, home: home, homes: homes)
+        let user = WatchUser.resolve()?.home
+        let homes = Set([user, home].compactMap { $0 }.flatMap { [$0.path, $0.resolvingSymlinksInPath().path] })
+        Log.start(role: role, settings: settings, home: home, homes: Array(homes))
     }
 }
 
@@ -57,7 +58,7 @@ struct Macx: ParsableCommand {
         subcommands: [
             Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Daemon.self, Alerts.self, Net.self,
             Chamber.self, Top.self, BoostCommand.self, TuneCommand.self, GamesCommand.self, ESPassthrough.self,
-            Incident.self, Privacy.self,
+            Incident.self, Privacy.self, Report.self, ReportKeygen.self, ReportOpen.self,
             Update.self,
             Undo.self,
         ]
