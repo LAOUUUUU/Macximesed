@@ -23,7 +23,8 @@ public enum StraceLog {
             ESProcessInfo(path: exe[pid] ?? "", pid: pid, ppid: parent[pid], isPlatform: false, teamID: nil, signingID: nil)
         }
 
-        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
+        // Any line ending: the VM console writes "\r\n", which Swift sees as a single Character.
+        for raw in text.split(whereSeparator: \.isNewline) {
             guard raw.utf8.count <= maxLineBytes, let (pid, time, rest0) = header(raw) else {
                 skipped += 1
                 continue

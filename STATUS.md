@@ -23,7 +23,13 @@ Run a suspicious file in a throwaway macOS VM with no network, judge it on the r
 - [x] VM-check rule (`vm-check`) in guard, check, persist and watch: catches AMOS's own check.
 - [x] Spike: the self-signed app can use Apple's Virtualization framework (with the `com.apple.security.virtualization` entitlement). The macOS image is 27.2.1, 25.6 GB.
 - [x] Host side: untrusted-log reader, chamber rules (keychain, browser and wallet reads, VM check then quit), verdict, sample pinning, quarantine into an incident case and the undo store.
-- [ ] VM side: `macx chamber setup [--at DIR]` and `macx chamber run FILE`. **Blocked on disk space:** Lao's Mac has 31 GB free; the image plus a guest needs about 50 GB (estimate). Needs space freed or an external disk, and Lao's OK before the 25.6 GB download.
+- [x] Switched to the **light chamber** (Lao: 25.6 GB is too big). It's a tiny Alpine Linux VM, 52 MB in all, that runs scripts with Mac commands replaced by stand-ins. Mac apps and binaries keep the static checks.
+- [x] Light chamber pieces: strace reader, `network-attempt` rule, initramfs (cpio) writer.
+- [x] Boot test (2026-11-24): verified Alpine downloads, zboot kernel unwrapped, booted with no disk or network, ran a pretend stealer in 1.6 s, judged *DON'T OPEN THIS* from the real trace.
+- [ ] `macx chamber setup`: download and verify in Swift (signature + hashes, pinned manifest), unwrap the kernel, store about 60 MB. Needs the virtualization entitlement added to the app's signing (scripts/install.sh).
+- [ ] `macx chamber run FILE`: build the initramfs with CPIOArchive (stand-ins, bait files, agent, sample), boot, collect the trace, judge, quarantine.
+- [ ] Intel Macs: x86_64 manifest and kernel format.
+- [ ] Hints from `macx check` and `guard inspect` when the verdict is *partly unknown*.
 
 ## Check on macOS 27.3 (expected early December 2026)
 Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.com/news?id=oqng0zjk), 2026-11-16): users are guided to grant only specific folders, there's a new grant prompt and a menu-bar list of apps with access, and grants made before the update stay in effect. Endpoint Security and eslogger aren't mentioned, and the new entitlements are only for backup and assistive-technology apps.

@@ -85,6 +85,12 @@ struct StraceTests {
         #expect(e.first?.process?.pid == 500)
     }
 
+    @Test func consoleLineEndingsAreSplit() {
+        // The VM's console turns "\n" into "\r\n", which Swift treats as one character.
+        let text = "500 1795514401.3 openat(AT_FDCWD, \"/a\", O_RDONLY) = 3\r\n500 1795514401.4 openat(AT_FDCWD, \"/b\", O_RDONLY) = 4\r\n"
+        #expect(events(text).compactMap(\.filePath) == ["/a", "/b"])
+    }
+
     @Test func junkIsSkippedAndCounted() {
         let log = StraceLog.parse("hello\n500 not-a-time execve(\"/x\") = 0\n\n")
         #expect(log.events.isEmpty)
@@ -113,5 +119,26 @@ struct StraceTests {
             #"500 1795514401.0 connect(3, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:db8::1", &sin6_addr), sin6_scope_id=0}, 28) = -1 ENETUNREACH (Network is unreachable)"#
         let r = ChamberJudge(guestHome: URL(fileURLWithPath: "/Users/chamber")).judge(events: StraceLog.parse(text).events, samplePID: 500)
         #expect(r.alerts.contains { $0.rule == "network-attempt" && $0.severity == .medium && ($0.detail ?? "") == "[2001:db8::1]:80" })
+    }
+}
+
+/// A real run: the light chamber booted (Alpine 3.24.4 kernel, 1.6 s) and ran a harmless pretend stealer
+/// (fake password box, bait keychain read, connect to a TEST-NET address, fake Apple launch item).
+@Suite("Light chamber: a real recorded run")
+struct RealChamberRunTests {
+    static let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/chamber-strace-pretend-stealer.txt")
+
+    @Test func judgedDangerousWithEveryStep() throws {
+        let text = try String(contentsOf: Self.fixture, encoding: .utf8)
+        let parsed = StraceLog.parse(text)
+        #expect(parsed.skipped == 0)
+        // The first process in the trace is the sample (timeout, then bash in the same pid).
+        let sample = try #require(parsed.events.first?.process?.pid)
+        let r = ChamberJudge(guestHome: URL(fileURLWithPath: "/Users/chamber")).judge(events: parsed.events, samplePID: sample)
+        let rules = Set(r.alerts.map(\.rule))
+        #expect(r.verdict == .dangerous)
+        #expect(rules.isSuperset(of: ["password-prompt", "reads-keychain", "network-attempt", "fake-apple-launch-item"]))
+        #expect(r.alerts.first { $0.rule == "network-attempt" }?.detail == "203.0.113.9:443")
     }
 }
