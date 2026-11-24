@@ -63,4 +63,9 @@ esac
 echo
 echo "Next: give the app Full Disk Access so macx watch can run and macx can include Documents, Downloads, etc.:"
 echo "  macx privacy --open    then  +  → Applications (your home folder's) → Macximesed → switch it on."
-echo "After a reinstall or update, switch it off and on again (ad-hoc signed: each build is new to macOS)."
+if [ "$SIGN" = "-" ]; then
+  echo "After a reinstall or update, switch it off and on again (ad-hoc signed: each build is new to macOS)."
+else
+  echo "Signed with a stable identity, so the switch stays on across reinstalls and updates."
+fi
+echo "To watch in the background, without a terminal:  sudo $BIN_DIR/macx daemon install"

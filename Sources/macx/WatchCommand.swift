@@ -30,6 +30,8 @@ struct Watch: ParsableCommand {
     @Option(help: "Check a saved eslogger JSON Lines file instead of watching live (no sudo needed).", completion: .file())
     var replay: String?
 
+    @Flag(help: .hidden) var background = false
+
     @Option(help: "Milliseconds between looks at the network connections of flagged processes (0 = off).")
     var netInterval: Int = 20
 
@@ -95,6 +97,8 @@ struct Watch: ParsableCommand {
             Self.keep.append(src)
         }
 
+        let screenUser = background ? WatchUser.resolve() : nil
+        if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
         print("Alerts are also saved to \(log.file.path)\n")
@@ -108,6 +112,7 @@ struct Watch: ParsableCommand {
                 pid: e.pid, processPath: e.path)
             log.append(a)
             if a.severity >= minimum { Self.printAlert(a) }
+            if let screenUser { AlertNotifier.notify(user: screenUser, title: "Macximesed: \(a.severity.label)", message: a.title) }
         }
 
         let handle = out.fileHandleForReading
@@ -123,11 +128,17 @@ struct Watch: ParsableCommand {
                 buffer.removeSubrange(buffer.startIndex...nl)
                 guard let e = ESEvent.parse(line) else { continue }
                 seen += 1
+                if background, seen == 1 {
+                    try? DaemonStatus(state: .watching, message: "Watching; alerts go to \(log.file.path).").write()
+                }
                 for a in rules.evaluate(e) {
                     log.append(a)
                     if a.severity >= .high, let pid = a.pid { net?.watch(pid: pid, reason: a.rule, path: a.processPath ?? "") }
                     guard a.severity >= minimum else { continue }
                     Self.printAlert(a)
+                    if let screenUser, a.severity >= .high {
+                        AlertNotifier.notify(user: screenUser, title: "Macximesed: \(a.severity.label)", message: a.title)
+                    }
                     // Critical: stop it first (if asked), then keep the evidence while the process is still there.
                     if a.severity == .critical {
                         var frozen: [Int] = []
@@ -159,9 +170,22 @@ struct Watch: ParsableCommand {
                     ? (UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe))?.path ?? exe) : "your terminal app"
                 hint += " (macx privacy --open), then try again."
             }
+            if background {
+                // Exit cleanly so launchd doesn't restart it every 30 s; the status file says why.
+                print(hint)
+                try? DaemonStatus(state: .refused, message: hint).write()
+                if let screenUser {
+                    AlertNotifier.notify(user: screenUser, title: "Macximesed can't watch", message: "Run: macx daemon status")
+                }
+                return
+            }
             throw UserError(hint)
         }
         print("eslogger stopped (\(es.terminationStatus)).")
+        if background {
+            try? DaemonStatus(state: .stopped, message: "eslogger stopped (\(es.terminationStatus)).").write()
+            throw ExitCode(1)  // launchd restarts it
+        }
     }
 
     nonisolated(unsafe) static var keep: [DispatchSourceSignal] = []
@@ -193,6 +217,7 @@ struct Watch: ParsableCommand {
 
     /// The real user behind sudo, so ~/ paths and the log file are theirs, not root's.
     static func invokingUser() -> (home: URL, uid: uid_t, gid: gid_t) {
+        if let u = WatchUser.resolve() { return (u.home, u.uid, u.gid) }
         if let name = ProcessInfo.processInfo.environment["SUDO_USER"], let pw = getpwnam(name), let dir = pw.pointee.pw_dir {
             return (URL(fileURLWithPath: String(cString: dir)), pw.pointee.pw_uid, pw.pointee.pw_gid)
         }
