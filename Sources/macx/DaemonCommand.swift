@@ -31,6 +31,25 @@ struct Daemon: ParsableCommand {
 
     static var isLoaded: Bool { launchctl(["print", target]).status == 0 }
 
+    /// `bootout` returns before launchd has finished unloading, and bootstrapping again too soon fails with
+    /// error 5 (Input/output error). So wait for it to be gone, then load with a few retries.
+    static func unload() {
+        guard isLoaded else { return }
+        _ = launchctl(["bootout", target])
+        for _ in 0..<50 where isLoaded { Thread.sleep(forTimeInterval: 0.2) }
+        try? DaemonStatus(state: .stopped, message: "Stopped by macx daemon.").write()
+    }
+
+    static func load() throws {
+        var last = (status: Int32(0), output: "")
+        for attempt in 0..<4 {
+            if attempt > 0 { Thread.sleep(forTimeInterval: 1) }
+            last = launchctl(["bootstrap", "system", DaemonPlan.plistPath.path])
+            if last.status == 0 || isLoaded { return }
+        }
+        throw UserError("launchctl bootstrap failed (\(last.status)): \(last.output.trimmingCharacters(in: .whitespacesAndNewlines))")
+    }
+
     static func requireRoot(_ verb: String) throws {
         guard geteuid() == 0 else { throw UserError("This needs root. Run: sudo macx daemon \(verb)") }
     }
@@ -58,12 +77,11 @@ struct Daemon: ParsableCommand {
             let fm = FileManager.default
             try fm.createDirectory(at: DaemonPlan.logDir, withIntermediateDirectories: true)
             chmod(DaemonPlan.logDir.path, 0o755)
-            if isLoaded { _ = launchctl(["bootout", target]) }
+            unload()
             try plan.plistData().write(to: plan.plistPath, options: .atomic)
             chown(plan.plistPath.path, 0, 0)
             chmod(plan.plistPath.path, 0o644)
-            let r = launchctl(["bootstrap", "system", plan.plistPath.path])
-            guard r.status == 0 else { throw UserError("launchctl bootstrap failed (\(r.status)): \(r.output)") }
+            try load()
             print("Installed \(plan.plistPath.path)")
             print("Runs: \(exe.path) \(plan.arguments.joined(separator: " ")) for \(user.name)")
             print("Checking it started...")
@@ -76,7 +94,7 @@ struct Daemon: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Stop the background watch and remove it.")
         func run() throws {
             try requireRoot("uninstall")
-            if isLoaded { _ = launchctl(["bootout", target]) }
+            unload()
             if FileManager.default.fileExists(atPath: DaemonPlan.plistPath.path) {
                 try FileManager.default.removeItem(at: DaemonPlan.plistPath)
             }
@@ -92,9 +110,8 @@ struct Daemon: ParsableCommand {
             guard FileManager.default.fileExists(atPath: DaemonPlan.plistPath.path) else {
                 throw UserError("Not installed. Run: sudo macx daemon install")
             }
-            if isLoaded { _ = launchctl(["bootout", target]) }
-            let r = launchctl(["bootstrap", "system", DaemonPlan.plistPath.path])
-            guard r.status == 0 else { throw UserError("launchctl bootstrap failed (\(r.status)): \(r.output)") }
+            unload()
+            try load()
             Thread.sleep(forTimeInterval: 4)
             Status.show()
         }
@@ -118,7 +135,9 @@ struct Daemon: ParsableCommand {
             if let pid { print("  \(pid.trimmingCharacters(in: .whitespaces))") }
             if let s = DaemonStatus.read() {
                 let when = DateFormatter.localizedString(from: s.since, dateStyle: .short, timeStyle: .medium)
-                print("  macx says (\(when)): \(s.state.rawValue). \(s.message)")
+                let stale = info.status != 0 && s.state == .watching
+                print("  macx \(stale ? "last said" : "says") (\(when)): \(s.state.rawValue). \(s.message)")
+                if info.status != 0 { print("  Start it: sudo macx daemon restart") }
             }
             print("  Log: \(DaemonPlan.logPath.path)    Alerts: macx alerts")
         }

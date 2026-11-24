@@ -32,6 +32,8 @@ now() { /usr/bin/python3 -I -c 'import time; print(f"{time.time():.6f}")'; }
 
 cleanup() {
   [ -n "${WATCH:-}" ] && kill "$WATCH" 2>/dev/null
+  # Backstop: every watcher this run started logs into $WORK, including a re-launched child.
+  pkill -f -- "--log $WORK/" 2>/dev/null
   pkill -f "macx-sim-" 2>/dev/null
   rm -f "$UHOME/Library/LaunchAgents/com.macx-sim.test.plist"
   rmdir "$UHOME/Library/Application Support/.com.apple.macx-sim" 2>/dev/null

@@ -43,6 +43,8 @@ enum Responsibility {
 
     /// Re-executes this binary with responsibility disclaimed and exits with the child's status.
     /// Returns (and the caller just carries on) when it isn't needed or isn't possible.
+    nonisolated(unsafe) static var child: pid_t = 0
+
     static func becomeOwnResponsibleProcessIfNeeded() {
         guard shouldDisclaim, !isOwnResponsibleProcess, let exe = executablePath,
             let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim")
@@ -67,9 +69,15 @@ enum Responsibility {
         var pid: pid_t = 0
         guard posix_spawn(&pid, exe, nil, &attrs, &cArgs, &cEnv) == 0 else { return }
 
-        // Ctrl-C reaches the child through the terminal's process group; the parent just waits.
-        signal(SIGINT, SIG_IGN)
-        signal(SIGTERM) { _ in }
+        // Pass stop signals on: a kill aimed at this parent (a script, launchd, `kill PID`) must stop the child
+        // too, or a root `macx watch --suspend` keeps running orphaned. Ctrl-C also reaches the child through
+        // the terminal's process group; a second SIGINT is harmless.
+        child = pid
+        for sig in [SIGINT, SIGTERM, SIGHUP] {
+            signal(sig) { s in
+                if Responsibility.child > 0 { kill(Responsibility.child, s) }
+            }
+        }
         var status: Int32 = 0
         while waitpid(pid, &status, 0) == -1 && errno == EINTR {}
         let exited = (status & 0x7F) == 0
