@@ -173,36 +173,28 @@ struct Watch: ParsableCommand {
         // spctl takes up to a few seconds on a big app, so a removed quarantine flag is judged here, not in the loop.
         let reviews = DispatchQueue(label: "macx.watch.gatekeeper")
 
-        let handle = out.fileHandleForReading
-        var buffer = Data()
         let started = Date()
         var seen = 0
-        while true {
-            let chunk = handle.availableData
-            if chunk.isEmpty { break }  // eslogger exited
-            buffer.append(chunk)
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                guard let e = ESEvent.parse(line) else { continue }
-                seen += 1
-                if background, seen == 1 {
-                    try? DaemonStatus(state: .watching, message: "Watching; alerts go to \(log.file.path).").write()
-                }
-                if !noDownloads, let path = DownloadWatch.finishedDownload(e, downloads: downloadsDir) {
-                    downloads.check(URL(fileURLWithPath: path))
-                }
-                for a in rules.evaluate(e) {
-                    if QuarantineReview.needsReview(a) {
-                        reviews.async {
-                            let path = a.detail ?? ""
-                            handleAlert(
-                                QuarantineReview.review(a, gatekeeper: SpctlAssessor().assess(path, kind: QuarantineReview.kind(for: path)))
-                            )
-                        }
-                    } else {
-                        handleAlert(a)
+        // Until eslogger exits. Each chunk gets its own autorelease pool (see LineReader).
+        LineReader.forEachLine(out.fileHandleForReading) { line in
+            guard let e = ESEvent.parse(line) else { return }
+            seen += 1
+            if background, seen == 1 {
+                try? DaemonStatus(state: .watching, message: "Watching; alerts go to \(log.file.path).").write()
+            }
+            if !noDownloads, let path = DownloadWatch.finishedDownload(e, downloads: downloadsDir) {
+                downloads.check(URL(fileURLWithPath: path))
+            }
+            for a in rules.evaluate(e) {
+                if QuarantineReview.needsReview(a) {
+                    reviews.async {
+                        let path = a.detail ?? ""
+                        handleAlert(
+                            QuarantineReview.review(a, gatekeeper: SpctlAssessor().assess(path, kind: QuarantineReview.kind(for: path)))
+                        )
                     }
+                } else {
+                    handleAlert(a)
                 }
             }
         }

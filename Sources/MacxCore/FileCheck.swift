@@ -485,7 +485,12 @@ public struct FileChecker: Sendable {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         var hasher = SHA256Stream()
-        while let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(chunk) }
+        // A pool per chunk: on the watch's never-returning main loop the chunks would otherwise all stay in memory.
+        while autoreleasepool(invoking: { () -> Bool in
+            guard let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty else { return false }
+            hasher.update(chunk)
+            return true
+        }) {}
         return hasher.finish()
     }
 }
