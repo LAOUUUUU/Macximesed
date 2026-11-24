@@ -57,7 +57,11 @@ struct StartupView: View {
     var sentence: String? {
         guard let items = model.startupItems else { return nil }
         var s = "\(items.count) things start with your Mac or your login."
-        if model.startupHasBaseline { s += model.startupAdded.isEmpty ? " Nothing is new since your baseline." : " \(model.startupAdded.count) new since your baseline." }
+        if model.startupHasBaseline {
+            s +=
+                model.startupAdded.isEmpty
+                ? " Nothing is new since your baseline." : " \(model.startupAdded.count) new since your baseline."
+        }
         return s + (note.map { " \($0)" } ?? "")
     }
 
@@ -303,10 +307,13 @@ struct CheckView: View {
                 if let q = r.quarantine {
                     fact(
                         "Downloaded",
-                        "by \(q.agent ?? "an unknown app")" + (q.date.map { ", \(DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short))" } ?? ""))
+                        "by \(q.agent ?? "an unknown app")"
+                            + (q.date.map { ", \(DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short))" } ?? ""))
                 }
                 fact("SHA-256", r.sha256, mono: true)
-                ForEach(Array(r.installs.enumerated()), id: \.offset) { _, i in fact("Installs", i.label + (i.path.map { " → \($0)" } ?? ""), mono: true) }
+                ForEach(Array(r.installs.enumerated()), id: \.offset) { _, i in
+                    fact("Installs", i.label + (i.path.map { " → \($0)" } ?? ""), mono: true)
+                }
             }
             .padding(.top, 12)
         }
@@ -366,7 +373,8 @@ struct CleanView: View {
         VStack(spacing: 0) {
             PageHeader(
                 label: "Clean",
-                headline: model.cleanItems == nil ? "Measuring…" : (total == 0 ? "Nothing chosen." : "\(ByteCountFormatter.file(total)) can go."),
+                headline: model.cleanItems == nil
+                    ? "Measuring…" : (total == 0 ? "Nothing chosen." : "\(ByteCountFormatter.file(total)) can go."),
                 sentence: note ?? "Caches and logs that apps rebuild. Everything moves to the undo store first; nothing is deleted."
             ) {
                 if let lastBatch {
@@ -450,7 +458,8 @@ struct CleanView: View {
         do {
             let batch = try CleanupCatalog.run(picked, store: UndoStore())
             lastBatch = batch
-            note = "Moved \(ByteCountFormatter.file(batch.totalBytes)) to the undo store."
+            note =
+                "Moved \(ByteCountFormatter.file(batch.totalBytes)) to the undo store."
                 + (batch.failed.isEmpty ? "" : " \(batch.failed.count) couldn't move.")
             model.cleanItems = nil
             scan()
@@ -488,7 +497,8 @@ struct AppsView: View {
         VStack(spacing: 0) {
             PageHeader(
                 label: "Apps", headline: model.apps == nil ? "Finding apps…" : "\(shown.count) apps.",
-                sentence: note ?? (model.appsSkipped > 0 ? "\(model.appsSkipped) in guarded folders were skipped (Full Disk Access is off)." : nil)
+                sentence: note
+                    ?? (model.appsSkipped > 0 ? "\(model.appsSkipped) in guarded folders were skipped (Full Disk Access is off)." : nil)
             ) {
                 TwoState(label: "Unused for 90 days only", isOn: unusedOnly) { unusedOnly = $0 }
                     .help("Only apps not opened for 90 days")
@@ -526,8 +536,12 @@ struct AppsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(ByteCountFormatter.file(app.bytes)).font(Fonts.mono(12)).frame(width: 80, alignment: .trailing)
-                Text(app.lastUsed.map { (app.lastUsedIsEstimate ? "about " : "") + RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()) } ?? "never")
-                    .font(Fonts.sans(12)).foregroundStyle(Ink.grey).frame(width: 120, alignment: .trailing)
+                Text(
+                    app.lastUsed.map {
+                        (app.lastUsedIsEstimate ? "about " : "") + RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())
+                    } ?? "never"
+                )
+                .font(Fonts.sans(12)).foregroundStyle(Ink.grey).frame(width: 120, alignment: .trailing)
                 Group {
                     if app.isApple && !app.fromAppStore {
                         Text("built in").font(Fonts.sans(12)).foregroundStyle(Ink.grey)

@@ -24,7 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         status = StatusController(model: model, openWindow: { [weak self] section in self?.showWindow(section) })
-        if ProcessInfo.processInfo.environment["MACX_APP_HIDDEN"] != "1" { showWindow(nil) }
+        let env = ProcessInfo.processInfo.environment
+        if env["MACX_APP_HIDDEN"] != "1" { showWindow(nil) }
+        // For screenshots and checks: `open --env MACX_APP_PANEL=1 Macximesed.app` opens the menu bar panel too.
+        if env["MACX_APP_PANEL"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.status?.showPanel() }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -302,12 +307,12 @@ struct MenuPanelView: View {
                                 .font(Fonts.mono(10.5)).foregroundStyle(Ink.grey).lineLimit(1).truncationMode(.middle)
                         }
                         Spacer(minLength: 8)
-                        Text(WatchState.clock(g.last)).font(Fonts.mono(11)).foregroundStyle(Ink.grey)
+                        Text(ProtectionView.when(g.last)).font(Fonts.mono(11)).foregroundStyle(Ink.grey)
                     }
                     .padding(.horizontal, 18).padding(.vertical, 7)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(RowHover())
+                .buttonStyle(RowHover()).focusEffectDisabled()
             }
             Hairline().padding(.top, 6)
             VStack(alignment: .leading, spacing: 0) {
@@ -317,7 +322,10 @@ struct MenuPanelView: View {
                         model.resume()
                     }
                 } else if model.installed {
-                    menuRow("Pause for 1 hour…", info: "Asks for your administrator password. The watch turns itself back on when the hour is up.") {
+                    menuRow(
+                        "Pause for 1 hour…",
+                        info: "Asks for your administrator password. The watch turns itself back on when the hour is up."
+                    ) {
                         close()
                         model.pause()
                     }
@@ -346,7 +354,7 @@ struct MenuPanelView: View {
             .padding(.horizontal, 18).padding(.vertical, 6)
             .contentShape(Rectangle())
         }
-        .buttonStyle(RowHover())
+        .buttonStyle(RowHover()).focusEffectDisabled()
     }
 }
 

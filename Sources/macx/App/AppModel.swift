@@ -7,7 +7,11 @@ import Observation
 @MainActor @Observable
 final class AppModel {
     enum Section: String, CaseIterable, Identifiable {
-        case protection = "Protection", startup = "Startup items", check = "Check a file", clean = "Clean", apps = "Apps"
+        case protection = "Protection"
+        case startup = "Startup items"
+        case check = "Check a file"
+        case clean = "Clean"
+        case apps = "Apps"
         case settings = "Settings"
         var id: String { rawValue }
     }

@@ -57,7 +57,9 @@ struct AlertGroupTests {
     }
 
     @Test func expectedProgramsHideNonCriticalGroupsButNeverCritical() {
-        let records = [record("exec-from-hidden-or-temp", .high, "/dev/macx", at: 1), record("base64-to-shell", .critical, "/bin/zsh", at: 2)]
+        let records = [
+            record("exec-from-hidden-or-temp", .high, "/dev/macx", at: 1), record("base64-to-shell", .critical, "/bin/zsh", at: 2),
+        ]
         let expected: Set<String> = ["exec-from-hidden-or-temp|/dev/macx", "base64-to-shell|/bin/zsh"]
         let groups = AlertGroups.make(records, expected: expected)
         #expect(groups.map(\.rule) == ["base64-to-shell"])
@@ -215,8 +217,12 @@ struct WatchPauseTests {
 @Suite("Mac app: admin prompt")
 struct AdminCommandTests {
     @Test func quotesForTheShellAndForAppleScript() {
-        let s = AdminCommand.appleScript(executable: "/Users/v/Applications/Macximesed.app/Contents/MacOS/macx", arguments: ["daemon", "pause", "--for", "1h"])
-        #expect(s == #"do shell script "'/Users/v/Applications/Macximesed.app/Contents/MacOS/macx' 'daemon' 'pause' '--for' '1h'" with administrator privileges"#)
+        let s = AdminCommand.appleScript(
+            executable: "/Users/v/Applications/Macximesed.app/Contents/MacOS/macx", arguments: ["daemon", "pause", "--for", "1h"])
+        #expect(
+            s
+                == #"do shell script "'/Users/v/Applications/Macximesed.app/Contents/MacOS/macx' 'daemon' 'pause' '--for' '1h'" with administrator privileges"#
+        )
         let tricky = AdminCommand.appleScript(executable: "/tmp/a b/it's \"x\"", arguments: [])
         #expect(tricky == #"do shell script "'/tmp/a b/it'\\''s \"x\"'" with administrator privileges"#)
     }

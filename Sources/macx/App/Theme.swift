@@ -43,7 +43,9 @@ extension NSColor {
 /// user's preferred text size (Settings > Accessibility > Display > Text size).
 enum Fonts {
     static var scale: CGFloat { max(0.85, min(1.6, NSFont.preferredFont(forTextStyle: .body).pointSize / 13)) }
-    static func serif(_ size: CGFloat, _ weight: Font.Weight = .medium) -> Font { .system(size: size * scale, weight: weight, design: .serif) }
+    static func serif(_ size: CGFloat, _ weight: Font.Weight = .medium) -> Font {
+        .system(size: size * scale, weight: weight, design: .serif)
+    }
     static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size * scale, weight: weight) }
     static func mono(_ size: CGFloat) -> Font { .system(size: size * scale, design: .monospaced) }
 }

@@ -250,8 +250,10 @@ struct ProtectionView: View {
                         Text(String(line)).lineLimit(3)
                     }
                     Text("program  \(g.process.isEmpty ? "unknown" : g.process)").foregroundStyle(Ink.grey)
-                    Text("seen     \(g.count == 1 ? "once" : "\(g.count) times"), first \(WatchState.clock(g.first)), last \(WatchState.clock(g.last))")
-                        .foregroundStyle(Ink.grey)
+                    Text(
+                        "seen     \(g.count == 1 ? "once" : "\(g.count) times"), first \(WatchState.clock(g.first)), last \(WatchState.clock(g.last))"
+                    )
+                    .foregroundStyle(Ink.grey)
                 }
                 .font(Fonts.mono(11.5)).textSelection(.enabled)
                 HStack(spacing: 8) {
@@ -276,9 +278,13 @@ struct ProtectionView: View {
                     if AlertGroups.canMarkExpected(g) {
                         Button("Expected") { model.markExpected(g) }.buttonStyle(PlainButtonStyle())
                         InfoButton(
-                            text: "Hides this program's \(g.rule) alerts here. The background watch still logs them and still notifies you.")
+                            text: "Hides this program's \(g.rule) alerts here. The background watch still logs them and still notifies you."
+                        )
                     } else {
-                        InfoButton(text: "Critical alerts can't be marked as expected. A stealer could use that to hide itself, so each one always shows.")
+                        InfoButton(
+                            text:
+                                "Critical alerts can't be marked as expected. A stealer could use that to hide itself, so each one always shows."
+                        )
                     }
                 }
             }
@@ -335,7 +341,8 @@ struct SettingsView: View {
                             Spacer()
                             if !model.fullDiskAccess {
                                 Button("Open Settings") {
-                                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+                                    NSWorkspace.shared.open(
+                                        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
                                 }
                                 .buttonStyle(PlainButtonStyle(kind: .primary))
                             }
@@ -376,7 +383,9 @@ struct SettingsView: View {
                         HStack(spacing: 4) {
                             Text(updateNote ?? "Version \(macxVersion).").font(Fonts.sans(14))
                             InfoButton(
-                                text: (update.lastCheck.map { "Checked \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())) on the signed channel. " } ?? "")
+                                text: (update.lastCheck.map {
+                                    "Checked \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())) on the signed channel. "
+                                } ?? "")
                                     + "Every update is checked against the Ed25519 key built into the app before it installs.")
                             Spacer()
                             Button(checking ? "Checking…" : "Check now") { checkUpdates() }

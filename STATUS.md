@@ -41,7 +41,11 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
 - [ ] **8. Games**: per-game profiles (Boost, Rosetta check, Metal HUD), heat graph, best way to run (native, CrossOver, cloud).
 - [ ] **10. Risky tier**: triple confirmation, undo script.
-- [ ] **11. Root daemon + menu bar app**.
+- [x] **11. Root daemon + menu bar app** (daemon 2026-11-23; app and menu bar 2026-11-24, design in [research/app-ui/RESEARCH.md](research/app-ui/RESEARCH.md)). Left:
+  - [ ] Lao: reinstall (`scripts/install.sh`), then `sudo macx daemon restart` so the daemon runs the build that honours pause.
+  - [ ] Check the menu bar glyph and panel on the real menu bar, in light and dark.
+  - [ ] Icon for the app bundle (it has none yet).
+  - [ ] "Open at login" with SMAppService on an LSUIElement app: test after a reboot.
 - [ ] **12. Extreme**: deleting sealed-volume apps after the user turns SIP and authenticated-root off in Recovery. Off by default.
 
 ## Done

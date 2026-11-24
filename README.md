@@ -30,6 +30,21 @@ scripts/install.sh
 
 This builds **`~/Applications/Macximesed.app`**, a background app with no Dock icon and macx inside it, and points `~/.local/bin/macx` at it, so the command is still just `macx`. To use other folders, pass them: `scripts/install.sh <bin-dir> <app-dir>`.
 
+### The app and the menu bar
+Open **Macximesed** from your Applications folder (or run `macx app`). It's the same program as the command: opened from Finder, the Dock, `open` or a login item it starts the app; run from a shell it's the CLI, exactly as before. So the app has the same bundle id, signature and Full Disk Access as `macx` and the background watch, and nothing in Settings needs redoing.
+
+- **Menu bar:** a small square mark. It's filled while the watch runs, an outline while it's paused, and struck through when nothing is watching. A red dot means a critical alert you haven't looked at. Click it for the state and the latest alerts. Right-click it for Pause, Resume, Open and Quit.
+- **The window** has these screens:
+  - **Protection:** the watch's state and the last 7 days of alerts, grouped by rule and program, with counts.
+  - **Startup items:** the `persist` scan, with a baseline. Your own items can be removed, and they go to the undo store.
+  - **Check a file:** drop a file on it or choose one.
+  - **Clean:** the Safe tier, with undo.
+  - **Apps:** remove an app and its leftovers, with undo.
+  - **Settings:** Full Disk Access, install or uninstall the watch, freeze on critical, updates, and open at login.
+- **Explanations sit behind the ⓘ buttons.**
+- **Pause, install, restart and uninstall ask for your administrator password**, because they run `sudo macx daemon …` underneath.
+- **"Expected"** hides a program's non-critical alerts in the app only. The watch still logs them and still notifies you. Critical alerts can't be hidden.
+
 ### Permissions (no popups)
 macOS guards some folders with privacy popups: Documents, Desktop, Downloads, Pictures, Movies, Music, other apps' containers, iCloud Drive and external disks. **Without Full Disk Access, macx never reads them, so it never sets off a popup.** It tells you what it skipped instead.
 
@@ -54,7 +69,7 @@ sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx
 Then `macx privacy --open`, **+**, and choose Macximesed again. To see why access was refused, look for "Failed to match existing code requirement" in `/usr/bin/log show --last 5m --predicate 'process == "tccd"'`.
 
 ### Background watch
-`sudo macx daemon install` runs the live watch from startup on, without a terminal. It's a launchd daemon that runs Macximesed.app's own `macx watch`, so Full Disk Access is checked against the app, not against Terminal or sudo. High and critical alerts show as notifications (at most one every 10 seconds; the rest are counted), and every alert goes to `~/Library/Logs/Macximesed/watch.jsonl`. `macx alerts [--follow]` shows them, and `macx daemon status` says whether it's running and, if not, why. Add `--suspend` to the install to freeze whatever is behind a critical alert. `sudo macx daemon restart` restarts it (after giving Full Disk Access, say), and `sudo macx daemon uninstall` removes it. Measured on an M3: about 1% CPU and 16 MB.
+`sudo macx daemon install` runs the live watch from startup on, without a terminal. It's a launchd daemon that runs Macximesed.app's own `macx watch`, so Full Disk Access is checked against the app, not against Terminal or sudo. High and critical alerts show as notifications (at most one every 10 seconds; the rest are counted), and every alert goes to `~/Library/Logs/Macximesed/watch.jsonl`. `macx alerts [--follow]` shows them, and `macx daemon status` says whether it's running and, if not, why. Add `--suspend` to the install to freeze whatever is behind a critical alert. `sudo macx daemon restart` restarts it (after giving Full Disk Access, say), and `sudo macx daemon uninstall` removes it. `sudo macx daemon pause --for 1h` (from 1 minute to 24 hours) turns notifications and freezing off for a while; alerts are still logged, and the watch turns itself back on when the time is up. `sudo macx daemon resume` ends a pause early. Only root can pause it: the pause file is root-owned in `/Library/Logs/Macximesed`, and the watch ignores one that anyone else could have written. Measured on an M3: about 1% CPU and 16 MB.
 
 ### Detonation chamber
 `macx chamber setup` downloads about 50 MB from Alpine Linux once: the base system, a kernel, bash, zsh and strace. Every file is checked against a SHA-256 pinned in macx (`data/chamber/manifest-aarch64.json`, made and verified by `scripts/chamber/make-manifest.py`). Then `macx chamber run FILE`:
@@ -109,7 +124,7 @@ swift build -c release
 | `macx chamber setup` / `run FILE [--seconds 60] [-y] [--no-quarantine]` / `status` / `remove` | **Detonation chamber.** Runs a suspicious script in a throwaway Linux VM (about 60 MB) with no network, no disk and nothing shared with this Mac. Mac-only commands are stand-ins, and bait files sit where stealers look. Everything it does is recorded and judged here. *DON'T OPEN THIS* offers to quarantine the file into a restorable incident case (exit code 2). Scripts only: Mac apps and programs keep `macx check`. See *Detonation chamber*. | No |
 | `macx net PID [--interval MS] [--seconds N] [--every] [--loopback]` | Shows where a process, and anything it starts, connects to, as it happens: each new remote address once. Reads the process's sockets from the kernel every 20 ms. Connections open for under about 20 ms can be missed ([measured](research/evaluation/network-results.md)). Your own processes work without sudo. | For other users' processes |
 | `macx incident [list]` / `show ID` / `contain ID [-y]` | **Incident response.** Each case is a private folder with read-only copies and SHA-256 hashes of the files involved, the process tree (who started it, what it started), the alert timeline, and a summary with what to do next. `contain` moves the case's launch items, hidden folders and temp-folder programs into the undo folder (nothing is deleted), prints the `launchctl bootout` commands for anything still running, and gives the password- and key-rotation checklist. | Sometimes |
-| `sudo macx daemon install [--suspend]` / `status` / `restart` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `status` needs no sudo. See *Background watch*. | **Yes** (not `status`) |
+| `sudo macx daemon install [--suspend]` / `status` / `restart` / `pause [--for 1h]` / `resume` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `status` needs no sudo. See *Background watch*. | **Yes** (not `status`) |
 | `macx alerts [-n 20] [--min-severity low] [--follow]` | Shows saved alerts from the live and background watch. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
 | `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |

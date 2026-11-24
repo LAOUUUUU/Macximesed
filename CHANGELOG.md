@@ -9,6 +9,23 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - **`macx chamber`** (setup, run, status, remove): the detonation chamber, end to end. Pinned Alpine downloads with SHA-256 checks; a per-run boot image with Mac stand-ins (canary password), bait files and the sample; Apple's Virtualization framework with no disk or network; strace judged with the live-watch and chamber rules (VM checks across pipes, repeated reads collapsed); quarantine into an incident case. `scripts/install.sh` and the updater now sign with the `com.apple.security.virtualization` entitlement (`scripts/macx.entitlements`). `macx check` points scripts it can't settle at the chamber.
 - **Light chamber on Intel Macs (data side):** a pinned x86_64 manifest (`data/chamber/manifest-x86_64.json`, Alpine 3.24.4, 15 files, 52 MB, verified the same way as aarch64), and `ChamberKernel.prepare`, which turns Alpine's kernel into what `VZLinuxBootLoader` boots: it unwraps the EFI-zboot gzip on Apple silicon and checks the arm64 `Image` magic, and checks the bzImage header on Intel. Unknown formats, an ELF `vmlinux` and corrupt gzip are refused. Not booted on an Intel Mac yet.
 - **Strace reader on Intel:** `StraceLog` also reads `open` and `creat`, which Intel programs use instead of `openat`, so keychain and browser-data reads aren't missed there. `StraceLog.traceSyscalls` is the one list the guest agent should trace; x86-only names carry strace's `?` so the same list works on arm64.
+- **Mac app and menu bar item** (roadmap step 11, research and design in `research/app-ui/RESEARCH.md`).
+  - **How it's built:** windows and the status item are AppKit; the screens are our own SwiftUI parts, with no stock lists, forms, toolbars or glass popovers.
+    - Type: New York for sentences of state, SF Mono for anything technical.
+    - Colour: paper and ink, red only for critical, high and off.
+    - Helper text sits behind ⓘ buttons.
+  - **Screens:** Protection, Startup items, Check a file, Clean, Apps and Settings.
+  - **Alerts are grouped by rule and program**, because one day of development logged 721 alerts, 568 of them one rule. "Expected" hides a non-critical group in the app only.
+  - **One executable:** `LSEnvironment MACX_APP=1` in the app's Info.plist starts the app when it's opened from Finder, the Dock, `open` or a login item. Shell runs and the daemon stay the CLI, and `macx app` opens it from a terminal. The bundle id, signature and Full Disk Access are unchanged.
+  - **The menu bar reads the real daemon:** `launchctl print`, the daemon's status file, the pause file and the alert log, every 2 seconds. Nothing needs root.
+  - **Cost of linking the app into one binary**, measured as a release build on an M3:
+    - binary: 4.9 to 6.5 MB per architecture;
+    - an idle CLI process: 11.7 to 14.3 MB of memory.
+  - **Root actions** (pause, resume, install, restart, uninstall) run the app's own `macx daemon …` through the administrator prompt.
+- **`sudo macx daemon pause [--for 1h]` and `resume`:**
+  - While paused, the background watch still logs alerts but sends no notifications and freezes nothing.
+  - The pause ends by itself, after 24 hours at most.
+  - The pause file must be root-owned and not writable by anyone else, or it's ignored. A stealer running as you can't pause the watch.
 - **Light chamber boot test:** a 52 MB Alpine Linux VM booted with no disk or network, ran a harmless pretend stealer in 1.6 s, and the real strace trace (`Tests/Fixtures/chamber-strace-pretend-stealer.txt`) is judged *DON'T OPEN THIS*. `StraceLog` now splits the console's `\r\n` lines.
 - **Light chamber pieces:** `StraceLog` turns the guest's `strace -f` output into chamber events. It covers exec with parent tracking, open and create, rename, connect, exit, unfinished and resumed calls, and C-string escapes, and skips anything unreadable. There's a new `network-attempt` chamber rule. `CPIOArchive` writes the newc initramfs the chamber boots from; macOS's own `cpio` lists it, and it refuses `..` paths.
 - **Detonation chamber, host side** (`Sources/MacxCore/Chamber.swift`, not wired to a command yet). It reads a guest VM's eslogger log as untrusted data and judges only the sample's own process tree. It adds chamber rules (`reads-keychain`, `reads-browser-data`, `reads-wallet`, `vm-check-then-quit`), gives a verdict (*DON'T OPEN THIS* / *Be careful* / *Nothing seen*, never "safe"), pins the sample by SHA-256, and quarantines it into an incident case and the undo store. The eslogger parser now reads `open`, `exit` and event times.
