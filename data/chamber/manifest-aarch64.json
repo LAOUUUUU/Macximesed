@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "alpine": "3.24.4",
+  "arch": "aarch64",
+  "files": [
+    {
+      "role": "rootfs",
+      "name": "alpine-minirootfs",
+      "version": "3.24.4",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.4-aarch64.tar.gz",
+      "sha256": "4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de",
+      "bytes": 4029843
+    },
+    {
+      "role": "kernel",
+      "name": "linux-virt",
+      "version": "6.18.65-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/linux-virt-6.18.65-r0.apk",
+      "sha256": "21bc1217671a2b450f3f8703fe76c8ffacc2cc7f93423cbe232f20cf1a0cbe6a",
+      "bytes": 41812652
+    },
+    {
+      "role": "package",
+      "name": "bash",
+      "version": "5.3.9-r1",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/bash-5.3.9-r1.apk",
+      "sha256": "95f4f976bdf2f4ca18ff41c32916eb6d7b12a0dae12504d55d04427460d6542f",
+      "bytes": 542084
+    },
+    {
+      "role": "package",
+      "name": "zsh",
+      "version": "5.9-r7",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/zsh-5.9-r7.apk",
+      "sha256": "e76097433573a22fe9978605ca8867ac0b9fd125c7a53ddb6ce98b5cd7dd4003",
+      "bytes": 1629335
+    },
+    {
+      "role": "package",
+      "name": "strace",
+      "version": "6.19-r1",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/strace-6.19-r1.apk",
+      "sha256": "41948304c8c0c0002db2be2fedfbf25676ffc3d0c2cbf851bf4de56f192ab08d",
+      "bytes": 464196
+    },
+    {
+      "role": "package",
+      "name": "readline",
+      "version": "8.3.3-r1",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/readline-8.3.3-r1.apk",
+      "sha256": "9f0ae0923c02b0d6aba62e9173542b65396ba3f0efefcbf087ea32f1120e7b34",
+      "bytes": 129706
+    },
+    {
+      "role": "package",
+      "name": "libcap2",
+      "version": "2.78-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/libcap2-2.78-r0.apk",
+      "sha256": "e13be383f18b1fcfe895361d816ff7cfd2b3c265e442bb371c4a234b29b0e4a9",
+      "bytes": 23993
+    },
+    {
+      "role": "package",
+      "name": "libncursesw",
+      "version": "6.6_p20260516-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/libncursesw-6.6_p20260516-r0.apk",
+      "sha256": "51a7aa4b3ec40b144d0801c0544e0a9f62e2a41d04b6067bb5e95786040741c6",
+      "bytes": 161906
+    },
+    {
+      "role": "package",
+      "name": "libdw",
+      "version": "0.195-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/libdw-0.195-r0.apk",
+      "sha256": "ccfe821138496ebc2e78dc8ace441522583eb06844df6ea24715e7f026b7bbe0",
+      "bytes": 235354
+    },
+    {
+      "role": "package",
+      "name": "ncurses-terminfo-base",
+      "version": "6.6_p20260516-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/ncurses-terminfo-base-6.6_p20260516-r0.apk",
+      "sha256": "e0c546b9461bdce206a90bc720cb69aa4628b5a5b8d908c3e5084e00f28f6a9d",
+      "bytes": 22150
+    },
+    {
+      "role": "package",
+      "name": "libelf",
+      "version": "0.195-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/libelf-0.195-r0.apk",
+      "sha256": "1c108314af454a885ac0b053201db57027470c4f2309412c016897e2a2bf5d0e",
+      "bytes": 44727
+    },
+    {
+      "role": "package",
+      "name": "libbz2",
+      "version": "1.0.8-r6",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/libbz2-1.0.8-r6.apk",
+      "sha256": "28cb76bb6d11d2a55c3061b5fcb2ab84996412a248b2c9fe52bb710d0a2a84e7",
+      "bytes": 34259
+    },
+    {
+      "role": "package",
+      "name": "musl-fts",
+      "version": "1.2.7-r7",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/musl-fts-1.2.7-r7.apk",
+      "sha256": "49e242db9339136148f1399d2126af277a5723a23d0be5a47fa0c94f96732e73",
+      "bytes": 7638
+    },
+    {
+      "role": "package",
+      "name": "xz-libs",
+      "version": "5.8.4-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/xz-libs-5.8.4-r0.apk",
+      "sha256": "9be375832e747afe14f98e400e8b55d8f6fde25e41663090c81600628daab093",
+      "bytes": 119423
+    },
+    {
+      "role": "package",
+      "name": "zstd-libs",
+      "version": "1.5.7-r2",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/zstd-libs-1.5.7-r2.apk",
+      "sha256": "2bb5136c89f5b0bbe1554c8915a3b520d5aa63ae2a51d4d821eb81698db5a818",
+      "bytes": 365383
+    }
+  ]
+}
