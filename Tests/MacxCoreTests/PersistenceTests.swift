@@ -242,6 +242,8 @@ struct PersistenceRuleTests {
     @Test func unsignedAndAdHocPrograms() {
         #expect(rules([item(signature: .unsigned)]).contains("unsigned-program"))
         #expect(rules([item(signature: .adHoc)]).contains("adhoc-program"))
+        // Anyone can make a self-signed certificate, so it counts like ad-hoc, under its own name.
+        #expect(rules([item(signature: .selfSigned(name: "Some Cert"))]).contains("self-signed-program"))
         #expect(rules([item(signature: .developerID(team: "T"))]).isEmpty)
     }
 
@@ -370,6 +372,19 @@ struct CodeSignatureTests {
         let f = PersistenceRules.evaluate([item], home: URL(fileURLWithPath: "/Users/v"))
         #expect(f.map(\.rule) == ["unreadable-program"])
         #expect(f.first?.severity == .info)
+    }
+
+    @Test func certificateWithoutATeamIsSelfSigned() {
+        #expect(SignatureInfo.classify(adHocFlag: true, team: nil, leafName: nil) == .adHoc)
+        #expect(
+            SignatureInfo.classify(adHocFlag: false, team: "ABCDE12345", leafName: "Developer ID Application: X")
+                == .developerID(team: "ABCDE12345"))
+        #expect(
+            SignatureInfo.classify(adHocFlag: false, team: nil, leafName: "Macximesed Local Signing")
+                == .selfSigned(name: "Macximesed Local Signing"))
+        #expect(SignatureInfo.classify(adHocFlag: false, team: nil, leafName: nil) == .adHoc)
+        #expect(
+            SignatureInfo.selfSigned(name: "Macximesed Local Signing").label == "self-signed (Macximesed Local Signing, no developer team)")
     }
 
     @Test func adHocSignedBinary() throws {

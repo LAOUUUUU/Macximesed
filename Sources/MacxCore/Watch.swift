@@ -265,9 +265,9 @@ public struct WatchRules: Sendable {
             add("new-background-item", .medium, "A new login or background item was registered", what, pid: e.instigator?.pid)
             if let exe = e.executablePath {
                 let sig = signatures.check(exe)
-                if sig == .adHoc || sig == .unsigned {
+                if sig.isWithoutDeveloper {
                     add(
-                        "new-background-item-unsigned", .high, "The new background item runs an \(sig.label) program", exe,
+                        "new-background-item-unsigned", .high, "The new background item runs a program that's \(sig.label)", exe,
                         pid: e.instigator?.pid)
                 }
             }

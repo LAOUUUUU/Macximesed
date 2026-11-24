@@ -115,6 +115,19 @@ struct FileCheckTests {
         #expect(report.quarantine?.agent == "Brave")
     }
 
+    @Test func downloadedSelfSignedAppIsHigh() throws {
+        let tmp = try TempDir()
+        let app = try tmp.app("Tool.app", id: "com.example.tool")
+        _ = "0081;6afdebf1;Safari;X".withCString { setxattr(app.path, "com.apple.quarantine", $0, strlen($0), 0, 0) }
+        let report = try checker(
+            gatekeeper: GatekeeperResult(accepted: false, source: "no usable signature"),
+            signatures: FakeSignatures(byPath: [app.path: .selfSigned(name: "Totally Real Developer")])
+        ).check(app)
+        let f = try #require(report.findings.first { $0.rule == "self-signed-downloaded" })
+        #expect(f.severity == .high)
+        #expect(f.title.contains("Totally Real Developer"))
+    }
+
     @Test func appThatInstallsThingsSaysSo() throws {
         let tmp = try TempDir()
         let app = try tmp.app("Helper.app", id: "com.example.helper")

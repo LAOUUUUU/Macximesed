@@ -122,7 +122,10 @@ public struct NetTracker {
     /// Report every new connection (keyed by local port too), not just each new remote.
     let perConnection: Bool
     public private(set) var watched: [Int: Watched] = [:]
-    var seen: Set<String> = []
+    /// What was already reported, per alert (its root process). Forgotten once nothing of that alert is
+    /// followed any more, so the background watch doesn't grow with every alert it ever had.
+    var seen: [Int: Set<String>] = [:]
+    var seenCount: Int { seen.values.reduce(0) { $0 + $1.count } }
 
     public init(
         connections: @escaping (pid_t) -> [NetConnection]? = NetConnections.of(pid:),
@@ -157,10 +160,12 @@ public struct NetTracker {
             }
             for c in conns where includeLoopback || !c.isLoopback {
                 let key = "\(w.root) \(c.proto.rawValue) \(c.endpoint)" + (perConnection ? " \(pid) \(c.localPort)" : "")
-                guard seen.insert(key).inserted else { continue }
+                guard seen[w.root, default: []].insert(key).inserted else { continue }
                 out.append(NetEvent(pid: pid, path: w.path.isEmpty ? "pid \(pid)" : w.path, reason: w.reason, connection: c))
             }
         }
+        let followed = Set(watched.values.map(\.root))
+        for root in seen.keys where !followed.contains(root) { seen[root] = nil }
         return out
     }
 }

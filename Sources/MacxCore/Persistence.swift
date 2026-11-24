@@ -11,6 +11,9 @@ public enum SignatureInfo: Codable, Sendable, Equatable {
     case developerID(team: String)
     /// Signed with no identity (`codesign -s -`). Anyone can make these: AMOS payloads were ad-hoc.
     case adHoc
+    /// Signed with a certificate that has no Apple developer team: made by whoever holds it (Macximesed's own
+    /// local and release certificates are like this). Anyone can make one, so it counts like ad-hoc.
+    case selfSigned(name: String)
     case unsigned
     case missing
     /// The file exists but this user can't read it (root-only helpers), so its signature is unknown.
@@ -21,6 +24,7 @@ public enum SignatureInfo: Codable, Sendable, Equatable {
         case .apple: "Apple"
         case .developerID(let team): "signed, team \(team)"
         case .adHoc: "ad-hoc (no identity)"
+        case .selfSigned(let name): "self-signed (\(name), no developer team)"
         case .unsigned: "unsigned"
         case .missing: "file missing"
         case .unreadable: "can't read (root only, or in a privacy-guarded folder)"
@@ -57,8 +61,28 @@ public struct CodeSignatureChecker: SignatureChecking {
             return .apple
         }
         let flags = (dict[kSecCodeInfoFlags as String] as? NSNumber)?.uint32Value ?? 0
-        if flags & 0x2 != 0 { return .adHoc }  // kSecCodeSignatureAdhoc
-        if let team = dict[kSecCodeInfoTeamIdentifier as String] as? String { return .developerID(team: team) }
+        let leaf = (dict[kSecCodeInfoCertificates as String] as? [SecCertificate])?.first
+        return SignatureInfo.classify(
+            adHocFlag: flags & 0x2 != 0,  // kSecCodeSignatureAdhoc
+            team: dict[kSecCodeInfoTeamIdentifier as String] as? String,
+            leafName: leaf.flatMap { SecCertificateCopySubjectSummary($0) as String? })
+    }
+}
+
+extension SignatureInfo {
+    /// No Apple developer behind it: unsigned, ad-hoc or self-signed.
+    public var isWithoutDeveloper: Bool {
+        switch self {
+        case .unsigned, .adHoc, .selfSigned: true
+        default: false
+        }
+    }
+
+    /// Not Apple's: ad-hoc, a developer team, or a certificate with no team (self-signed).
+    static func classify(adHocFlag: Bool, team: String?, leafName: String?) -> SignatureInfo {
+        if adHocFlag { return .adHoc }
+        if let team { return .developerID(team: team) }
+        if let leafName, !leafName.isEmpty { return .selfSigned(name: leafName) }
         return .adHoc
     }
 }
@@ -558,6 +582,10 @@ public enum PersistenceRules {
                 add("unsigned-program", item.runsAsRoot ? .high : .medium, "Runs an unsigned program")
             case .adHoc?:
                 add("adhoc-program", item.runsAsRoot ? .high : .medium, "Runs an ad-hoc signed program (no developer identity)")
+            case .selfSigned(let name)?:
+                add(
+                    "self-signed-program", item.runsAsRoot ? .high : .medium,
+                    "Runs a self-signed program (\(name), no Apple developer team: anyone can make such a certificate)")
             case .unreadable?:
                 add(
                     "unreadable-program", .info,

@@ -98,6 +98,22 @@ struct NetWatchTests {
         #expect(tracker.watched.isEmpty)
     }
 
+    @Test func forgetsWhatItSawOnceAnAlertIsNoLongerFollowed() {
+        let c = NetConnection(proto: .tcp, localPort: 5000, remoteAddress: "1.2.3.4", remotePort: 443, state: "established")
+        var tracker = NetTracker(connections: { _ in [c] }, children: { _ in [] }, followFor: 60)
+        let t0 = Date()
+        for pid in 100..<150 { tracker.watch(pid: pid, reason: "x", path: "/p", now: t0) }
+        #expect(tracker.poll(now: t0).count == 50)
+        #expect(tracker.seenCount == 50)
+        // Five minutes on, nothing is followed any more: nothing it saw needs remembering.
+        #expect(tracker.poll(now: t0.addingTimeInterval(61)).isEmpty)
+        #expect(tracker.watched.isEmpty)
+        #expect(tracker.seenCount == 0)
+        // A new alert for the same program is followed afresh.
+        tracker.watch(pid: 100, reason: "y", path: "/p", now: t0.addingTimeInterval(62))
+        #expect(tracker.poll(now: t0.addingTimeInterval(62)).count == 1)
+    }
+
     @Test func loopbackIsSkippedByDefault() {
         let lo = NetConnection(proto: .tcp, localPort: 1, remoteAddress: "127.0.0.1", remotePort: 8080, state: "established")
         var tracker = NetTracker(connections: { _ in [lo] }, children: { _ in [] })

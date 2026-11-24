@@ -84,7 +84,6 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 - The `privacy-granted` alert (eslogger `tcc_modify`) has never been seen live. A 5-minute eslogger capture while Lao switched Screen Recording on and off got 0 events, and the background watch flagged nothing (2026-11-24, macOS 27.0.1). Either the toggle fell outside the capture or macOS doesn't send `tcc_modify` for Settings toggles. The `profile-added` alert was seen live (20:56 UTC). Trap: `sudo sh -c 'eslogger … & sleep N; kill -INT $p'` never stops eslogger (background jobs in sh ignore SIGINT); use plain `kill`.
 - Metal HUD via `open --env MTL_HUD_ENABLED=1` is untested on macOS 27, and doesn't reach games started by Steam or CrossOver.
 - `~/Library/Preferences/NSGlobalDomain.plist` (empty) was left by the global-domain bug on Lao's Mac (2026-11-24 00:31). It's harmless; remove it if Lao says so.
-- `macx persist` labels a program signed with the local self-signed certificate as "ad-hoc (no identity)". It should say self-signed.
 - Should purging old undo batches happen automatically? It's manual for now (`macx undo purge`, or `macx undo empty` and Clean > *Empty undo folder* for everything), because those are the only real deletes.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
 - `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.

@@ -266,13 +266,13 @@ Each rule comes from how AMOS and similar stealers stay on a Mac:
 | `hidden-folder` | high in a Library folder, else medium | Runs something from a hidden (`.name`) folder |
 | `temp-location` | high | Runs from `/tmp`, `/Users/Shared` or Downloads |
 | `missing-program` | high for root autostart, else medium | Its program is gone: a leftover, or a payload that was removed |
-| `unsigned-program` / `adhoc-program` | high for root, else medium | No signature, or an ad-hoc one with no developer identity |
+| `unsigned-program` / `adhoc-program` / `self-signed-program` | high for root, else medium | No signature, an ad-hoc one with no developer identity, or a self-signed certificate with no Apple developer team (anyone can make one) |
 | `download-to-shell`, `base64-to-shell`, `quarantine-strip`, `password-prompt`, `password-check` | high | Lines in shell startup files or cron that download and run code, decode hidden code, strip the quarantine flag, or ask for or check your password |
 | `inline-script`, `hidden-support-folder`, `unreadable-plist` | medium | Worth a look |
 | `apple-label-outside-system` | low | An Apple-named item outside `/System` that runs an Apple binary directly |
 | `unreadable-program` | info | Root-only program whose signature can't be checked without `sudo` |
 
-Signatures are read with the Security framework (`anchor apple`, team ID, ad-hoc flag). Nothing depends on parsing `codesign` output.
+Signatures are read with the Security framework (`anchor apple`, team ID, ad-hoc flag, the leaf certificate's name). Nothing depends on parsing `codesign` output.
 
 **Last used:** this comes from Spotlight. When Spotlight has no date, it's estimated from the newest change to the app's own bundle-ID files, and shown with `~`. Apps with no date at all are never counted as unused.
 

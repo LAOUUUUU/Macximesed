@@ -347,6 +347,11 @@ public struct FileChecker: Sendable {
             add(
                 downloaded ? "adhoc-downloaded" : "adhoc", downloaded ? .high : .medium,
                 "Ad-hoc signed (no developer identity)\(downloaded ? ", and it was downloaded" : "")")
+        case .selfSigned(let name)?:
+            add(
+                downloaded ? "self-signed-downloaded" : "self-signed", downloaded ? .high : .medium,
+                "Self-signed (\(name), no Apple developer team: anyone can make such a certificate)"
+                    + (downloaded ? ", and it was downloaded" : ""))
         case .unsigned?:
             add(
                 downloaded ? "unsigned-downloaded" : "unsigned", downloaded ? .high : .medium,
