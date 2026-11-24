@@ -4,7 +4,8 @@
 Sources:
   1. data/hashes/*.tsv in the repo (sha256 <TAB> family <TAB> source), curated by hand.
   2. abuse.ch MalwareBazaar, by tag, when MALWAREBAZAAR_KEY is set (free key from auth.abuse.ch).
-     Only Mach-O, disk image, package and app archive samples are kept.
+     Only Mach-O, disk image, package and app archive samples are kept; for tags that only name macOS malware,
+     zipped apps and shell loaders too. Plus every recent Mach-O and disk image sample (get_file_type).
 The workflow puts this file's SHA-256 into the signed channel, so the feed can't be changed on its own.
 """
 import collections, datetime, glob, json, os, re, sys, time, urllib.parse, urllib.request
@@ -12,6 +13,14 @@ import collections, datetime, glob, json, os, re, sys, time, urllib.parse, urlli
 HEX = re.compile(r"^[0-9a-f]{64}$")
 TAGS = ["AtomicStealer", "AMOS", "Atomic", "MacStealer", "Banshee", "Cuckoo", "Poseidon", "PoseidonStealer", "MetaStealer", "RustBucket", "macos"]
 MAC_TYPES = {"macho", "mach-o", "dmg", "pkg", "app", "zip-app", "applescript", "scpt"}
+# Tags that only ever name macOS malware: their zipped apps and shell loaders count too. Mixed tags (MetaStealer is
+# mostly Windows) keep only the file types above.
+MAC_ONLY_TAGS = {"AtomicStealer", "AMOS", "Banshee", "Cuckoo", "Poseidon", "PoseidonStealer", "MacStealer", "RustBucket", "macos"}
+MAC_ONLY_EXTRA = {"zip", "sh", "osascript"}
+# Every recent sample of these types, however it was tagged.
+FILE_TYPES = ["macho", "dmg"]
+# Big answers time out at the gateway (502), so a query that fails is asked again for fewer samples.
+LIMITS = ["1000", "250", "100", "50"]
 
 def curated(root):
     out = {}
@@ -26,40 +35,45 @@ def curated(root):
             out[parts[0].lower()] = {"family": parts[1], "source": parts[2]}
     return out
 
-def ask(body, key, tag):
-    """One MalwareBazaar query, retried: its API answers 502 under load, and one bad moment shouldn't thin the feed."""
-    req = urllib.request.Request("https://mb-api.abuse.ch/api/v1/", data=body, headers={"Auth-Key": key, "User-Agent": "macximesed-feed"})
-    for attempt in range(4):
+def ask(params, key, label):
+    """One MalwareBazaar query. On an error (its gateway answers 502 when the answer is large) it waits and asks again
+    for fewer samples, so one bad moment or one big tag doesn't thin the feed."""
+    for attempt, limit in enumerate(LIMITS):
+        body = urllib.parse.urlencode({**params, "limit": limit}).encode()
+        req = urllib.request.Request("https://mb-api.abuse.ch/api/v1/", data=body, headers={"Auth-Key": key, "User-Agent": "macximesed-feed"})
         try:
-            return json.load(urllib.request.urlopen(req, timeout=60))
-        except Exception as e:  # one tag failing shouldn't stop the feed
-            if attempt == 3:
-                print(f"MalwareBazaar tag {tag}: gave up after 4 tries ({e})", file=sys.stderr)
+            return json.load(urllib.request.urlopen(req, timeout=90))
+        except Exception as e:  # one query failing shouldn't stop the feed
+            if attempt == len(LIMITS) - 1:
+                print(f"MalwareBazaar {label}: gave up after {len(LIMITS)} tries ({e})", file=sys.stderr)
                 return None
+            print(f"MalwareBazaar {label}: {e}, asking for {LIMITS[attempt + 1]}", file=sys.stderr)
             time.sleep(5 * (attempt + 1))
 
 def bazaar(key):
     out = {}
     dropped = collections.Counter()
-    for tag in TAGS:
-        body = urllib.parse.urlencode({"query": "get_taginfo", "tag": tag, "limit": "1000"}).encode()
-        data = ask(body, key, tag)
+    queries = [({"query": "get_taginfo", "tag": t}, f"tag {t}", t in MAC_ONLY_TAGS, t) for t in TAGS]
+    queries += [({"query": "get_file_type", "file_type": f}, f"file type {f}", True, f) for f in FILE_TYPES]
+    for params, label, mac_only, name in queries:
+        data = ask(params, key, label)
         if data is None:
             continue
         if data.get("query_status") != "ok":
-            print(f"MalwareBazaar tag {tag}: {data.get('query_status')}", file=sys.stderr)
+            print(f"MalwareBazaar {label}: {data.get('query_status')}", file=sys.stderr)
             continue
         samples = data.get("data", [])
+        allowed = MAC_TYPES | (MAC_ONLY_EXTRA if mac_only else set())
         kept = 0
         for s in samples:
             h = (s.get("sha256_hash") or "").lower()
             kind = (s.get("file_type") or "").lower()
-            if HEX.match(h) and kind in MAC_TYPES:
-                out[h] = {"family": s.get("signature") or tag, "source": f"MalwareBazaar ({tag})"}
+            if HEX.match(h) and kind in allowed:
+                out.setdefault(h, {"family": s.get("signature") or name, "source": f"MalwareBazaar ({name})"})
                 kept += 1
             else:
                 dropped[kind or "?"] += 1
-        print(f"MalwareBazaar tag {tag}: {len(samples)} samples, {kept} kept", file=sys.stderr)
+        print(f"MalwareBazaar {label}: {len(samples)} samples, {kept} kept", file=sys.stderr)
     if dropped:
         print("Not macOS file types, left out: " + ", ".join(f"{k} {n}" for k, n in dropped.most_common(12)), file=sys.stderr)
     return out
