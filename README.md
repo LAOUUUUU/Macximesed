@@ -283,7 +283,7 @@ A list of SHA-256 hashes of known macOS malware, published on GitHub Pages at `f
 
 The signed channel file it came with is saved next to it (`hashfeed-channel.json` and `.sig`). The background watch runs as root but reads this folder, which is yours, so it checks the signature and the feed's hash again before using it, and refuses an older signed feed in place of a newer one. Something running as you can't empty or swap the feed to blind it. The watch looks for a newer feed every minute, with no restart.
 
-The feed is built at release time from [`data/hashes/curated.tsv`](data/hashes/curated.tsv) plus, when the `MALWAREBAZAAR_KEY` secret is set, abuse.ch MalwareBazaar's recent macOS samples. Only hashes are stored; no samples.
+The feed is built at release time from [`data/hashes/curated.tsv`](data/hashes/curated.tsv) plus, when the `MALWAREBAZAAR_KEY` secret is set, abuse.ch MalwareBazaar's recent macOS samples. Only hashes are stored; no samples. To set the key, get a free Auth-Key at [auth.abuse.ch](https://auth.abuse.ch) and run `scripts/release/set-malwarebazaar-key.sh`: it asks for the key without showing it, checks it with one lookup, and saves it in the `release` environment through `gh`.
 
 ## Install a release
 Each [release](https://github.com/LAOUUUUU/Macximesed/releases) has a universal `macx` (Apple silicon and Intel) with a SHA-256 file. The binary isn't signed yet, so after checking the hash:
