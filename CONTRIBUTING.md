@@ -32,7 +32,7 @@ Run your build with `.build/debug/macx <command>`. Development builds keep your 
 
 ## Rules the code must keep
 - **No guessing.** Decide from facts the system reports: bundle IDs in Spotlight's index, a tool's own answer about its cache path, open files from libproc, code signatures from the Security framework. Never decide from what a name looks like. If the owner can't be established, say "unknown owner" and leave it out by default.
-- **Nothing is deleted directly.** Cleanups and uninstalls move files into the undo store (`UndoStore`). Only `macx undo purge` deletes, and it asks first.
+- **Nothing is deleted directly.** Cleanups and uninstalls move files into the undo store (`UndoStore`). Only `macx undo purge` and `macx undo empty` (Clean > *Empty undo folder* in the app) delete, and they ask first.
 - **Higher tiers ask more.** Safe asks once, Risky and Extreme ask three times and come with an undo. Nothing below Extreme touches SIP, Gatekeeper, XProtect, FileVault or the firewall.
 - **No privacy popups.** Without Full Disk Access, don't read anything `PrivacyPolicy` guards.
 - **Works on any Mac.** Don't hardcode folder layouts that can differ: ask the system, or fall back to standard locations and say so. Run system tools through `ProcessRunner` (C locale). Think about Intel Macs and macOS 15.

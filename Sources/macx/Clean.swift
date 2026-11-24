@@ -26,7 +26,7 @@ func askYes(_ question: String) -> Bool {
 
 struct Clean: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Free space. Everything is moved to the undo folder first; nothing is deleted."
+        abstract: "Free space. Caches and logs move to the undo folder; only macx undo empty or purge deletes them for good."
     )
 
     @Option(name: .shortAndLong, help: "Risk level: safe (only safe is built so far).")
@@ -83,7 +83,7 @@ struct Clean: ParsableCommand {
         if !batch.failed.isEmpty {
             print("Could not move \(batch.failed.count) paths (in use or no permission); they were left alone.")
         }
-        print("The space comes back when the batch is purged: macx undo purge (batches older than 7 days).")
+        print("The space comes back once it's deleted for good: macx undo empty (everything) or macx undo purge (older than 7 days).")
     }
 }
 

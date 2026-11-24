@@ -376,7 +376,8 @@ struct CleanView: View {
                 label: "Clean",
                 headline: model.cleanItems == nil
                     ? "Measuring…" : (total == 0 ? "Nothing chosen." : "\(formatBytes(total)) can go."),
-                sentence: note ?? "Caches and logs that apps rebuild. Everything moves to the undo store first; nothing is deleted."
+                sentence: note
+                    ?? "Caches and logs that apps rebuild. Cleaning moves them to the undo folder, where Undo can put them back. Only Empty undo folder deletes them for good."
             ) {
                 if let lastBatch {
                     Button("Undo last clean") { undo(lastBatch) }.buttonStyle(PlainButtonStyle())

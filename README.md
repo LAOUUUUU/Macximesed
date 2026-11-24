@@ -219,7 +219,7 @@ Signatures are read with the Security framework (`anchor apple`, team ID, ad-hoc
 
 **Last used:** this comes from Spotlight. When Spotlight has no date, it's estimated from the newest change to the app's own bundle-ID files, and shown with `~`. Apps with no date at all are never counted as unused.
 
-Cleaned items go to `~/Library/Application Support/Macximesed/Undo/<batch>/`, with a `manifest.json` per batch. Disk space only comes back after `macx undo purge`.
+Cleaned items go to `~/Library/Application Support/Macximesed/Undo/<batch>/`, with a `manifest.json` per batch. Disk space only comes back once they're deleted for good, by `macx undo empty`, `macx undo purge` or Clean > *Empty undo folder* in the app.
 
 ## Tests and checks
 ```bash
