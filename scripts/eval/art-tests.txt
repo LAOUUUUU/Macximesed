@@ -1,0 +1,76 @@
+# Atomic Red Team tests for Macximesed (atomics pinned at a0e3f9bc69fe, see research/independent-testing/PLAN.md).
+# Written BEFORE the first run, from each test's real commands. One test per line:
+#   TECHNIQUE  TEST#  WANT  [note]
+# WANT is what a good antivirus should report:
+#   rule[,rule...]  caught if the watch logs any of these rules during the test (a rule macx doesn't have yet
+#                   is still listed: that's an honest miss)
+#   persist         caught if `macx persist --diff` (as the user or with sudo) shows a new item
+#   -               should stay quiet: any alert at medium or above is a false alarm
+#   ?               informational only, not scored
+
+# Getting in: script-made password boxes, decode-and-run, download-and-run
+T1056.002 1 password-prompt                      AppleScript password box in System Preferences
+T1056.002 3 password-prompt                      osascript dialog "with hidden answer"
+T1059.002 1 base64-to-shell                      osascript runs python exec(base64.b64decode(...))
+T1059.004 2 download-to-shell                    curl ... | bash
+T1140     10 base64-to-shell                     python decodes (base64 + XOR) and runs a command
+T1027     1 exec-from-hidden-or-temp             base64 -d into /tmp/art.sh, then runs it
+T1140     3 -                                    python decodes base64 and prints it
+T1140     4 -                                    perl decodes base64 and prints it
+T1140     5 -                                    base64 -d to the screen and to a file
+T1140     8 -                                    xxd -r hex to the screen and to a file
+T1105     14 -                                   whois used to fetch a file (download alone)
+T1105     31 -                                   nscurl download (download alone)
+T1059.004 1 -                                    writes and runs a small shell script that pings
+
+# Stealing: keychain, browser data (macx has no file-read rule yet: these are expected misses)
+T1555.001 1 keychain-read                        security dump-keychain (root)
+T1555.001 2 keychain-read                        security find-certificate -a -p
+T1555.001 4 keychain-read                        cat login.keychain-db
+T1555.003 2 browser-data-read                    grep in Safari Cookies.binarycookies
+T1555.003 14 browser-data-read                   cp Chrome Login Data to /tmp
+T1555.003 18 browser-data-read                   sqlite3 query of Chrome Login Data
+T1560.001 13 ?                                   ditto zip of a sensitive folder (AMOS zips its loot)
+T1560.001 5 -                                    zip files
+T1560.001 7 -                                    tar a folder
+T1113     1 ?                                    screencapture
+T1113     2 ?                                    screencapture -x (silent)
+
+# Dodging analysis
+T1497.001 4 vm-check                             ioreg grep for VirtualBox/VMware/Parallels
+T1497.001 6 vm-check                             sysctl -n hw.model | grep -v Mac
+T1497.001 8 vm-check                             system_profiler Model Identifier | grep -v Mac
+T1497.001 7 ?                                    csrutil status
+T1553.001 1 quarantine-strip,quarantine-removed  xattr -d com.apple.quarantine
+T1518.001 3 -                                    ps aux | egrep for security tools
+
+# Staying: launch items, login items, cron, shell files, sudoers, accounts
+T1543.001 1 new-launch-item,persist              user LaunchAgent loaded with launchctl
+T1543.001 3 new-launch-item,persist              /Library/LaunchAgents
+T1543.004 1 new-launch-item,persist              /Library/LaunchDaemons
+T1543.001 2 persist                              emond client (emond is gone on recent macOS)
+T1569.001 1 new-launch-item                      launchctl submit
+T1547.015 2 new-background-item,persist          login item added with AppleScript
+T1037.005 1 persist                              /Library/StartupItems file
+T1037.005 2 persist                              StartupItems script + launch daemon
+T1037.005 3 persist                              StartupItems script + launch agent
+T1053.003 1 persist                              crontab replaced
+T1053.003 2 persist                              scripts in /etc/cron.* folders
+T1546.004 1 persist                              command added to ~/.bash_profile
+T1546.004 2 persist                              command added to ~/.bashrc
+T1548.003 3 persist                              sudoers: unlimited sudo cache
+T1548.003 5 persist                              sudoers: tty_tickets off
+T1548.003 1 -                                    sudo -l and reading sudoers
+T1564.002 1 account-created                      hidden user (UniqueID < 500)
+T1564.002 2 account-created                      hidden user (IsHidden)
+T1136.001 3 account-created                      new local user with dscl
+T1574.006 3 dyld-injection,code-injection        DYLD_INSERT_LIBRARIES on a program
+T1546.005 1 ?                                    trap EXIT in bash
+T1546.005 3 ?                                    trap SIGINT in bash
+T1546.005 5 ?                                    trap DEBUG logging commands
+T1564.001 1 -                                    hidden file in a hidden folder (made, not run)
+T1564.001 5 -                                    setfile -a V
+T1564.001 6 -                                    chflags hidden
+T1548.001 3 ?                                    setuid bit on a file
+T1548.001 5 ?                                    setgid bit on a file
+T1115     3 -                                    pbcopy, then run what's on the clipboard
