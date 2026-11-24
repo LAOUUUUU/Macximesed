@@ -384,8 +384,21 @@ public struct PersistenceRoots: Sendable {
         self.home = home
     }
 
+    /// Under `sudo`, the home of the user who ran it: root's own home has none of their launch agents, shell
+    /// files or hidden folders, which is where user-level malware lives.
     public static var current: PersistenceRoots {
-        PersistenceRoots(system: URL(fileURLWithPath: "/"), home: FileManager.default.homeDirectoryForCurrentUser)
+        let home =
+            invokingUser(euid: geteuid(), environment: ProcessInfo.processInfo.environment)?.home
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        return PersistenceRoots(system: URL(fileURLWithPath: "/"), home: home)
+    }
+
+    /// The user behind `sudo` (SUDO_USER), when running as root for someone else.
+    public static func invokingUser(euid: uid_t, environment: [String: String]) -> (name: String, home: URL)? {
+        guard euid == 0, let name = environment["SUDO_USER"], !name.isEmpty, name != "root",
+            let pw = getpwnam(name), let dir = pw.pointee.pw_dir
+        else { return nil }
+        return (name, URL(fileURLWithPath: String(cString: dir)))
     }
 }
 
@@ -448,8 +461,15 @@ public enum PersistenceScanner {
     }
 
     /// Everything, from the real Mac. Login items and background tasks need root; the rest doesn't.
+    /// `crontab` arguments: root's own, and under sudo also the invoking user's.
+    static func crontabCommands(sudoUser: String?) -> [[String]] {
+        [["-l"]] + (sudoUser.map { [["-u", $0, "-l"]] } ?? [])
+    }
+
     public static func current(runner: CommandRunner = ProcessRunner()) -> [PersistenceItem] {
-        let cron = try? runner.run("/usr/bin/crontab", ["-l"])
+        let sudoUser = PersistenceRoots.invokingUser(euid: geteuid(), environment: ProcessInfo.processInfo.environment)?.name
+        let tables = crontabCommands(sudoUser: sudoUser).compactMap { try? runner.run("/usr/bin/crontab", $0) }
+        let cron: String? = tables.isEmpty ? nil : tables.joined(separator: "\n")
         let (btm, note) = BTMParser.currentWithNote()
         if let note { FileHandle.standardError.write(Data("macx: \(note)\n".utf8)) }
         let profiles = ConfigurationProfiles.current()

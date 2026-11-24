@@ -397,3 +397,27 @@ struct CodeSignatureTests {
         #expect(CodeSignatureChecker().check(bin.path) == .adHoc)
     }
 }
+
+@Suite("sudo macx persist checks the user who ran sudo")
+struct PersistInvokingUserTests {
+    @Test func usesTheSudoUsersHome() throws {
+        let me = try #require(getpwuid(getuid())).pointee
+        let name = String(cString: me.pw_name)
+        let home = String(cString: me.pw_dir)
+        let u = try #require(PersistenceRoots.invokingUser(euid: 0, environment: ["SUDO_USER": name]))
+        #expect(u.name == name)
+        #expect(u.home.path == home)
+    }
+
+    @Test func notUnderSudoOrForRootItselfThereIsNone() {
+        #expect(PersistenceRoots.invokingUser(euid: 501, environment: ["SUDO_USER": "someone"]) == nil)
+        #expect(PersistenceRoots.invokingUser(euid: 0, environment: [:]) == nil)
+        #expect(PersistenceRoots.invokingUser(euid: 0, environment: ["SUDO_USER": "root"]) == nil)
+        #expect(PersistenceRoots.invokingUser(euid: 0, environment: ["SUDO_USER": "no-such-user-macx"]) == nil)
+    }
+
+    @Test func readsBothCrontabsUnderSudo() {
+        #expect(PersistenceScanner.crontabCommands(sudoUser: "lao") == [["-l"], ["-u", "lao", "-l"]])
+        #expect(PersistenceScanner.crontabCommands(sudoUser: nil) == [["-l"]])
+    }
+}
