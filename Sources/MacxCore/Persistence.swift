@@ -324,6 +324,12 @@ public enum CommandPattern: String, Codable, Sendable, CaseIterable {
     case passwordPrompt = "password-prompt"
     case passwordCheck = "password-check"
     case vmCheck = "vm-check"
+    /// Reading the keychain from a command line: dumping it, copying its file, or asking for a browser's Safe Storage key.
+    case keychainRead = "keychain-read"
+    /// Copying or querying a browser's saved passwords, cookies or card data from a command line.
+    case browserDataRead = "browser-data-read"
+    /// A background job started with `launchctl submit`: no launch file, so nothing to find later.
+    case launchctlSubmit = "new-launch-item"
 
     public var title: String {
         switch self {
@@ -333,13 +339,17 @@ public enum CommandPattern: String, Codable, Sendable, CaseIterable {
         case .passwordPrompt: "Shows a script-made password box"
         case .passwordCheck: "Checks a password with dscl (how stealers verify a stolen password)"
         case .vmCheck: "Checks whether it's running in a virtual machine (how AMOS dodges analysis)"
+        case .keychainRead: "Reads the keychain from a command line (dumps it, copies its file or takes a browser's key)"
+        case .browserDataRead: "Copies or reads a browser's saved passwords or cookies"
+        case .launchctlSubmit: "Starts a background job with launchctl submit (it leaves no launch file behind)"
         }
     }
 
     /// Quarantine stripping and VM checks have rare honest uses; the rest are how stealers get in.
     public var severity: Severity {
         switch self {
-        case .quarantineStrip, .vmCheck: .high
+        case .launchctlSubmit: .medium
+        case .quarantineStrip, .vmCheck, .keychainRead, .browserDataRead: .high
         case .downloadToShell, .base64ToShell, .passwordPrompt, .passwordCheck: .critical
         }
     }
@@ -352,13 +362,29 @@ public enum CommandPatterns {
         (.downloadToShell, #"(?:\#(shells))\s+<\(\s*(?:curl|wget)\b"#),
         (.downloadToShell, #"\beval\s+["']?\$\(\s*(?:curl|wget)\b"#),
         (.base64ToShell, #"\bbase64\s+(?:-[dD]\b|--decode\b)[^|;\n]*\|\s*(?:sudo\s+)?(?:/\S*/)?(?:\#(shells))\b"#),
+        // Python, Perl and Ruby: exec/eval of decoded code, or decoding and handing the result to a shell.
+        (.base64ToShell, #"\b(?:exec|eval)\s*\(\s*(?:[\w.]+\.)?(?:b64decode|decodebytes|decode_base64|decode64|unhexlify)\s*\("#),
+        (.base64ToShell, #"\bb64decode\b[\s\S]{0,400}?\b(?:subprocess\.(?:call|run|Popen|check_output)|os\.(?:system|popen))\s*\("#),
         (.quarantineStrip, #"\bxattr\b[^;|\n]*(?:-[a-z]*d[a-z]*\s+com\.apple\.quarantine|-[a-z]*c[a-z]*r|-[a-z]*r[a-z]*c)\b"#),
         (.passwordPrompt, #"\bosascript\b.*\bdisplay dialog\b.*\bhidden answer\b"#),
         (.passwordCheck, #"\bdscl\s+\.\s+-authonly\b"#),
         // A hardware query and a VM name close together, in either order.
         (.vmCheck, #"\b(?:system_profiler|ioreg|sysctl\s+(?:-n\s+)?hw\.model)\b[\s\S]{0,300}?\#(vmNames)"#),
         (.vmCheck, #"\#(vmNames)[\s\S]{0,300}?\b(?:system_profiler|ioreg|sysctl\s+(?:-n\s+)?hw\.model)\b"#),
+        // The model name, kept only when it isn't a Mac's: a real Mac always says Mac.
+        (.vmCheck, #"\b(?:sysctl\s+(?:-n\s+)?hw\.model|system_profiler\s+SPHardwareDataType)\b[^;\n]{0,160}?\|\s*grep\s+-v\s+['"]?Mac\b"#),
+        (.keychainRead, #"\bsecurity\s+dump-keychain\b"#),
+        (.keychainRead, #"\bsecurity\s+find-generic-password\b[^;|\n]*Safe Storage"#),
+        (.keychainRead, #"\b(?:\#(fileTools))\b[^;|\n]*Library/Keychains/"#),
+        (
+            .browserDataRead,
+            #"\b(?:\#(fileTools))\b[^;|\n]*(?:Login Data|Web Data|Cookies\.binarycookies|/Cookies["'\s]|key4\.db|logins\.json)"#
+        ),
+        (.launchctlSubmit, #"\blaunchctl\s+submit\b"#),
     ]
+
+    /// Programs that copy, pack, query or read files.
+    static let fileTools = #"cat|cp|ditto|zip|tar|rsync|scp|sqlite3|grep|strings|base64|xxd|head|tail|curl"#
 
     static let vmNames = #"(?:VMware|QEMU|VirtualBox|Parallels|\bKVM\b|Virtual\s*Machine|VirtualMac)"#
 

@@ -31,6 +31,8 @@ public struct ESEvent: Sendable, Equatable {
     public var process: ESProcessInfo?
     public var target: ESProcessInfo?
     public var args: [String] = []
+    /// For exec: the script an interpreter was started for through its #! line (es_event_exec_t.script).
+    public var script: String?
     public var filePath: String?
     public var sourcePath: String?
     public var extattr: String?
@@ -65,6 +67,7 @@ public struct ESEvent: Sendable, Equatable {
         case "exec":
             e.target = ESProcessInfo.parse(body["target"])
             e.args = (body["args"] as? [Any])?.compactMap { $0 as? String } ?? []
+            e.script = path(body["script"])
         case "create":
             e.filePath = destination(body)
         case "rename":
@@ -205,8 +208,7 @@ public struct WatchRules: Sendable {
             // Arguments are only code when a shell or interpreter runs them, or when the tool is the attack itself
             // (dscl -authonly, xattr -d quarantine). `macx check "curl|sh"` or a commit message is just text.
             let tool = ((e.target?.path ?? e.args.first ?? "") as NSString).lastPathComponent
-            let wanted: Set<CommandPattern>? =
-                Self.interpreters.contains(tool) ? nil : tool == "dscl" ? [.passwordCheck] : tool == "xattr" ? [.quarantineStrip] : []
+            let wanted: Set<CommandPattern>? = Self.interpreters.contains(tool) ? nil : Self.toolPatterns[tool] ?? []
             let code =
                 Self.interpreters.contains(tool)
                 ? e.args.map(ShellText.stripDataHeredocs).joined(separator: " ") : e.args.joined(separator: " ")
@@ -219,12 +221,23 @@ public struct WatchRules: Sendable {
             if let feed, let t = e.target, !t.isPlatform, let hash = hashes.hash(t.path), let name = try? feed.lookup(sha256: hash) {
                 add("known-malware", .critical, "A known malware program started", "\(name)\n  SHA-256 \(hash)\n  \(t.path)")
             }
-            if let t = e.target, t.isUnsignedThirdParty, Self.isHiddenOrTemp(t.path, home: h) {
+            if let t = e.target, t.isUnsignedThirdParty, let place = Self.hiddenOrTempPlace(t.path, home: h) {
                 if Self.isBuildFolder(t.path) {
                     add("exec-from-hidden-or-temp", .low, "A program you built ran from a developer build folder", t.path)
+                } else if place == .toolFolder {
+                    add(
+                        "exec-from-hidden-or-temp", .low,
+                        "An unsigned program ran from inside a hidden folder in your home (developer tools such as ~/.rustup live there)",
+                        t.path)
                 } else {
                     add("exec-from-hidden-or-temp", .high, "An unsigned program started from a hidden or temporary folder", t.path)
                 }
+            }
+            // A script run by its #! line: the program is the interpreter, so look at the script itself.
+            if let s = e.script, let place = Self.hiddenOrTempPlace(s, home: h), place != .toolFolder, !Self.isBuildFolder(s),
+                !Self.isInstallerSandbox(s)
+            {
+                add("exec-from-hidden-or-temp", .medium, "A script started from a hidden or temporary folder", s)
             }
 
         case "create", "rename":
@@ -287,10 +300,45 @@ public struct WatchRules: Sendable {
         ["/.build/", "/DerivedData/", "/Build/Products/"].contains { path.contains($0) }
     }
 
-    static func isHiddenOrTemp(_ path: String, home: String) -> Bool {
+    /// Programs whose own arguments are the attack (no shell involved): which patterns to look for in them.
+    static let toolPatterns: [String: Set<CommandPattern>] = {
+        var t: [String: Set<CommandPattern>] = [
+            "dscl": [.passwordCheck], "xattr": [.quarantineStrip], "security": [.keychainRead], "launchctl": [.launchctlSubmit],
+        ]
+        for tool in CommandPatterns.fileTools.split(separator: "|") { t[String(tool)] = [.keychainRead, .browserDataRead] }
+        return t
+    }()
+
+    enum HiddenPlace: Equatable {
+        /// /tmp, /Users/Shared, Downloads.
+        case temp
+        /// A hidden file or folder anywhere else: right in the home folder (~/.helper), in Application Support...
+        case hidden
+        /// Deep inside a hidden folder at the top of the home folder (~/.rustup/toolchains/.../bin/rustc), where
+        /// developer tools install themselves.
+        case toolFolder
+    }
+
+    static func hiddenOrTempPlace(_ path: String, home: String) -> HiddenPlace? {
         let temp = ["/tmp/", "/private/tmp/", "/private/var/tmp/", "/var/tmp/", "/Users/Shared/", "\(home)/Downloads/"]
-        if temp.contains(where: { path.hasPrefix($0) }) { return true }
-        return path.split(separator: "/").dropLast().contains { $0.hasPrefix(".") && $0 != "." && $0 != ".." }
+        if temp.contains(where: { path.hasPrefix($0) }) { return .temp }
+        let parts = path.split(separator: "/")
+        guard parts.contains(where: { $0.hasPrefix(".") && $0 != "." && $0 != ".." }) else { return nil }
+        let homeParts = home.split(separator: "/")
+        if path.hasPrefix(home + "/."), parts.count >= homeParts.count + 3, parts[homeParts.count].count > 1,
+            !parts.dropFirst(homeParts.count + 1).contains(where: { $0.hasPrefix(".") })
+        {
+            return .toolFolder
+        }
+        return .hidden
+    }
+
+    static func isHiddenOrTemp(_ path: String, home: String) -> Bool { hiddenOrTempPlace(path, home: home) != nil }
+
+    /// macOS Installer runs package scripts from its own sandbox in /private/tmp.
+    static func isInstallerSandbox(_ path: String) -> Bool {
+        path.hasPrefix("/private/tmp/PKInstallSandbox.") || path.hasPrefix("/tmp/PKInstallSandbox.")
+            || path.hasPrefix("/Library/InstallerSandboxes/")
     }
 
     /// Hides what follows `-authonly <user>` (the password being checked) and `-p`/`--password` values.

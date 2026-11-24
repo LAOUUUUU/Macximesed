@@ -236,7 +236,7 @@ Stealer sites and IP addresses change all the time, so a list is always out of d
 
 | | What | How macx uses it |
 |---|---|---|
-| **Observed, used** | `exec` (program starts, with arguments) | download-to-shell and base64 payloads, password prompts, `dscl -authonly`, unsigned programs from hidden or temp folders |
+| **Observed, used** | `exec` (program starts, with arguments) | download-to-shell and base64 payloads (including Python, Perl and Ruby `exec`/`eval` of decoded code), password prompts, `dscl -authonly`, VM checks, keychain dumps and copies (`security dump-keychain`, a browser's *Safe Storage* key, `cat`/`cp` of `~/Library/Keychains`), copies and queries of browser passwords and cookies (`Login Data`, `Cookies.binarycookies`), `launchctl submit` jobs, and unsigned programs or `#!` scripts from hidden or temp folders. A program deep inside a hidden folder at the top of your home (`~/.rustup/.../rustc`) is low, a hidden file right in your home (`~/.helper`, where AMOS puts its backdoor) is high |
 | | `create`, `rename` (new files) | new launch items, fake `com.apple.*` launch items, hidden `.com.apple.*` folders |
 | | `deleteextattr` | quarantine flag removed. High, unless a signed updater did it, or Gatekeeper (`spctl`, run off the event loop) accepts the file as notarized or Apple's, as with `brew upgrade` |
 | | `btm_launch_item_add` | new login or background items, checked for unsigned programs |
@@ -247,7 +247,7 @@ Stealer sites and IP addresses change all the time, so a list is always out of d
 | | `gatekeeper_user_override` | *Open Anyway* on something Gatekeeper blocked (medium; critical when its SHA-256 is in the malware feed) |
 | | `remote_thread_create` | code injected into another program (critical and frozen for an unsigned program, high for a signed one) |
 | | `screensharing_attach`, `openssh_login` | someone connected to your screen (high) or logged in over SSH (medium) |
-| **Observed, not used** | `open` | Too noisy to watch live, so keychain and browser-file reads are only seen through what the reading program does next. |
+| **Observed, not used** | `open` | Too noisy to watch live (88% CPU), so keychain and browser files are only seen being read when a command line names them. A stealer that opens them from its own code isn't seen until it does something else. |
 | | `setextattr`, `authentication`, `get_task`, `mmap`, others | Too frequent to watch live, or not yet in the rules. The newer events above are only asked for when this Mac's `eslogger --list-events` lists them, so an older macOS still starts the watch. |
 | **Prevented** | nothing | No auth events without Apple's entitlement. |
 | **Evidence** | every critical alert | A case is recorded right after the freeze, while the process still exists (see `macx incident`). Under sudo it's owned by you, not root. |
@@ -267,7 +267,7 @@ Each rule comes from how AMOS and similar stealers stay on a Mac:
 | `temp-location` | high | Runs from `/tmp`, `/Users/Shared` or Downloads |
 | `missing-program` | high for root autostart, else medium | Its program is gone: a leftover, or a payload that was removed |
 | `unsigned-program` / `adhoc-program` / `self-signed-program` | high for root, else medium | No signature, an ad-hoc one with no developer identity, or a self-signed certificate with no Apple developer team (anyone can make one) |
-| `download-to-shell`, `base64-to-shell`, `quarantine-strip`, `password-prompt`, `password-check` | high | Lines in shell startup files or cron that download and run code, decode hidden code, strip the quarantine flag, or ask for or check your password |
+| `download-to-shell`, `base64-to-shell`, `quarantine-strip`, `password-prompt`, `password-check`, `vm-check`, `keychain-read`, `browser-data-read`, `new-launch-item` | high | Lines in shell startup files or cron that download and run code, decode hidden code, strip the quarantine flag, ask for or check your password, check for a VM, read the keychain or a browser's passwords, or start a `launchctl submit` job |
 | `inline-script`, `hidden-support-folder`, `unreadable-plist` | medium | Worth a look |
 | `apple-label-outside-system` | low | An Apple-named item outside `/System` that runs an Apple binary directly |
 | `unreadable-program` | info | Root-only program whose signature can't be checked without `sudo` |
