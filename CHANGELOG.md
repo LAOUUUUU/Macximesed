@@ -4,6 +4,8 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
 ### Added
 - **Downloads watch:** the background watch checks every finished download in `~/Downloads` (browser temp names are understood, subfolders skipped) with the full file check, offline, on its own queue. *DON'T OPEN THIS* is quarantined automatically into an incident case and the undo store, owned by the user, with a notification. `macx undo restore` adds a restored download to an allow list, so it isn't quarantined again. `--no-downloads` turns it off.
 - **First-run setup** in the Mac app (research and design in `research/app-onboarding/RESEARCH.md`, approved 2026-11-24):

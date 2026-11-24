@@ -4,6 +4,9 @@ The job list: what is being built now and what comes next. Finished work moves t
 
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
+## 0.3.0 (2026-11-24)
+Released with the Mac app and menu bar, first-run setup, the light detonation chamber, Boost/top/tune/games, the Downloads watch (automatic quarantine), Intel support (not yet run on Intel hardware) and the false-alarm fixes. Evaluations on 3cab554: static 17/17 attacks flagged, 0/11 installers dangerous; runtime 7/7 alerted in 33–186 ms, frozen 5–7 ms after the alert. Open: macx used 370 MB idle in the runtime eval (the daemon sits at about 91 MB); not explained yet.
+
 ## Antivirus checklist: done, released as 0.2.0 (2026-11-24)
 Lao, 2026-11-23: "we release when the anti virus is fully built".
 

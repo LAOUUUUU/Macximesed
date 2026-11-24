@@ -41,6 +41,6 @@ body:
     id: versions
     attributes:
       label: macx and macOS versions
-      placeholder: "macx 0.2.0, macOS 27.0.1, Apple silicon"
+      placeholder: "macx 0.3.0, macOS 27.0.1, Apple silicon"
     validations:
       required: true
