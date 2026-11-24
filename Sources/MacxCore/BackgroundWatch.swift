@@ -80,6 +80,52 @@ public struct DaemonPlan {
     }
 }
 
+/// What the installed daemon was set up to do, read from its launchd plist. The plist is root-owned in
+/// /Library/LaunchDaemons, so anyone can read these settings and only root can change them: a stealer running as
+/// you can't switch the Downloads watch off.
+public struct DaemonSettings: Sendable, Equatable {
+    public var suspend: Bool
+    public var downloads: Bool
+
+    public init(suspend: Bool, downloads: Bool) {
+        self.suspend = suspend
+        self.downloads = downloads
+    }
+
+    /// Nil unless it's the plist `macx daemon install` writes (our label, running `macx watch`).
+    public init?(plist: [String: Any]) {
+        guard plist["Label"] as? String == DaemonPlan.label, let args = plist["ProgramArguments"] as? [String],
+            args.dropFirst().first == "watch"
+        else { return nil }
+        suspend = args.contains("--suspend")
+        downloads = !args.contains("--no-downloads")
+    }
+
+    public static func read(from url: URL = DaemonPlan.plistPath) -> DaemonSettings? {
+        guard let data = try? Data(contentsOf: url),
+            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return DaemonSettings(plist: plist)
+    }
+
+    /// The same plist with the Downloads watch switched on or off. Everything else (the program, the user,
+    /// freezing, launchd's keys) stays as installed.
+    public static func plist(_ plist: [String: Any], downloads: Bool) -> [String: Any]? {
+        guard DaemonSettings(plist: plist) != nil, var args = plist["ProgramArguments"] as? [String] else { return nil }
+        args.removeAll { $0 == "--no-downloads" }
+        if !downloads { args.append("--no-downloads") }
+        var out = plist
+        out["ProgramArguments"] = args
+        return out
+    }
+
+    /// `macx daemon install` writes a fresh plist. To change freezing, it must carry over a Downloads watch that
+    /// was switched off, or reinstalling would quietly turn it back on.
+    public static func installArguments(suspend: Bool, keeping current: DaemonSettings?) -> [String] {
+        ["daemon", "install"] + (suspend ? ["--suspend"] : []) + (current?.downloads == false ? ["--no-downloads"] : [])
+    }
+}
+
 /// What the daemon last said about itself, readable by anyone (no sudo needed for `macx daemon status`).
 public struct DaemonStatus: Codable, Sendable, Equatable {
     public enum State: String, Codable, Sendable { case starting, watching, refused, stopped }

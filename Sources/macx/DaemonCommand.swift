@@ -9,7 +9,7 @@ struct Daemon: ParsableCommand {
         discussion: """
             `sudo macx daemon install` sets up /Library/LaunchDaemons/\(DaemonPlan.label).plist, which runs Macximesed.app's own macx as `macx watch` from startup on. High and critical alerts show as notifications, and every alert is saved to ~/Library/Logs/Macximesed/watch.jsonl (see `macx alerts`). It needs Full Disk Access for Macximesed.app (macx privacy --open).
             """,
-        subcommands: [Install.self, Uninstall.self, Status.self, Restart.self, Pause.self, Resume.self],
+        subcommands: [Install.self, Uninstall.self, Status.self, Restart.self, Pause.self, Resume.self, Downloads.self],
         defaultSubcommand: Status.self
     )
 
@@ -150,6 +150,47 @@ struct Daemon: ParsableCommand {
         }
     }
 
+    struct Downloads: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Show, or turn on or off, the check of finished downloads in ~/Downloads.",
+            discussion: """
+                `macx daemon downloads` shows the setting (no sudo). `sudo macx daemon downloads on|off` changes it in the root-owned launchd plist and restarts the watch. Only root can change it, so nothing running as you can switch it off.
+                """
+        )
+        enum Setting: String, ExpressibleByArgument, CaseIterable { case on, off }
+        @Argument(help: "on or off. Leave it out to see the current setting.") var setting: Setting?
+
+        func run() throws {
+            let path = DaemonPlan.plistPath
+            guard let data = try? Data(contentsOf: path),
+                let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+            else { throw UserError("The background watch isn't installed (sudo macx daemon install).") }
+            guard let current = DaemonSettings(plist: plist) else {
+                throw UserError("\(path.path) isn't the plist macx writes. Reinstall it: sudo macx daemon install")
+            }
+            guard let setting else {
+                print("Downloads watch: \(current.downloads ? "on" : "off (turn it on: sudo macx daemon downloads on)")")
+                return
+            }
+            try requireRoot("downloads \(setting.rawValue)")
+            let on = setting == .on
+            guard on != current.downloads else {
+                print("The Downloads watch is already \(setting.rawValue).")
+                return
+            }
+            guard let updated = DaemonSettings.plist(plist, downloads: on) else { throw UserError("Couldn't change \(path.path).") }
+            let out = try PropertyListSerialization.data(fromPropertyList: updated, format: .xml, options: 0)
+            unload()
+            try out.write(to: path, options: .atomic)
+            chown(path.path, 0, 0)
+            chmod(path.path, 0o644)
+            try load()
+            print("Downloads watch: \(setting.rawValue). The background watch restarted with it.")
+            Thread.sleep(forTimeInterval: 4)
+            Status.show()
+        }
+    }
+
     struct Status: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Is the background watch running, and what did it last say?")
         func run() throws { Status.show() }
@@ -173,6 +214,10 @@ struct Daemon: ParsableCommand {
                 if info.status != 0 { print("  Start it: sudo macx daemon restart") }
             }
             if let until = WatchPause.activeUntil() { print("  Paused until \(WatchState.clock(until)) (sudo macx daemon resume)") }
+            if let settings = DaemonSettings.read() {
+                let (now, other) = settings.downloads ? ("on", "off") : ("off", "on")
+                print("  Downloads watch: \(now) (sudo macx daemon downloads \(other))")
+            }
             if let user = WatchUser.resolve() ?? WatchUser.lookup(NSUserName()) {
                 print(
                     "  Notifications: \(AppPresence.isAppRunning(userUID: user.uid) ? "shown by the Macximesed app (open)" : "shown through osascript (the app isn't open)")"

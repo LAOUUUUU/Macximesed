@@ -22,6 +22,7 @@ final class AppModel {
     var pid: Int?
     var installed = false
     var freezesOnCritical = false
+    var downloadsWatched = true
     var fullDiskAccess = false
     var records: [AlertRecord] = []
     var expected = ExpectedPrograms()
@@ -94,6 +95,7 @@ final class AppModel {
         installed = s.installed
         pid = s.info.pid
         freezesOnCritical = s.suspend
+        downloadsWatched = s.downloads
         fullDiskAccess = s.fullDiskAccess
         let next = WatchState.derive(
             installed: s.installed, running: s.info.state == "running", status: s.status, pausedUntil: s.pausedUntil, now: Date())
@@ -210,8 +212,14 @@ final class AppModel {
         runAdmin(["daemon", "pause", "--for", duration], why: "pause the background watch")
     }
     func resume() { runAdmin(["daemon", "resume"], why: "turn the background watch back on") }
+    /// Also how the Freeze switch changes freezing: a reinstall, which keeps a switched-off Downloads watch off.
     func install(suspend: Bool) {
-        runAdmin(["daemon", "install"] + (suspend ? ["--suspend"] : []), why: "install the background watch")
+        let current = installed ? DaemonSettings(suspend: freezesOnCritical, downloads: downloadsWatched) : nil
+        runAdmin(DaemonSettings.installArguments(suspend: suspend, keeping: current), why: "install the background watch")
+    }
+    /// The setting lives in the root-owned launchd plist, so changing it takes the administrator password.
+    func setDownloads(_ on: Bool) {
+        runAdmin(["daemon", "downloads", on ? "on" : "off"], why: "turn the Downloads watch \(on ? "on" : "off")")
     }
     func uninstall() { runAdmin(["daemon", "uninstall"], why: "remove the background watch") }
     func restart() { runAdmin(["daemon", "restart"], why: "restart the background watch") }
@@ -240,6 +248,7 @@ struct DaemonSnapshot: Sendable {
     var status: DaemonStatus?
     var pausedUntil: Date?
     var suspend: Bool
+    var downloads: Bool
     var fullDiskAccess: Bool
 
     static func take() -> DaemonSnapshot {
@@ -258,10 +267,11 @@ struct DaemonSnapshot: Sendable {
         }
         let plist = (try? Data(contentsOf: DaemonPlan.plistPath))
             .flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] }
-        let args = plist?["ProgramArguments"] as? [String] ?? []
+        let settings = plist.flatMap(DaemonSettings.init(plist:))
         return DaemonSnapshot(
             installed: plist != nil, info: info, status: DaemonStatus.read(), pausedUntil: WatchPause.activeUntil(),
-            suspend: args.contains("--suspend"), fullDiskAccess: PrivacyPolicy.probeFullDiskAccess())
+            suspend: settings?.suspend ?? false, downloads: settings?.downloads ?? true,
+            fullDiskAccess: PrivacyPolicy.probeFullDiskAccess())
     }
 }
 

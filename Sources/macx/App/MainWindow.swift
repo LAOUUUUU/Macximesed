@@ -362,7 +362,8 @@ struct SettingsView: View {
                             HStack(spacing: 4) {
                                 Text(watchSentence).font(Fonts.sans(14))
                                 InfoButton(
-                                    text: "Install, Restart and Uninstall each ask for your administrator password.",
+                                    text:
+                                        "Install, Restart, Uninstall and the two switches below each ask for your administrator password.",
                                     detail: DaemonPlan.plistPath.path + (model.pid.map { " · pid \($0)" } ?? ""))
                             }
                             HStack(spacing: 8) {
@@ -383,6 +384,19 @@ struct SettingsView: View {
                                     }
                                 }
                                 .padding(.top, 6)
+                                .disabled(model.busy)
+                                HStack(spacing: 4) {
+                                    Text("Check finished downloads in ~/Downloads")
+                                    InfoButton(
+                                        text:
+                                            "A download judged DON'T OPEN THIS is quarantined into an incident case and the undo folder. The switch is kept where only root can change it, so nothing running as you can turn it off.",
+                                        detail: "sudo macx daemon downloads on|off")
+                                    Spacer()
+                                    TwoState(label: "Downloads watch", isOn: model.downloadsWatched) { on in
+                                        if on != model.downloadsWatched { model.setDownloads(on) }
+                                    }
+                                }
+                                .disabled(model.busy)
                             }
                         }
                     }

@@ -116,4 +116,54 @@ struct DownloadDaemonTests {
         #expect(!(try DaemonPlan(executable: exe, user: user, suspend: true).arguments.contains("--no-downloads")))
         #expect(try DaemonPlan(executable: exe, user: user, suspend: true, downloads: false).arguments.contains("--no-downloads"))
     }
+
+    let user = WatchUser(name: "v", uid: 501, gid: 20, home: URL(fileURLWithPath: "/Users/v"))
+    let exe = URL(fileURLWithPath: "/Users/v/Applications/Macximesed.app/Contents/MacOS/macx")
+
+    /// The setting is read from the root-owned launchd plist the daemon was installed with: anyone can read it.
+    @Test func settingsAreReadFromTheInstalledPlist() throws {
+        let on = DaemonSettings(plist: try DaemonPlan(executable: exe, user: user, suspend: true).plist)
+        #expect(on == DaemonSettings(suspend: true, downloads: true))
+        let off = DaemonSettings(plist: try DaemonPlan(executable: exe, user: user, suspend: false, downloads: false).plist)
+        #expect(off == DaemonSettings(suspend: false, downloads: false))
+        #expect(DaemonSettings(plist: ["Label": "com.example.other", "ProgramArguments": ["/bin/sh"]]) == nil)
+        #expect(DaemonSettings(plist: ["Label": DaemonPlan.label]) == nil)
+    }
+
+    @Test func settingsAreReadFromAFile() throws {
+        let tmp = try TempDir()
+        let file = tmp.url.appendingPathComponent("watch.plist")
+        try DaemonPlan(executable: exe, user: user, suspend: false, downloads: false).plistData().write(to: file)
+        #expect(DaemonSettings.read(from: file)?.downloads == false)
+        #expect(DaemonSettings.read(from: tmp.url.appendingPathComponent("missing.plist")) == nil)
+    }
+
+    /// `sudo macx daemon downloads on|off` rewrites only the Downloads switch: freezing, the program, the user and
+    /// every other key stay as installed.
+    @Test func switchingDownloadsKeepsEverythingElse() throws {
+        let installed = try DaemonPlan(executable: exe, user: user, suspend: true).plist
+        let off = try #require(DaemonSettings.plist(installed, downloads: false))
+        #expect(off["ProgramArguments"] as? [String] == [exe.path, "watch", "--background", "--suspend", "--no-downloads"])
+        #expect(DaemonSettings(plist: off) == DaemonSettings(suspend: true, downloads: false))
+        #expect((off["EnvironmentVariables"] as? [String: String])?["MACX_USER"] == "v")
+        #expect(Set(off.keys) == Set(installed.keys))
+
+        let again = try #require(DaemonSettings.plist(off, downloads: false))
+        #expect((again["ProgramArguments"] as? [String])?.filter { $0 == "--no-downloads" }.count == 1)
+
+        let on = try #require(DaemonSettings.plist(off, downloads: true))
+        #expect(on["ProgramArguments"] as? [String] == [exe.path, "watch", "--background", "--suspend"])
+        #expect(DaemonSettings.plist(["Label": "com.example.other"], downloads: false) == nil)
+    }
+
+    /// The app's Freeze switch reinstalls the daemon; that must not turn a switched-off Downloads watch back on.
+    @Test func reinstallingForFreezingKeepsTheDownloadsSetting() {
+        let off = DaemonSettings(suspend: true, downloads: false)
+        #expect(DaemonSettings.installArguments(suspend: false, keeping: off) == ["daemon", "install", "--no-downloads"])
+        #expect(
+            DaemonSettings.installArguments(suspend: true, keeping: DaemonSettings(suspend: false, downloads: true)) == [
+                "daemon", "install", "--suspend",
+            ])
+        #expect(DaemonSettings.installArguments(suspend: true, keeping: nil) == ["daemon", "install", "--suspend"])  // a first install
+    }
 }
