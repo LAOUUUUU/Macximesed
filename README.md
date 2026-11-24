@@ -188,7 +188,7 @@ Stealer sites and IP addresses change all the time, so a list is always out of d
 |---|---|---|
 | **Observed, used** | `exec` (program starts, with arguments) | download-to-shell and base64 payloads, password prompts, `dscl -authonly`, unsigned programs from hidden or temp folders |
 | | `create`, `rename` (new files) | new launch items, fake `com.apple.*` launch items, hidden `.com.apple.*` folders |
-| | `deleteextattr` | quarantine flag removed |
+| | `deleteextattr` | quarantine flag removed. High, unless a signed updater did it, or Gatekeeper (`spctl`, run off the event loop) accepts the file as notarized or Apple's, as with `brew upgrade` |
 | | `btm_launch_item_add` | new login or background items, checked for unsigned programs |
 | **Observed, not used** | `open` | Too noisy to watch live, so keychain and browser-file reads are only seen through what the reading program does next. |
 | | `setextattr`, `authentication`, `tcc_modify`, `xp_malware_detected`, others | Available (`eslogger --list-events`), not yet in the rules. |

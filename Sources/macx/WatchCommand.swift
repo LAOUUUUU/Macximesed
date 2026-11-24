@@ -64,7 +64,13 @@ struct Watch: ParsableCommand {
             for line in text.split(separator: "\n") {
                 guard let e = ESEvent.parse(String(line)) else { continue }
                 events += 1
-                for a in rules.evaluate(e) where a.severity >= minimum {
+                for raw in rules.evaluate(e) {
+                    let a =
+                        QuarantineReview.needsReview(raw)
+                        ? QuarantineReview.review(
+                            raw, gatekeeper: SpctlAssessor().assess(raw.detail ?? "", kind: QuarantineReview.kind(for: raw.detail ?? "")))
+                        : raw
+                    guard a.severity >= minimum else { continue }
                     Self.printAlert(a)
                     count += 1
                 }
@@ -141,6 +147,32 @@ struct Watch: ParsableCommand {
             notify(a)
         }
 
+        // One alert at a time, whether it comes from the event loop or from a Gatekeeper review finishing later.
+        let handleAlert = AlertHandler { a in
+            log.append(a)
+            if a.severity >= .high, let pid = a.pid { net?.watch(pid: pid, reason: a.rule, path: a.processPath ?? "") }
+            guard a.severity >= minimum else { return }
+            Self.printAlert(a)
+            if a.severity >= .high { notify(a) }
+            // Critical: stop it first (if asked), then keep the evidence while the process is still there.
+            if a.severity == .critical {
+                var frozen: [Int] = []
+                if suspend, screen.effects.freeze {
+                    frozen = Self.freeze(a)
+                    if !frozen.isEmpty { log.appendFreeze(alertRule: a.rule, pids: frozen) }
+                }
+                let recent =
+                    (try? String(contentsOf: log.file, encoding: .utf8))?.split(separator: "\n").suffix(50).map(String.init) ?? []
+                if let c = IncidentCapture.fromAlert(
+                    a, frozen: frozen, home: user.home, uid: user.uid, gid: user.gid, timeline: recent)
+                {
+                    print("           Evidence kept: macx incident show \(c.id)")
+                }
+            }
+        }
+        // spctl takes up to a few seconds on a big app, so a removed quarantine flag is judged here, not in the loop.
+        let reviews = DispatchQueue(label: "macx.watch.gatekeeper")
+
         let handle = out.fileHandleForReading
         var buffer = Data()
         let started = Date()
@@ -161,30 +193,21 @@ struct Watch: ParsableCommand {
                     downloads.check(URL(fileURLWithPath: path))
                 }
                 for a in rules.evaluate(e) {
-                    log.append(a)
-                    if a.severity >= .high, let pid = a.pid { net?.watch(pid: pid, reason: a.rule, path: a.processPath ?? "") }
-                    guard a.severity >= minimum else { continue }
-                    Self.printAlert(a)
-                    if a.severity >= .high { notify(a) }
-                    // Critical: stop it first (if asked), then keep the evidence while the process is still there.
-                    if a.severity == .critical {
-                        var frozen: [Int] = []
-                        if suspend, screen.effects.freeze {
-                            frozen = Self.freeze(a)
-                            if !frozen.isEmpty { log.appendFreeze(alertRule: a.rule, pids: frozen) }
+                    if QuarantineReview.needsReview(a) {
+                        reviews.async {
+                            let path = a.detail ?? ""
+                            handleAlert(
+                                QuarantineReview.review(a, gatekeeper: SpctlAssessor().assess(path, kind: QuarantineReview.kind(for: path)))
+                            )
                         }
-                        let recent =
-                            (try? String(contentsOf: log.file, encoding: .utf8))?.split(separator: "\n").suffix(50).map(String.init) ?? []
-                        if let c = IncidentCapture.fromAlert(
-                            a, frozen: frozen, home: user.home, uid: user.uid, gid: user.gid, timeline: recent)
-                        {
-                            print("           Evidence kept: macx incident show \(c.id)")
-                        }
+                    } else {
+                        handleAlert(a)
                     }
                 }
             }
         }
         es.waitUntilExit()
+        reviews.sync {}  // report any Gatekeeper review still running
         let message = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if seen == 0, Date().timeIntervalSince(started) < 10 {
@@ -330,6 +353,18 @@ final class DownloadChecker: @unchecked Sendable {
             Watch.printAlert(alert)
             if alert.severity >= .high { notify(alert) }
         }
+    }
+}
+
+/// Handles alerts one at a time: the eslogger loop and the Gatekeeper reviews both report through it.
+final class AlertHandler: @unchecked Sendable {
+    private let lock = NSLock()
+    private let body: (WatchAlert) -> Void
+    init(_ body: @escaping (WatchAlert) -> Void) { self.body = body }
+    func callAsFunction(_ a: WatchAlert) {
+        lock.lock()
+        defer { lock.unlock() }
+        body(a)
     }
 }
 
