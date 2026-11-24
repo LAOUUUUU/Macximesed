@@ -162,6 +162,15 @@ public struct ChamberJudge: Sendable {
                     processPath: who)
             ]
         }
+        if e.kind == "exec", let t = e.target, ["curl", "wget"].contains((t.path as NSString).lastPathComponent),
+            let url = e.args.dropFirst().first(where: { $0.hasPrefix("http://") || $0.hasPrefix("https://") || $0.hasPrefix("ftp://") })
+        {
+            return [
+                WatchAlert(
+                    rule: "network-attempt", severity: .medium, title: "Tried to download from the internet", detail: url, pid: t.pid,
+                    processPath: t.path)
+            ]
+        }
         guard e.kind == "open", let path = e.filePath else { return [] }
         func alert(_ rule: String, _ sev: Severity, _ title: String) -> [WatchAlert] {
             [WatchAlert(rule: rule, severity: sev, title: title, detail: path, pid: pid, processPath: who)]
