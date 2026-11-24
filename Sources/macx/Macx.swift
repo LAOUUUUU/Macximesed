@@ -41,8 +41,8 @@ enum Entry {
     static func startLog(_ role: LogRole, _ settings: LogSettings) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let user = WatchUser.resolve()?.home
-        let homes = Set([user, home].compactMap { $0 }.flatMap { [$0.path, $0.resolvingSymlinksInPath().path] })
-        Log.start(role: role, settings: settings, home: home, homes: Array(homes))
+        let homes = LogLine.homeVariants([user, home].compactMap { $0?.path })
+        Log.start(role: role, settings: settings, home: home, homes: homes)
     }
 }
 

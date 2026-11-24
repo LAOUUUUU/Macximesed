@@ -47,6 +47,18 @@ struct ReportRedactionTests {
         #expect(line.contains("/private/tmp/h/x"))
     }
 
+    /// Foundation's resolvingSymlinksInPath drops `/private`, so the real path comes from realpath().
+    @Test func homeVariantsCoverThePrivatePrefix() throws {
+        let tmp = try TempDir()
+        let viaTmp = "/tmp/" + tmp.url.lastPathComponent
+        try FileManager.default.createDirectory(atPath: viaTmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: viaTmp) }
+        let variants = LogLine.homeVariants([viaTmp])
+        #expect(variants.contains(viaTmp) && variants.contains("/private" + viaTmp))
+        let r = ReportRedactor(homes: variants, names: [], hosts: [])
+        #expect(r.redact("/private\(viaTmp)/Downloads/My Taxes 2026.pdf").0 == "~/Downloads/….pdf")
+    }
+
     @Test func emptySectionsSaySo() {
         let input = BugReportInput(description: "", facts: [], crashes: [], queuedCrashes: [], alerts: [], logs: [])
         let (text, _) = BugReport.build(input, redactor: redactor, created: Date())
@@ -119,6 +131,10 @@ struct CrashSummaryTests {
         try queue.add([s], role: "background watch")
         let waiting = queue.waiting()
         #expect(waiting.count == 1)
+        #expect(queue.newCount(since: Date().addingTimeInterval(-60)) == 1)  // the app asks about it once
+        #expect(queue.newCount(since: Date().addingTimeInterval(60)) == 0)
+        try queue.add([s], role: "background watch")  // found again on the next start: not added twice
+        #expect(queue.waiting().count == 1)
         #expect(waiting.first?.contains("EXC_BAD_ACCESS") == true && waiting.first?.contains("background watch") == true)
     }
 }

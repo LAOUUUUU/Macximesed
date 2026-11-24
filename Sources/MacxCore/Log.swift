@@ -104,6 +104,22 @@ public enum LogLine {
         return "\(time.formatted(.iso8601)) \(level.name.uppercased()) \(role.rawValue)[\(pid)] \(category): \(m)\n"
     }
 
+    /// Every spelling of each home a path in a log or crash might use: as given, its real path (realpath keeps
+    /// `/private`, which Foundation's resolvingSymlinksInPath drops) and without `/private`.
+    public static func homeVariants(_ homes: [String]) -> [String] {
+        var out: [String] = []
+        for h in homes where h.count > 1 {
+            var forms = [h]
+            if let real = realpath(h, nil) {
+                forms.append(String(cString: real))
+                free(real)
+            }
+            forms += forms.filter { $0.hasPrefix("/private/") }.map { String($0.dropFirst("/private".count)) }
+            for f in forms where !out.contains(f) { out.append(f) }
+        }
+        return out
+    }
+
     /// `/Users/v/x` becomes `~/x`, but `/Users/vv` stays as it is.
     static func tilde(_ text: String, home: String) -> String {
         let pattern = #"(?<![\w.~/-])"# + NSRegularExpression.escapedPattern(for: home) + #"(?=[/\s"'),;:\]]|$)"#

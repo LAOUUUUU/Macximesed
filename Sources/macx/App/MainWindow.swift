@@ -420,6 +420,27 @@ struct SettingsView: View {
                         }
                     }
                     Hairline()
+                    section("Problems") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Text("Ask after macx crashes").font(Fonts.sans(14))
+                                InfoButton(
+                                    text: "The app opens a report about the crash for you to look at. It's only sent if you press Send.")
+                                Spacer()
+                                TwoState(label: "Ask after a crash", isOn: model.askAfterCrash) { model.setAskAfterCrash($0) }
+                            }
+                            if model.reportOpen {
+                                ReportPanel(model: model)
+                            } else {
+                                HStack {
+                                    Text("Something not working?").font(Fonts.sans(14))
+                                    Spacer()
+                                    Button("Report a problem…") { model.reportOpen = true }.buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                        }
+                    }
+                    Hairline()
                     section("This app") {
                         // One row per setting: `section` lays its content out in an HStack, so two rows need a VStack.
                         VStack(alignment: .leading, spacing: 14) {

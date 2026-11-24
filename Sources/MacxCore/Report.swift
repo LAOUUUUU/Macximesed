@@ -227,6 +227,16 @@ public struct CrashQueue: Sendable {
         let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { $0.hasSuffix(".txt") }.sorted()
         return names.suffix(10).compactMap { try? String(contentsOf: folder.appendingPathComponent($0), encoding: .utf8) }
     }
+
+    /// Summaries added since the app last asked, so it asks about each crash once.
+    public func newCount(since: Date) -> Int {
+        let fm = FileManager.default
+        return ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? []).filter { name in
+            guard name.hasSuffix(".txt") else { return false }
+            let modified = (try? fm.attributesOfItem(atPath: folder.appendingPathComponent(name).path)[.modificationDate]) as? Date
+            return (modified ?? .distantPast) > since
+        }.count
+    }
 }
 
 // MARK: - The report

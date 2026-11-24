@@ -33,6 +33,9 @@ final class AppModel {
     var busy = false
     var notifications: SetupFacts.Notifications = .notAsked
     var chamber: ChamberJob = .unknown
+    var askAfterCrash = ReportState.load().askAfterCrash
+    var reportOpen = false
+    var crashNote: String?
 
     enum ChamberJob: Equatable {
         case unknown, notSetUp, settingUp, ready
@@ -76,6 +79,7 @@ final class AppModel {
         refresh()
         readNotificationStatus()
         readChamber()
+        checkForCrashes()
         let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
         RunLoop.main.add(t, forMode: .common)
         timer = t
@@ -206,6 +210,35 @@ final class AppModel {
         let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         p.waitUntilExit()
         return (p.terminationStatus, out)
+    }
+
+    // MARK: Bug reports
+
+    /// Once at launch: if macx crashed since the last look (yours, or the background watch's queue), open
+    /// Settings > Problems with the report ready to look at. Nothing is sent from here.
+    func checkForCrashes() {
+        guard askAfterCrash else { return }
+        let since = ReportState.load().lastCrashSeen ?? Date().addingTimeInterval(-7 * 86_400)
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        Task.detached(priority: .utility) {
+            let found =
+                CrashReports.find(in: CrashReports.userFolder(home: home), since: since).count + CrashQueue().newCount(since: since)
+            Log.debug("app", "crash check: \(found) new since \(since)")
+            guard found > 0 else { return }
+            await MainActor.run {
+                self.crashNote =
+                    "macx crashed \(found == 1 ? "once" : "\(found) times") since you last looked. Make the report to see what happened; nothing is sent unless you press Send."
+                self.reportOpen = true
+                self.section = .settings
+            }
+        }
+    }
+
+    func setAskAfterCrash(_ on: Bool) {
+        var state = ReportState.load()
+        state.askAfterCrash = on
+        try? state.save()
+        askAfterCrash = on
     }
 
     // MARK: Root actions (each asks for the administrator password)

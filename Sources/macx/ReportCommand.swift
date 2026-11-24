@@ -15,7 +15,7 @@ enum ReportCollector {
         let computer = SCDynamicStoreCopyComputerName(nil, nil) as String?
         let local = SCDynamicStoreCopyLocalHostName(nil) as String?
         var r = ReportRedactor(
-            homes: Array(Set([home.path, home.resolvingSymlinksInPath().path])), names: [NSUserName(), NSFullUserName()],
+            homes: LogLine.homeVariants([home.path]), names: [NSUserName(), NSFullUserName()],
             hosts: [computer, local, local.map { $0 + ".local" }].compactMap { $0 })
         r.keepFileNames = keepFileNames
         r.keepProgramNames = keepProgramNames
