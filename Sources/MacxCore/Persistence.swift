@@ -299,6 +299,7 @@ public enum CommandPattern: String, Codable, Sendable, CaseIterable {
     case quarantineStrip = "quarantine-strip"
     case passwordPrompt = "password-prompt"
     case passwordCheck = "password-check"
+    case vmCheck = "vm-check"
 
     public var title: String {
         switch self {
@@ -307,6 +308,15 @@ public enum CommandPattern: String, Codable, Sendable, CaseIterable {
         case .quarantineStrip: "Removes macOS's download-safety (quarantine) flag"
         case .passwordPrompt: "Shows a script-made password box"
         case .passwordCheck: "Checks a password with dscl (how stealers verify a stolen password)"
+        case .vmCheck: "Checks whether it's running in a virtual machine (how AMOS dodges analysis)"
+        }
+    }
+
+    /// Quarantine stripping and VM checks have rare honest uses; the rest are how stealers get in.
+    public var severity: Severity {
+        switch self {
+        case .quarantineStrip, .vmCheck: .high
+        case .downloadToShell, .base64ToShell, .passwordPrompt, .passwordCheck: .critical
         }
     }
 }
@@ -321,7 +331,12 @@ public enum CommandPatterns {
         (.quarantineStrip, #"\bxattr\b[^;|\n]*(?:-[a-z]*d[a-z]*\s+com\.apple\.quarantine|-[a-z]*c[a-z]*r|-[a-z]*r[a-z]*c)\b"#),
         (.passwordPrompt, #"\bosascript\b.*\bdisplay dialog\b.*\bhidden answer\b"#),
         (.passwordCheck, #"\bdscl\s+\.\s+-authonly\b"#),
+        // A hardware query and a VM name close together, in either order.
+        (.vmCheck, #"\b(?:system_profiler|ioreg|sysctl\s+(?:-n\s+)?hw\.model)\b[\s\S]{0,300}?\#(vmNames)"#),
+        (.vmCheck, #"\#(vmNames)[\s\S]{0,300}?\b(?:system_profiler|ioreg|sysctl\s+(?:-n\s+)?hw\.model)\b"#),
     ]
+
+    static let vmNames = #"(?:VMware|QEMU|VirtualBox|Parallels|\bKVM\b|Virtual\s*Machine|VirtualMac)"#
 
     static let compiled: [(CommandPattern, NSRegularExpression)] = rules.compactMap { pattern, regex in
         (try? NSRegularExpression(pattern: regex, options: [.caseInsensitive])).map { (pattern, $0) }

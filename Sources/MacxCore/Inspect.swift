@@ -251,6 +251,15 @@ public enum ScriptInspector {
                             detail: "line \(n + 1): \(lines[n].trimmingCharacters(in: .whitespaces).prefix(200))"))
                 }
             }
+            // A VM check often spans lines (query on one, comparison on the next), so it's matched on the whole text.
+            if CommandPatterns.match(text).contains(.vmCheck) {
+                let p = CommandPattern.vmCheck
+                let n = lines.firstIndex { $0.range(of: #"system_profiler|ioreg|hw\.model"#, options: .regularExpression) != nil } ?? 0
+                behaviours.append(
+                    CheckFinding(
+                        rule: p.rawValue, severity: p.severity, title: p.title,
+                        detail: "line \(n + 1): \(lines[n].trimmingCharacters(in: .whitespaces).prefix(200))"))
+            }
             nested = lines.flatMap { DownloadRuns.find(in: $0) }
             if !nested.isEmpty {
                 behaviours.append(
@@ -533,7 +542,7 @@ public struct PasteReport: Sendable {
     /// hiding the command in base64 and every other pattern still do. A link that couldn't be read counts as dangerous.
     public var findings: [CheckFinding] {
         var out = guardResult.patterns.filter { $0 != .downloadToShell }.map {
-            CheckFinding(rule: $0.rawValue, severity: $0 == .quarantineStrip ? .high : .critical, title: $0.title)
+            CheckFinding(rule: $0.rawValue, severity: $0.severity, title: $0.title)
         }
         for r in runs {
             if let e = r.error {

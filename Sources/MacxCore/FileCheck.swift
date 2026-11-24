@@ -402,7 +402,7 @@ public struct FileChecker: Sendable {
                 var detail = "line \(i + 1): \(String(line.prefix(200)))"
                 let decoded = CommandPatterns.decodedPayloads(in: line)
                 if !decoded.isEmpty { detail += "\n  decodes to: " + decoded.joined(separator: "\n  decodes to: ") }
-                let severity: Severity = p == .quarantineStrip ? .high : .critical
+                let severity = p.severity
                 out.append(CheckFinding(rule: p.rawValue, severity: severity, title: p.title, detail: detail))
             }
         }

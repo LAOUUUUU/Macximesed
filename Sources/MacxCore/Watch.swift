@@ -132,7 +132,7 @@ public struct WatchRules: Sendable {
             for p in result.patterns.sorted(by: { $0.rawValue < $1.rawValue }) {
                 var detail = String(command.prefix(300))
                 if !result.decoded.isEmpty { detail += "\n  decodes to: " + result.decoded.joined(separator: "\n  decodes to: ") }
-                add(p.rawValue, p == .quarantineStrip ? .high : .critical, p.title, detail)
+                add(p.rawValue, p.severity, p.title, detail)
             }
             if let feed, let t = e.target, !t.isPlatform, let hash = hashes.hash(t.path), let name = try? feed.lookup(sha256: hash) {
                 add("known-malware", .critical, "A known malware program started", "\(name)\n  SHA-256 \(hash)\n  \(t.path)")

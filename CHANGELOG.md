@@ -4,6 +4,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Added
+- **VM-check rule** (`vm-check`, high) in `guard`, `check`, `persist` and the live watch: a hardware query (`system_profiler`, `ioreg`, `sysctl hw.model`) next to a virtual-machine name (VMware, QEMU, VirtualBox, Parallels, "Apple Virtual Machine", VirtualMac). That's how AMOS dodges analysis. Scripts are checked across lines. None of the 11 real installers in the static evaluation trip it.
+
 ### Changed
 - README, `macx privacy` and the watch's refusal message say to give full access, not specific folders, on macOS 27.3 and later (eslogger needs full Full Disk Access).
 
