@@ -16,15 +16,28 @@ enum UpdateCheck {
 
         var state = UpdateState.load()
         let now = Date()
-        guard state.isCheckDue(now: now) else { return }
+        guard state.isCheckDue(now: now) else {
+            Log.trace("update", "daily check not due")
+            return
+        }
         state.lastCheck = now  // even on failure: don't retry on every command
         defer { try? state.save() }
 
-        guard let signed = try? UpdateClient.fetchSignedChannel(timeout: 4) else { return }
+        let signed: SignedChannel
+        do { signed = try UpdateClient.fetchSignedChannel(timeout: 4) } catch {
+            Log.warning("update", "daily check failed: \(error)")
+            return
+        }
         let channel = signed.channel
-        _ = try? HashFeed.refresh(from: signed)
-        let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: now)
-        state.lastSequence = max(state.lastSequence, channel.sequence)
+        do { _ = try HashFeed.refresh(from: signed) } catch { Log.warning("update", "hash feed not refreshed: \(error)") }
+        let beta = Update.fetchBetaIfChosen(state: state, timeout: 4)
+        let installed = BuildVersion.current
+        let decision = UpdateDecision.decide(stable: channel, beta: beta, installed: installed, state: state, now: now)
+        Log.info(
+            "update",
+            "daily check: channel \(channel.sequence), latest \(channel.latest.version), beta \(beta.map { "\($0.sequence) dev-\($0.build.commit)" } ?? "-"), \(decision.action)"
+        )
+        Update.remember(channel, beta, in: &state)
         // Only the rollback warning here; "out of date" is shown by `macx update`, not before every command.
         decision.warnings.filter { !$0.contains("out of date") }.forEach { note("macx: \($0)") }
 
@@ -32,16 +45,18 @@ enum UpdateCheck {
         case .none:
             break
         case .notify(let version):
-            if !state.noticesOff { note("macx \(version) is out (you have \(macxVersion)). Update with: macx update") }
+            if !state.noticesOff { note("macx \(version) is out (you have \(installed)). Update with: macx update") }
         case .force(let version, let reason):
-            note("macx: version \(macxVersion) has a security problem: \(reason)")
+            note("macx: version \(installed) has a security problem: \(reason)")
             if let a = channel.minimumSafe?.advisory { note("      Details: \(a)") }
+            guard let target = decision.target else { return }
             do {
-                try Update.install(channel, quiet: false)
+                try Update.install(target, quiet: false)
                 note("macx: updated to \(version). Running your command with the new version.")
                 try? state.save()
                 reexec()
             } catch {
+                Log.error("update", "security update failed: \(error)")
                 note("macx: couldn't update automatically (\(error)). Run `macx update` as soon as you can.")
             }
         }
@@ -77,8 +92,28 @@ struct Update: ParsableCommand {
     @Option(help: "Turn the daily \"new version\" notices on or off (security updates still happen).")
     var notices: String?
 
+    @Option(help: "Which builds to get: stable (releases) or beta (a build of every change, named by its commit).")
+    var channel: String?
+
     func run() throws {
         var state = UpdateState.load()
+        if let channel {
+            guard let new = ReleaseChannel(rawValue: channel) else { throw UserError("Use --channel stable or --channel beta.") }
+            do { try state.switchChannel(to: new) } catch { throw UserError("Can't switch: \(error).") }
+            try state.save()
+            switch new {
+            case .beta:
+                print("You're on the beta channel: a build of every change to dev, named by its commit (macx --version).")
+                print("Beta builds are signed with their own key and published automatically, without a person checking each one.")
+                print("Security updates from the stable channel still apply. Run `macx update` to get the newest beta now.")
+            case .stable:
+                print("You're on the stable channel.")
+                if BuildVersion.current.isDev {
+                    print("You keep this dev build (\(BuildVersion.current)) until the next release replaces it.")
+                }
+            }
+            return
+        }
         if let notices {
             guard ["on", "off"].contains(notices) else { throw UserError("Use --notices on or --notices off.") }
             state.noticesOff = notices == "off"
@@ -91,22 +126,25 @@ struct Update: ParsableCommand {
         do { signed = try UpdateClient.fetchSignedChannel(timeout: 15) } catch {
             throw UserError("Couldn't get the update channel: \(error)")
         }
-        let channel = signed.channel
+        let stable = signed.channel
+        let beta = Self.fetchBetaIfChosen(state: state, timeout: 15)
+        let installed = BuildVersion.current
+        let decision = UpdateDecision.decide(stable: stable, beta: beta, installed: installed, state: state, now: Date())
         state.lastCheck = Date()
-        state.lastSequence = max(state.lastSequence, channel.sequence)
+        Self.remember(stable, beta, in: &state)
         try? state.save()
-        let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: Date())
         decision.warnings.forEach { print($0) }
+        if state.channel == .beta, beta == nil { print("Warning: the beta file couldn't be read, so only stable releases were checked.") }
         if let feed = try? HashFeed.refresh(from: signed) { print(HashFeedLine.text(count: feed.count)) }
 
         switch decision.action {
         case .none:
-            print("macx \(macxVersion) is up to date.")
+            print("macx \(installed) is up to date\(state.channel == .beta ? " (beta channel)" : "").")
         case .notify(let v), .force(let v, _):
             if case .force(_, let reason) = decision.action { print("Your version has a security problem: \(reason)") }
-            print("macx \(v) is available (you have \(macxVersion)).")
-            guard !check else { return }
-            try Update.install(channel, quiet: false)
+            print("macx \(v) is available (you have \(installed)).")
+            guard !check, let target = decision.target else { return }
+            try Update.install(target, quiet: false)
             print("Updated to \(v). The previous version is kept as macx.previous.")
             if (Responsibility.executablePath ?? "").contains("/.local/bin/") || Responsibility.isOwnResponsibleProcess {
                 print("If macx had Full Disk Access, switch it off and on again for the new version (macx privacy --open).")
@@ -114,7 +152,23 @@ struct Update: ParsableCommand {
         }
     }
 
-    static func install(_ channel: UpdateChannel, quiet: Bool) throws {
+    /// The beta file, only on Macs that chose beta. A beta file that fails to download or verify is skipped: the
+    /// stable check still runs.
+    static func fetchBetaIfChosen(state: UpdateState, timeout: TimeInterval) -> BetaChannel? {
+        guard state.channel == .beta else { return nil }
+        do { return try UpdateClient.fetchBeta(timeout: timeout) } catch {
+            Log.warning("update", "beta file not read: \(error)")
+            return nil
+        }
+    }
+
+    /// Raises the rollback marks to what was just seen, each channel on its own.
+    static func remember(_ stable: UpdateChannel, _ beta: BetaChannel?, in state: inout UpdateState) {
+        state.lastSequence = max(state.lastSequence, stable.sequence)
+        if let beta { state.betaSequence = max(state.betaSequence, beta.sequence) }
+    }
+
+    static func install(_ target: UpdateTarget, quiet: Bool) throws {
         guard let exe = Responsibility.executablePath else { throw UserError("Can't tell where macx is installed.") }
         if exe.contains("/.build/") {
             throw UserError("This is a development build; update it with git pull and swift build instead.")
@@ -125,28 +179,42 @@ struct Update: ParsableCommand {
         // Installed from the .pkg or .dmg (signed with the release certificate): swap in CI's whole signed app.
         let app = UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe))
         let signer = RealAppSigner()
-        let method = UpdateMethod.choose(
-            app: app, authority: app.flatMap(signer.authority(of:)), hasAppAsset: channel.latest.app != nil)
-        if method == .wholeApp, let app, let asset = channel.latest.app {
+        let method = UpdateMethod.choose(app: app, authority: app.flatMap(signer.authority(of:)), hasAppAsset: target.app != nil)
+        if method == .wholeApp, let app, let asset = target.app {
             guard FileManager.default.isWritableFile(atPath: app.deletingLastPathComponent().path) else {
                 throw UserError(
                     "Can't write to \(app.deletingLastPathComponent().path). Install the new .pkg from the release page instead.")
             }
             guard let url = URL(string: asset.url), url.scheme == "https" else { throw UpdateError.download("not an https link") }
-            if !quiet { FileHandle.standardError.write(Data("Downloading Macximesed \(channel.latest.version)…\n".utf8)) }
+            let name = target.version.description
+            if !quiet { FileHandle.standardError.write(Data("Downloading Macximesed \(name)…\n".utf8)) }
+            Log.info("update", "installing the whole app \(name) over \(BuildVersion.current)")
             let data = try UpdateClient.get(url, timeout: 60)
-            try UpdateInstaller().installApp(
-                data, sha256: asset.sha256, version: channel.latest.version, over: app, installed: SemVer(macxVersion)!)
+            do {
+                try UpdateInstaller().installApp(
+                    data, sha256: asset.sha256, version: name, over: app, installed: SemVer(macxVersion)!)
+            } catch {
+                Log.error("update", "install of the whole app \(name) failed: \(error)")
+                throw error
+            }
+            Log.info("update", "installed the whole app \(name)")
             return
         }
         guard FileManager.default.isWritableFile(atPath: (exe as NSString).deletingLastPathComponent) else {
             throw UserError("Can't write to \((exe as NSString).deletingLastPathComponent). Reinstall with scripts/install.sh.")
         }
-        guard let url = URL(string: channel.latest.url), url.scheme == "https" else { throw UpdateError.download("not an https link") }
-        if !quiet { FileHandle.standardError.write(Data("Downloading macx \(channel.latest.version)…\n".utf8)) }
+        guard let url = URL(string: target.url), url.scheme == "https" else { throw UpdateError.download("not an https link") }
+        let name = target.version.description
+        if !quiet { FileHandle.standardError.write(Data("Downloading macx \(name)\(target.beta ? " (beta)" : "")…\n".utf8)) }
+        Log.info("update", "installing \(name) over \(BuildVersion.current)")
         let data = try UpdateClient.get(url, timeout: 30)
-        try UpdateInstaller().install(
-            data, sha256: channel.latest.sha256, version: channel.latest.version, over: URL(fileURLWithPath: exe),
-            installed: SemVer(macxVersion)!)
+        do {
+            try UpdateInstaller().install(
+                data, sha256: target.sha256, expecting: target.version, over: URL(fileURLWithPath: exe), installed: .current)
+        } catch {
+            Log.error("update", "install of \(name) failed: \(error)")
+            throw error
+        }
+        Log.info("update", "installed \(name)")
     }
 }

@@ -112,6 +112,52 @@ Updates keep the app's signature, so Full Disk Access carries over. The updater 
 
 The background watch notices when its binary was updated and restarts on the new version by itself (within 30 s, no sudo).
 
+#### Beta builds (not open yet)
+`macx update --channel beta` (or Settings > Updates > *Get beta builds*) switches to a build of every change to `dev`, named by its commit: `macx --version` says `dev-1a2b3c4`. It stays switched off until the beta signing key exists.
+- **Its own key and file.** The beta file (`beta-v1.json` on the rolling `dev` prerelease) is signed with a separate key that macx never accepts for the stable channel, and the stable key's files are never read as beta. A beta file can't carry the security floor or the malware feed. It has its own sequence and expires after 30 days.
+- **Signed automatically.** Every change that passes the tests is published without a person checking it, so pick beta only if you want the newest changes first.
+- **Security updates still apply.** Beta Macs read the stable channel too: a newer release replaces a dev build, and the security floor can force one. A beta file can only ever offer an update, never force it.
+- **Leaving beta** (`--channel stable`) keeps the dev build until the next release replaces it.
+
+### Logs
+Add `-v` (or `-vv` for even more) to any command to see what it's doing, for example `macx -v update --check`. macx writes its own plain-text logs, one per part, each capped at 1 MB with two older files kept:
+
+| Part | Log | Who can change it |
+|---|---|---|
+| Commands you run | `~/Library/Logs/Macximesed/cli.log` | you |
+| The app | `~/Library/Logs/Macximesed/app.log` | you |
+| Commands run with sudo | `/Library/Logs/Macximesed/cli-root.log` | only root |
+| The background watch | `/Library/Logs/Macximesed/watch.log` | only root |
+
+- **Levels:** trace, debug, info (the default), warning, error. `MACX_LOG=debug` turns detail up without printing it, for the app and scripts.
+- **The background watch** can't take `-v`. `sudo macx daemon log debug` turns its log up and `sudo macx daemon log info` puts it back; `macx daemon log` shows the level without sudo. The level is kept in the root-owned launchd plist, and changing it restarts the watch.
+- **What's written:** your home folder is written as `~`, and the log names the command (`guard inspect`), never what you gave it: no file contents, pasted commands, links or secrets.
+- **Safe for root:** root only writes logs into `/Library/Logs/Macximesed` when that folder is root-owned and closed to everyone else, and never follows a symlink there.
+- **Copies:** warnings and errors also go to the system log (subsystem `dev.macximesed.macx`), so `log show` and a sysdiagnose include them.
+- `/Library/Logs/Macximesed/daemon.log` still holds the background watch's printed output, the place to look if it ever crashes on start.
+
+### Bug and crash reports
+`macx report` (or *Report a problem…* in the app's Settings) builds a bug report on your Mac, shows you all of it, and only sends it if you say yes. `-m "what happened"` adds your own words, `--save FILE` and `--copy` work without the internet.
+
+What's in it:
+- **This Mac:** macx and macOS versions, the chip, how macx is installed, whether the watch and Full Disk Access are on.
+- **macx's crashes** from the last week, cut down to the crash itself: the exception, macx's part of the crashed thread, the macOS build. The per-Mac crash ID, process IDs and paths are left out. The background watch runs as root and has no screen to ask on, so it never sends anything: it leaves its crash summaries in `/Library/Logs/Macximesed/crashes` for the app and `macx report` to offer.
+- **The last 20 alerts:** time, severity and rule only. No paths, commands or details.
+- **The end of macx's own logs** (see *Logs*).
+
+What's taken out first, and counted at the top of the report:
+- your home folder (written as `~`), account name, full name and computer name;
+- file names in your folders (`~/Documents/….pdf`; `--file-names` keeps them);
+- app names (`/Applications/<app>.app`; `--program-names` keeps them);
+- IP and MAC addresses, emails and file hashes.
+
+Sending:
+- **Encrypted on your Mac** to the maintainer's key (HPKE: X25519, ChaCha20-Poly1305). A small relay ([scripts/report-relay](scripts/report-relay)) passes the unreadable file to a private channel and answers with a random report ID, which macx shows you. Mention it in a GitHub issue if you'd like a reply or want the report deleted.
+- **Anonymous as far as possible:** no name, email, install ID or Mac ID goes with a report. The relay keeps no IP addresses, but like any website it sees yours while the report arrives. What you write in the description is yours to keep anonymous.
+- **Reports are kept 90 days.**
+- **After a crash** the app asks once, showing the report. `macx report --ask-after-crash off` (or the switch in Settings) stops that; `macx report` still works any time.
+- **Sending is off until the relay is set up**: until then `macx report` and the app offer Save and Copy, and a link to open a GitHub issue yourself (public).
+
 ## Build from source
 ```bash
 swift build -c release
@@ -148,10 +194,11 @@ swift build -c release
 | `macx chamber setup` / `run FILE [--seconds 60] [-y] [--no-quarantine]` / `status` / `remove` | **Detonation chamber.** Runs a suspicious script in a throwaway Linux VM (about 60 MB) with no network, no disk and nothing shared with this Mac. Mac-only commands are stand-ins, and bait files sit where stealers look. Everything it does is recorded and judged here. *DON'T OPEN THIS* offers to quarantine the file into a restorable incident case (exit code 2). Scripts only: Mac apps and programs keep `macx check`. See *Detonation chamber*. | No |
 | `macx net PID [--interval MS] [--seconds N] [--every] [--loopback]` | Shows where a process, and anything it starts, connects to, as it happens: each new remote address once. Reads the process's sockets from the kernel every 20 ms. Connections open for under about 20 ms can be missed ([measured](research/evaluation/network-results.md)). Your own processes work without sudo. | For other users' processes |
 | `macx incident [list]` / `show ID` / `contain ID [-y]` | **Incident response.** Each case is a private folder with read-only copies and SHA-256 hashes of the files involved, the process tree (who started it, what it started), the alert timeline, and a summary with what to do next. `contain` moves the case's launch items, hidden folders and temp-folder programs into the undo folder (nothing is deleted), prints the `launchctl bootout` commands for anything still running, and gives the password- and key-rotation checklist. | Sometimes |
-| `sudo macx daemon install [--suspend] [--no-downloads]` / `status` / `restart` / `pause [--for 1h]` / `resume` / `downloads [on\|off]` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `downloads on\|off` turns the Downloads watch on or off and restarts the watch. `status` and `downloads` without on or off need no sudo. See *Background watch*. | **Yes** (not `status` or showing `downloads`) |
+| `sudo macx daemon install [--suspend] [--no-downloads] [--log-level debug]` / `status` / `restart` / `pause [--for 1h]` / `resume` / `downloads [on\|off]` / `log [LEVEL]` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `downloads on\|off` turns the Downloads watch on or off and restarts the watch. `log debug` turns the watch's own log up (see *Logs*). `status`, and `downloads` or `log` without a value, need no sudo. See *Background watch*. | **Yes** (not `status` or showing `downloads`) |
 | `macx alerts [-n 20] [--min-severity low] [--follow]` | Shows saved alerts from the live and background watch. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
-| `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |
+| `macx update [--check] [--notices on\|off] [--channel stable\|beta]` | Updates from the signed channel, or just checks; `--channel` picks releases or beta builds. | No |
+| `macx report [-m TEXT] [--save FILE] [--copy] [--file-names] [--program-names]` | **Bug report:** builds a report from macx's logs, crashes and alerts with personal details taken out, shows all of it, then saves, copies or (when set up) sends it encrypted, only after you say yes. `--ask-after-crash on\|off`. See *Bug and crash reports*. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |
 | `macx undo purge [--days 7] [-y]` | **Permanently** deletes batches older than N days. It asks first. | No |

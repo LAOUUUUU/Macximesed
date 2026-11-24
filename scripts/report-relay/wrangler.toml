@@ -1,0 +1,17 @@
+# Macximesed bug-report relay. Needs Wrangler 4.36.0 or later (rate-limit binding). Setup: README.md here.
+name = "macx-report-relay"
+main = "worker.js"
+compatibility_date = "2026-11-24"
+
+# No request logs: they would hold the senders' IP addresses.
+[observability.logs]
+invocation_logs = false
+
+# About 5 reports a minute from one address, counted per Cloudflare location (approximate by design).
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60

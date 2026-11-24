@@ -23,6 +23,7 @@ final class AppModel {
     var installed = false
     var freezesOnCritical = false
     var downloadsWatched = true
+    var daemonLogLevel: LogLevel = .info
     var fullDiskAccess = false
     var records: [AlertRecord] = []
     var expected = ExpectedPrograms()
@@ -32,6 +33,9 @@ final class AppModel {
     var busy = false
     var notifications: SetupFacts.Notifications = .notAsked
     var chamber: ChamberJob = .unknown
+    var askAfterCrash = ReportState.load().askAfterCrash
+    var reportOpen = false
+    var crashNote: String?
 
     enum ChamberJob: Equatable {
         case unknown, notSetUp, settingUp, ready
@@ -75,6 +79,7 @@ final class AppModel {
         refresh()
         readNotificationStatus()
         readChamber()
+        checkForCrashes()
         let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
         RunLoop.main.add(t, forMode: .common)
         timer = t
@@ -96,6 +101,7 @@ final class AppModel {
         pid = s.info.pid
         freezesOnCritical = s.suspend
         downloadsWatched = s.downloads
+        daemonLogLevel = s.logLevel
         fullDiskAccess = s.fullDiskAccess
         let next = WatchState.derive(
             installed: s.installed, running: s.info.state == "running", status: s.status, pausedUntil: s.pausedUntil, now: Date())
@@ -206,6 +212,35 @@ final class AppModel {
         return (p.terminationStatus, out)
     }
 
+    // MARK: Bug reports
+
+    /// Once at launch: if macx crashed since the last look (yours, or the background watch's queue), open
+    /// Settings > Problems with the report ready to look at. Nothing is sent from here.
+    func checkForCrashes() {
+        guard askAfterCrash else { return }
+        let since = ReportState.load().lastCrashSeen ?? Date().addingTimeInterval(-7 * 86_400)
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        Task.detached(priority: .utility) {
+            let found =
+                CrashReports.find(in: CrashReports.userFolder(home: home), since: since).count + CrashQueue().newCount(since: since)
+            Log.debug("app", "crash check: \(found) new since \(since)")
+            guard found > 0 else { return }
+            await MainActor.run {
+                self.crashNote =
+                    "macx crashed \(found == 1 ? "once" : "\(found) times") since you last looked. Make the report to see what happened; nothing is sent unless you press Send."
+                self.reportOpen = true
+                self.section = .settings
+            }
+        }
+    }
+
+    func setAskAfterCrash(_ on: Bool) {
+        var state = ReportState.load()
+        state.askAfterCrash = on
+        try? state.save()
+        askAfterCrash = on
+    }
+
     // MARK: Root actions (each asks for the administrator password)
 
     func pause(_ duration: String = "1h") {
@@ -214,7 +249,7 @@ final class AppModel {
     func resume() { runAdmin(["daemon", "resume"], why: "turn the background watch back on") }
     /// Also how the Freeze switch changes freezing: a reinstall, which keeps a switched-off Downloads watch off.
     func install(suspend: Bool) {
-        let current = installed ? DaemonSettings(suspend: freezesOnCritical, downloads: downloadsWatched) : nil
+        let current = installed ? DaemonSettings(suspend: freezesOnCritical, downloads: downloadsWatched, logLevel: daemonLogLevel) : nil
         runAdmin(DaemonSettings.installArguments(suspend: suspend, keeping: current), why: "install the background watch")
     }
     /// The setting lives in the root-owned launchd plist, so changing it takes the administrator password.
@@ -229,8 +264,10 @@ final class AppModel {
         adminError = nil
         let script = AdminCommand.appleScript(
             executable: Self.executable, arguments: arguments, user: NSUserName(), prompt: "Macximesed needs your password to \(why).")
+        Log.info("app", "admin action: \(LogRole.commandName(arguments))")
         Task.detached(priority: .userInitiated) {
             let result = OsaScript.run(script)
+            if let result { Log.warning("app", "admin action \(LogRole.commandName(arguments)) ended: \(result)") }
             await MainActor.run {
                 self.busy = false
                 // -128: the user pressed Cancel on the password prompt. Not an error.
@@ -249,6 +286,7 @@ struct DaemonSnapshot: Sendable {
     var pausedUntil: Date?
     var suspend: Bool
     var downloads: Bool
+    var logLevel: LogLevel
     var fullDiskAccess: Bool
 
     static func take() -> DaemonSnapshot {
@@ -270,7 +308,7 @@ struct DaemonSnapshot: Sendable {
         let settings = plist.flatMap(DaemonSettings.init(plist:))
         return DaemonSnapshot(
             installed: plist != nil, info: info, status: DaemonStatus.read(), pausedUntil: WatchPause.activeUntil(),
-            suspend: settings?.suspend ?? false, downloads: settings?.downloads ?? true,
+            suspend: settings?.suspend ?? false, downloads: settings?.downloads ?? true, logLevel: settings?.logLevel ?? .info,
             fullDiskAccess: PrivacyPolicy.probeFullDiskAccess())
     }
 }

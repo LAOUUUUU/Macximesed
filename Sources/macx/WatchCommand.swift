@@ -121,6 +121,7 @@ struct Watch: ParsableCommand {
             timer.schedule(deadline: .now() + 30, repeating: 30)
             timer.setEventHandler {
                 guard stamp.changed() else { return }
+                Log.info("watch", "binary changed after an update; restarting")
                 print("macx was updated; restarting on the new version.")
                 try? DaemonStatus(state: .starting, message: "Restarting on the updated macx.").write()
                 kill(child, SIGTERM)
@@ -133,10 +134,22 @@ struct Watch: ParsableCommand {
         let downloadsDir = user.home.appendingPathComponent("Downloads").path
         let downloads = DownloadChecker(
             home: user.home, owner: (user.uid, user.gid), feed: feedSource, minimum: minimum, log: log, notify: notify)
-        if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
+        if background {
+            try? DaemonStatus(state: .starting, message: "Starting eslogger.").write()
+            // macx crashes as root land in the computer's crash folder, which only admins can read. Leave short,
+            // redacted summaries where the app and `macx report` can offer them; nothing is sent from here.
+            let crashes = CrashReports.summaries(in: CrashReports.systemFolder, since: Date().addingTimeInterval(-7 * 86_400))
+            if !crashes.isEmpty {
+                Log.info("watch", "found \(crashes.count) macx crash report(s) from the last week")
+                try? CrashQueue().add(crashes, role: "background watch (or macx run with sudo)")
+            }
+        }
         print("Watching (\(events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
         print("Alerts are also saved to \(log.file.path)\n")
+        Log.info(
+            "watch",
+            "starting eslogger (background \(background), freeze \(suspend), downloads \(!noDownloads), showing \(minSeverity)+)")
 
         // Network: follow each process behind a high or critical alert, and what it starts, for 5 minutes.
         let net = NetFollower(intervalMS: netInterval) { e in
@@ -152,6 +165,7 @@ struct Watch: ParsableCommand {
 
         // One alert at a time, whether it comes from the event loop or from a Gatekeeper review finishing later.
         let handleAlert = AlertHandler { a in
+            Log.debug("watch", "alert \(a.rule) (\(a.severity.label)) by \(a.processPath ?? "?")")
             log.append(a)
             if a.severity >= .high, let pid = a.pid { net?.watch(pid: pid, reason: a.rule, path: a.processPath ?? "") }
             guard a.severity >= minimum else { return }
@@ -182,9 +196,11 @@ struct Watch: ParsableCommand {
         LineReader.forEachLine(out.fileHandleForReading) { line in
             guard let e = ESEvent.parse(line) else { return }
             seen += 1
-            if background, seen == 1 {
-                try? DaemonStatus(state: .watching, message: "Watching; alerts go to \(log.file.path).").write()
+            if seen == 1 {
+                Log.info("watch", "first event from eslogger: watching")
+                if background { try? DaemonStatus(state: .watching, message: "Watching; alerts go to \(log.file.path).").write() }
             }
+            Log.trace("watch", "event \(e.kind) pid \(e.process?.pid ?? 0)")
             if !noDownloads, let path = DownloadWatch.finishedDownload(e, downloads: downloadsDir) {
                 downloads.check(URL(fileURLWithPath: path))
             }
@@ -219,6 +235,7 @@ struct Watch: ParsableCommand {
                     + " or run: sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx, then add it again."
                     + "\nOn macOS 27.3 and later, give it full access, not specific folders: eslogger needs full Full Disk Access."
             }
+            Log.error("watch", hint)
             if background {
                 // Exit cleanly so launchd doesn't restart it every 30 s; the status file says why.
                 print(hint)
@@ -231,6 +248,7 @@ struct Watch: ParsableCommand {
             throw UserError(hint)
         }
         print("eslogger stopped (\(es.terminationStatus)).")
+        Log.warning("watch", "eslogger stopped (\(es.terminationStatus)) after \(seen) events: \(message.prefix(300))")
         if background {
             try? DaemonStatus(state: .stopped, message: "eslogger stopped (\(es.terminationStatus)).").write()
             throw ExitCode(1)  // launchd restarts it
@@ -332,15 +350,28 @@ final class DownloadChecker: @unchecked Sendable {
             DownloadWatch.waitUntilSettled(file)
             guard FileManager.default.fileExists(atPath: file.path) else { return }
             let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: feed.current)
-            guard let report = try? checker.check(file) else { return }
-            if let sha = report.sha256, DownloadWatch.isAllowed(sha, home: home) { return }
+            Log.debug("downloads", "finished download: \(file.path)")
+            let report: FileReport
+            do { report = try checker.check(file) } catch {
+                Log.warning("downloads", "couldn't check \(file.lastPathComponent): \(error)")
+                return
+            }
+            if let sha = report.sha256, DownloadWatch.isAllowed(sha, home: home) {
+                Log.info("downloads", "\(file.lastPathComponent) is on the allow list (restored before)")
+                return
+            }
             var alert = DownloadWatch.alert(for: report)
+            Log.info("downloads", "\(file.lastPathComponent): \(report.verdict) [\(alert.rule)]")
             if alert.rule == "download-dangerous" {
                 // Lao's choice: quarantine automatically, so it can't be opened by accident. Restorable.
-                if let q = try? DownloadWatch.quarantine(file, report: report, home: home, owner: owner) {
+                do {
+                    let q = try DownloadWatch.quarantine(file, report: report, home: home, owner: owner)
+                    Log.info("downloads", "quarantined \(file.lastPathComponent): case \(q.caseID), batch \(q.batchID)")
                     alert.title = "Dangerous download quarantined: \(file.lastPathComponent)"
                     alert.detail =
                         (alert.detail ?? "") + "\n  Case: macx incident show \(q.caseID)\n  Put it back: macx undo restore \(q.batchID)"
+                } catch {
+                    Log.error("downloads", "couldn't quarantine \(file.lastPathComponent): \(error)")
                 }
             }
             log.append(alert)

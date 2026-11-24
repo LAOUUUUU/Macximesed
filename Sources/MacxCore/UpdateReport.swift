@@ -42,7 +42,7 @@ public struct UpdateReport: Sendable, Equatable {
             }
             return UpdateReport(status: .available(v), feed: feed, warnings: warnings)
         }
-        if lines.contains(where: { $0.hasSuffix(" is up to date.") }) {
+        if lines.contains(where: { $0.hasPrefix("macx ") && $0.contains(" is up to date") }) {
             return UpdateReport(status: .upToDate, feed: feed, warnings: warnings)
         }
         return UpdateReport(status: .failed(lines.last ?? "Couldn't check."), feed: feed, warnings: warnings)

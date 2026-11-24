@@ -9,7 +9,9 @@ struct Daemon: ParsableCommand {
         discussion: """
             `sudo macx daemon install` sets up /Library/LaunchDaemons/\(DaemonPlan.label).plist, which runs Macximesed.app's own macx as `macx watch` from startup on. High and critical alerts show as notifications, and every alert is saved to ~/Library/Logs/Macximesed/watch.jsonl (see `macx alerts`). It needs Full Disk Access for Macximesed.app (macx privacy --open).
             """,
-        subcommands: [Install.self, Uninstall.self, Status.self, Restart.self, Pause.self, Resume.self, Downloads.self],
+        subcommands: [
+            Install.self, Uninstall.self, Status.self, Restart.self, Pause.self, Resume.self, Downloads.self, LogLevelCommand.self,
+        ],
         defaultSubcommand: Status.self
     )
 
@@ -58,6 +60,7 @@ struct Daemon: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Install and start the background watch.")
         @Flag(help: "Freeze (SIGSTOP) the process behind each critical alert.") var suspend = false
         @Flag(help: "Don't check finished downloads in ~/Downloads.") var noDownloads = false
+        @Option(help: "How much it writes to its log: trace, debug, info, warning or error.") var logLevel: String = "info"
 
         func run() throws {
             try requireRoot("install")
@@ -67,9 +70,12 @@ struct Daemon: ParsableCommand {
             guard let user = WatchUser.resolve() else {
                 throw UserError("Run it with sudo from your own account (sudo macx daemon install), so alerts reach you.")
             }
+            guard let level = LogLevel(name: logLevel) else {
+                throw UserError("\"\(logLevel)\" isn't a level. Use trace, debug, info, warning or error.")
+            }
             let plan: DaemonPlan
             do {
-                plan = try DaemonPlan(executable: exe, user: user, suspend: suspend, downloads: !noDownloads)
+                plan = try DaemonPlan(executable: exe, user: user, suspend: suspend, downloads: !noDownloads, logLevel: level)
             } catch {
                 throw UserError(
                     "macx must run from Macximesed.app (Full Disk Access belongs to the app). Install it with scripts/install.sh, then run:\n  sudo ~/.local/bin/macx daemon install"
@@ -83,6 +89,7 @@ struct Daemon: ParsableCommand {
             chown(plan.plistPath.path, 0, 0)
             chmod(plan.plistPath.path, 0o644)
             try load()
+            Log.info("daemon", "installed: \(plan.arguments.joined(separator: " ")) for \(user.name)")
             print("Installed \(plan.plistPath.path)")
             print("Runs: \(exe.path) \(plan.arguments.joined(separator: " ")) for \(user.name)")
             print("Checking it started...")
@@ -100,6 +107,7 @@ struct Daemon: ParsableCommand {
                 try FileManager.default.removeItem(at: DaemonPlan.plistPath)
             }
             try? DaemonStatus(state: .stopped, message: "Uninstalled.").write()
+            Log.info("daemon", "uninstalled")
             print("Background watch removed. Alerts already saved stay in ~/Library/Logs/Macximesed/watch.jsonl.")
         }
     }
@@ -113,6 +121,7 @@ struct Daemon: ParsableCommand {
             }
             unload()
             try load()
+            Log.info("daemon", "restarted")
             Thread.sleep(forTimeInterval: 4)
             Status.show()
         }
@@ -136,6 +145,7 @@ struct Daemon: ParsableCommand {
             let until = Date().addingTimeInterval(seconds)
             try WatchPause.write(until: until)
             chown(WatchPause.file.path, 0, 0)
+            Log.info("daemon", "paused for \(Int(seconds / 60)) min")
             print("Paused until \(WatchState.clock(until)). Alerts are still logged; notifications and freezing are off.")
             print("Resume early: sudo macx daemon resume")
         }
@@ -146,8 +156,34 @@ struct Daemon: ParsableCommand {
         func run() throws {
             try requireRoot("resume")
             WatchPause.clear()
+            Log.info("daemon", "resumed")
             print("Resumed: notifications and freezing are back on.")
         }
+    }
+
+    /// The installed plist and what it says. Reading needs no root: the file is root-owned but readable.
+    static func installedPlist() throws -> (plist: [String: Any], settings: DaemonSettings) {
+        let path = DaemonPlan.plistPath
+        guard let data = try? Data(contentsOf: path),
+            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { throw UserError("The background watch isn't installed (sudo macx daemon install).") }
+        guard let settings = DaemonSettings(plist: plist) else {
+            throw UserError("\(path.path) isn't the plist macx writes. Reinstall it: sudo macx daemon install")
+        }
+        return (plist, settings)
+    }
+
+    /// Writes a changed plist (root-owned, 0644) and restarts the watch with it. Written before the watch is
+    /// stopped: if the write fails, the running watch is left as it was.
+    static func rewrite(_ plist: [String: Any]?) throws {
+        let path = DaemonPlan.plistPath
+        guard let plist else { throw UserError("Couldn't change \(path.path).") }
+        let out = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try out.write(to: path, options: .atomic)
+        chown(path.path, 0, 0)
+        chmod(path.path, 0o644)
+        unload()
+        try load()
     }
 
     struct Downloads: ParsableCommand {
@@ -161,13 +197,7 @@ struct Daemon: ParsableCommand {
         @Argument(help: "on or off. Leave it out to see the current setting.") var setting: Setting?
 
         func run() throws {
-            let path = DaemonPlan.plistPath
-            guard let data = try? Data(contentsOf: path),
-                let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-            else { throw UserError("The background watch isn't installed (sudo macx daemon install).") }
-            guard let current = DaemonSettings(plist: plist) else {
-                throw UserError("\(path.path) isn't the plist macx writes. Reinstall it: sudo macx daemon install")
-            }
+            let (plist, current) = try installedPlist()
             guard let setting else {
                 print("Downloads watch: \(current.downloads ? "on" : "off (turn it on: sudo macx daemon downloads on)")")
                 return
@@ -178,17 +208,42 @@ struct Daemon: ParsableCommand {
                 print("The Downloads watch is already \(setting.rawValue).")
                 return
             }
-            guard let updated = DaemonSettings.plist(plist, downloads: on) else { throw UserError("Couldn't change \(path.path).") }
-            let out = try PropertyListSerialization.data(fromPropertyList: updated, format: .xml, options: 0)
-            // Written before the watch is stopped: if the write fails, the running watch is left as it was.
-            try out.write(to: path, options: .atomic)
-            chown(path.path, 0, 0)
-            chmod(path.path, 0o644)
-            unload()
-            try load()
+            try rewrite(DaemonSettings.plist(plist, downloads: on))
+            Log.info("daemon", "Downloads watch turned \(setting.rawValue)")
             print("Downloads watch: \(setting.rawValue). The background watch restarted with it.")
             Thread.sleep(forTimeInterval: 4)
             Status.show()
+        }
+    }
+
+    /// `macx daemon log [level]`. Named apart from MacxCore's `Log`, which it would otherwise hide in here.
+    struct LogLevelCommand: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "log",
+            abstract: "Show or change how much the background watch writes to its log.",
+            discussion: """
+                The background watch writes to \(LogFile.rootFolder.path)/watch.log. `macx daemon log` shows the level (no sudo). `sudo macx daemon log debug` (or trace) adds detail while you look into a problem; `sudo macx daemon log info` puts it back. It's kept in the root-owned launchd plist, and changing it restarts the watch.
+                """
+        )
+        @Argument(help: "trace, debug, info, warning or error. Leave it out to see the current level.") var level: String?
+
+        func run() throws {
+            let (plist, current) = try installedPlist()
+            guard let level else {
+                print("Background watch log: \(current.logLevel.name), in \(LogFile.rootFolder.path)/watch.log")
+                return
+            }
+            guard let wanted = LogLevel(name: level) else {
+                throw UserError("\"\(level)\" isn't a level. Use trace, debug, info, warning or error.")
+            }
+            try requireRoot("log \(wanted.name)")
+            guard wanted != current.logLevel else {
+                print("The background watch already logs at \(wanted.name).")
+                return
+            }
+            try rewrite(DaemonSettings.plist(plist, logLevel: wanted))
+            Log.info("daemon", "log level set to \(wanted.name)")
+            print("Background watch log: \(wanted.name). The watch restarted with it.")
         }
     }
 
@@ -218,13 +273,14 @@ struct Daemon: ParsableCommand {
             if let settings = DaemonSettings.read() {
                 let (now, other) = settings.downloads ? ("on", "off") : ("off", "on")
                 print("  Downloads watch: \(now) (sudo macx daemon downloads \(other))")
+                print("  Its log: \(LogFile.rootFolder.path)/watch.log, level \(settings.logLevel.name) (sudo macx daemon log debug)")
             }
             if let user = WatchUser.resolve() ?? WatchUser.lookup(NSUserName()) {
                 print(
                     "  Notifications: \(AppPresence.isAppRunning(userUID: user.uid) ? "shown by the Macximesed app (open)" : "shown through osascript (the app isn't open)")"
                 )
             }
-            print("  Log: \(DaemonPlan.logPath.path)    Alerts: macx alerts")
+            print("  Output: \(DaemonPlan.logPath.path)    Alerts: macx alerts")
         }
     }
 }

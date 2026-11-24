@@ -9,3 +9,6 @@ DerivedData/
 research/evaluation/runtime-watch-output.txt
 announcements/*.message-id
 dist/
+.wrangler/
+node_modules/
+*.mxr

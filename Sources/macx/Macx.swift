@@ -5,7 +5,10 @@ import MacxCore
 @main
 enum Entry {
     static func main() {
-        let args = Array(CommandLine.arguments.dropFirst())
+        // -v / -vv / --verbose work on every command: they're taken out here, before ArgumentParser sees them.
+        let logSettings = LogSettings.from(
+            arguments: Array(CommandLine.arguments.dropFirst()), environment: ProcessInfo.processInfo.environment)
+        let args = logSettings.arguments
         if LaunchMode.decide(arguments: args, environment: ProcessInfo.processInfo.environment) == .app {
             // From a terminal (`macx app`) hand over to LaunchServices, so the app is its own process with its own
             // Full Disk Access, not a child of the terminal. A development build outside the app runs in place.
@@ -19,15 +22,27 @@ enum Entry {
                 open.waitUntilExit()
                 return
             }
+            startLog(.app, logSettings)
+            Log.info("app", "Macximesed \(BuildVersion.current) started")
             MainActor.assumeIsolated { MacxApp.run() }
         }
         Responsibility.becomeOwnResponsibleProcessIfNeeded()
-        UpdateCheck.runIfDue(arguments: Array(CommandLine.arguments.dropFirst()))
+        startLog(LogRole.of(arguments: args), logSettings)
+        Log.debug("start", "macx \(BuildVersion.current), command: \(LogRole.commandName(args)), uid \(geteuid())")
+        UpdateCheck.runIfDue(arguments: args)
         // A game session whose game quit while macx wasn't watching (crash, closed terminal) leaves Boost on.
         if geteuid() != 0, GameSessionGuard.recoverIfNeeded() {
             FileHandle.standardError.write(Data("macx: the last game session ended without macx; Boost was turned off.\n".utf8))
         }
-        Macx.main()
+        Macx.main(args)
+    }
+
+    /// Home folders are written as `~`: our own, and under sudo or in the daemon, the user macx works for.
+    static func startLog(_ role: LogRole, _ settings: LogSettings) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let user = WatchUser.resolve()?.home
+        let homes = LogLine.homeVariants([user, home].compactMap { $0?.path })
+        Log.start(role: role, settings: settings, home: home, homes: homes)
     }
 }
 
@@ -35,11 +50,15 @@ struct Macx: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "macx",
         abstract: "Macximesed: speed up macOS and watch for stealer-style malware.",
-        version: macxVersion,
+        discussion: """
+            Add -v (or -vv for even more) to any command to see what it's doing. The details also go to \
+            ~/Library/Logs/Macximesed/cli.log. MACX_LOG=debug does the same without printing them.
+            """,
+        version: BuildVersion.current.description,
         subcommands: [
             Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Daemon.self, Alerts.self, Net.self,
             Chamber.self, Top.self, BoostCommand.self, TuneCommand.self, GamesCommand.self, ESPassthrough.self,
-            Incident.self, Privacy.self,
+            Incident.self, Privacy.self, Report.self, ReportKeygen.self, ReportOpen.self,
             Update.self,
             Undo.self,
         ]
