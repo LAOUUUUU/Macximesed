@@ -253,3 +253,33 @@ public enum AdminCommand {
         return "do shell script \"\(escaped)\" with administrator privileges"
     }
 }
+
+/// The watch loop's view of the pause: it re-reads the pause file at most every `interval` seconds.
+public struct PauseGate {
+    public struct Effects: Equatable, Sendable {
+        public var log: Bool
+        public var notify: Bool
+        public var freeze: Bool
+    }
+
+    let interval: TimeInterval
+    let read: (Date) -> Date?
+    var checkedAt: Date?
+    var until: Date?
+
+    public init(interval: TimeInterval = 2, read: @escaping (Date) -> Date? = { WatchPause.activeUntil(now: $0) }) {
+        self.interval = interval
+        self.read = read
+    }
+
+    public mutating func isPaused(now: Date = Date()) -> Bool {
+        if checkedAt.map({ now.timeIntervalSince($0) >= interval }) ?? true {
+            until = read(now)
+            checkedAt = now
+        }
+        return until.map { $0 > now } ?? false
+    }
+
+    /// While paused every alert is still written to the log (nothing is lost), but nothing pops up or is frozen.
+    public static func effects(paused: Bool) -> Effects { Effects(log: true, notify: !paused, freeze: !paused) }
+}

@@ -221,3 +221,33 @@ struct AdminCommandTests {
         #expect(tricky == #"do shell script "'/tmp/a b/it'\\''s \"x\"'" with administrator privileges"#)
     }
 }
+
+@Suite("Mac app: pause gate in the watch loop")
+struct PauseGateTests {
+    final class Box: @unchecked Sendable {
+        var until: Date?
+        var reads = 0
+    }
+
+    @Test func readsThePauseFileAtMostEveryTwoSecondsAndFollowsIt() {
+        let box = Box()
+        var gate = PauseGate(interval: 2) { _ in
+            box.reads += 1
+            return box.until
+        }
+        let t0 = Date(timeIntervalSince1970: 100)
+        #expect(gate.isPaused(now: t0) == false)
+        box.until = Date(timeIntervalSince1970: 200)
+        #expect(gate.isPaused(now: t0.addingTimeInterval(1)) == false)  // cached
+        #expect(box.reads == 1)
+        #expect(gate.isPaused(now: t0.addingTimeInterval(2)) == true)
+        #expect(box.reads == 2)
+        // It ends on time even between reads.
+        #expect(gate.isPaused(now: Date(timeIntervalSince1970: 200.5)) == false)
+    }
+
+    @Test func pausedWatchStillLogsButStopsNotifyingAndFreezing() {
+        #expect(PauseGate.effects(paused: true) == .init(log: true, notify: false, freeze: false))
+        #expect(PauseGate.effects(paused: false) == .init(log: true, notify: true, freeze: true))
+    }
+}

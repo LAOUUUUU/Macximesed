@@ -99,7 +99,7 @@ struct Watch: ParsableCommand {
         }
 
         let screenUser = background ? WatchUser.resolve() : nil
-        let screen = ScreenNotifier(user: screenUser)
+        let screen = ScreenNotifier(user: screenUser, honoursPause: background)
         let notify: @Sendable (WatchAlert) -> Void = { screen.send($0) }
         if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
@@ -143,7 +143,7 @@ struct Watch: ParsableCommand {
                     // Critical: stop it first (if asked), then keep the evidence while the process is still there.
                     if a.severity == .critical {
                         var frozen: [Int] = []
-                        if suspend {
+                        if suspend, screen.effects.freeze {
                             frozen = Self.freeze(a)
                             if !frozen.isEmpty { log.appendFreeze(alertRule: a.rule, pids: frozen) }
                         }
@@ -237,11 +237,21 @@ final class ScreenNotifier: @unchecked Sendable {
     let user: WatchUser?
     let lock = NSLock()
     var throttle = NotificationThrottle()
+    /// `sudo macx daemon pause`: only the background watch honours it (a terminal watch is stopped with Ctrl-C).
+    var gate: PauseGate?
 
-    init(user: WatchUser?) { self.user = user }
+    init(user: WatchUser?, honoursPause: Bool = false) {
+        self.user = user
+        gate = honoursPause ? PauseGate() : nil
+    }
+
+    /// While paused, alerts are still logged, but nothing pops up and nothing is frozen.
+    var effects: PauseGate.Effects {
+        lock.withLock { PauseGate.effects(paused: gate?.isPaused() ?? false) }
+    }
 
     func send(_ a: WatchAlert) {
-        guard let user else { return }
+        guard let user, effects.notify else { return }
         let message = lock.withLock { throttle.offer(a.title) }
         if let message { AlertNotifier.notify(user: user, title: "Macximesed: \(a.severity.label)", message: message) }
     }

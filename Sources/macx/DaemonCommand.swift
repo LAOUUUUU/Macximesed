@@ -9,7 +9,7 @@ struct Daemon: ParsableCommand {
         discussion: """
             `sudo macx daemon install` sets up /Library/LaunchDaemons/\(DaemonPlan.label).plist, which runs Macximesed.app's own macx as `macx watch` from startup on. High and critical alerts show as notifications, and every alert is saved to ~/Library/Logs/Macximesed/watch.jsonl (see `macx alerts`). It needs Full Disk Access for Macximesed.app (macx privacy --open).
             """,
-        subcommands: [Install.self, Uninstall.self, Status.self, Restart.self],
+        subcommands: [Install.self, Uninstall.self, Status.self, Restart.self, Pause.self, Resume.self],
         defaultSubcommand: Status.self
     )
 
@@ -117,6 +117,38 @@ struct Daemon: ParsableCommand {
         }
     }
 
+    struct Pause: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Stop notifications and freezing for a while; alerts are still logged. It turns itself back on.",
+            discussion: "Needs root, so nothing running as you can pause it. At most 24h. Resume early with `sudo macx daemon resume`."
+        )
+        @Option(name: .customLong("for"), help: "How long: 1h, 30m, or minutes (at most 24h).") var duration: String = "1h"
+
+        func run() throws {
+            try requireRoot("pause")
+            guard let seconds = WatchPause.parseDuration(duration) else {
+                throw UserError("\"\(duration)\" isn't a duration from 1 minute to 24 hours (try 1h or 30m).")
+            }
+            guard FileManager.default.fileExists(atPath: DaemonPlan.plistPath.path) else {
+                throw UserError("The background watch isn't installed (sudo macx daemon install).")
+            }
+            let until = Date().addingTimeInterval(seconds)
+            try WatchPause.write(until: until)
+            chown(WatchPause.file.path, 0, 0)
+            print("Paused until \(WatchState.clock(until)). Alerts are still logged; notifications and freezing are off.")
+            print("Resume early: sudo macx daemon resume")
+        }
+    }
+
+    struct Resume: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "End a pause now.")
+        func run() throws {
+            try requireRoot("resume")
+            WatchPause.clear()
+            print("Resumed: notifications and freezing are back on.")
+        }
+    }
+
     struct Status: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Is the background watch running, and what did it last say?")
         func run() throws { Status.show() }
@@ -139,6 +171,7 @@ struct Daemon: ParsableCommand {
                 print("  macx \(stale ? "last said" : "says") (\(when)): \(s.state.rawValue). \(s.message)")
                 if info.status != 0 { print("  Start it: sudo macx daemon restart") }
             }
+            if let until = WatchPause.activeUntil() { print("  Paused until \(WatchState.clock(until)) (sudo macx daemon resume)") }
             print("  Log: \(DaemonPlan.logPath.path)    Alerts: macx alerts")
         }
     }
