@@ -77,3 +77,30 @@ struct PrivacyTests {
         _ = PrivacyPolicy.probeFullDiskAccess()
     }
 }
+
+/// macOS 27 removed direct access to TCC.db (and the user copy isn't at the old path), so the old probe said "no"
+/// even with Full Disk Access. The probe lists folders that only Full Disk Access opens and that never prompt.
+@Suite("Full Disk Access probe (macOS 27)")
+struct FullDiskAccessProbeTests {
+    @Test func readableProtectedFolderMeansOn() throws {
+        let tmp = try TempDir()
+        _ = try tmp.file("Library/Safari/Bookmarks.plist", "x")
+        #expect(PrivacyPolicy.probeFullDiskAccess(home: tmp.url))
+    }
+
+    @Test func refusedProtectedFolderMeansOff() throws {
+        let tmp = try TempDir()
+        let safari = tmp.url.appendingPathComponent("Library/Safari")
+        try FileManager.default.createDirectory(at: safari, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: safari.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: safari.path) }
+        #expect(!PrivacyPolicy.probeFullDiskAccess(home: tmp.url))
+    }
+
+    @Test func missingFoldersAreSkippedNotCountedAsOn() throws {
+        let tmp = try TempDir()
+        #expect(!PrivacyPolicy.probeFullDiskAccess(home: tmp.url, systemTCC: tmp.url.appendingPathComponent("none")))
+        _ = try tmp.file("Library/Mail/V10/x", "x")  // Safari missing, Mail present and readable
+        #expect(PrivacyPolicy.probeFullDiskAccess(home: tmp.url))
+    }
+}

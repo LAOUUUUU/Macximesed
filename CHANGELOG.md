@@ -184,6 +184,8 @@ The first release: the antivirus side is complete (the checklist in STATUS.md), 
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **Full Disk Access showed "Off" on macOS 27** (in the app, `macx privacy` and first-run setup) while it was on. macOS 27 blocks direct TCC.db access, and the user database isn't at the old path. The check now lists a folder only Full Disk Access opens (`~/Library/Safari`, `Mail`, `Messages`, `Cookies`, `Suggestions`), which fails quietly, with no prompt, when access is off.
+- **Settings in the app:** the "This app" settings were squeezed onto one line; each now has its own row.
 - **The app's Install button failed after the password.** AppleScript's admin shell runs as root with no SUDO_USER, so `daemon install` couldn't tell whose Mac it was. The app now passes `MACX_USER`, and the password dialog says what each action is for.
 - **False alarms in the live watch** (from Lao's real alert log, 2026-11-24):
   - **Arguments aren't code:** command patterns only count when a shell or interpreter runs them, or when the tool is the attack itself (`dscl -authonly`, `xattr -d com.apple.quarantine`). `macx guard inspect -- "curl…|zsh"`, commit messages and `sudo` wrappers no longer alert (46 + 2 false criticals from the evaluation).

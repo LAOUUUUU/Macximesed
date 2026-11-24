@@ -34,11 +34,27 @@ public struct PrivacyPolicy: Sendable, Equatable {
         return !guardedRoots.contains { p == $0 || p.hasPrefix($0 + "/") }
     }
 
-    /// Full Disk Access is the only thing that can open the TCC database. Without it the open just
-    /// fails with "Operation not permitted". There's no prompt, so this is safe to ask every run.
-    public static func probeFullDiskAccess(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
-        let db = home.appendingPathComponent("Library/Application Support/com.apple.TCC/TCC.db").path
-        let fd = open(db, O_RDONLY)
+    /// Folders only Full Disk Access opens, and that never show a privacy prompt when refused (unlike Desktop or
+    /// Documents). macOS 27 blocks direct TCC.db access, so the database itself is only a last resort.
+    static let fullDiskAccessOnly = ["Library/Safari", "Library/Mail", "Library/Messages", "Library/Cookies", "Library/Suggestions"]
+
+    /// True when this process (or the app responsible for it) has Full Disk Access. Lists the first of those folders
+    /// that exists: listing works with access and fails quietly ("Operation not permitted") without. No prompt, so
+    /// it's safe to ask on every run.
+    public static func probeFullDiskAccess(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        systemTCC: URL = URL(fileURLWithPath: "/Library/Application Support/com.apple.TCC/TCC.db")
+    ) -> Bool {
+        for rel in fullDiskAccessOnly {
+            let path = home.appendingPathComponent(rel).path
+            var isDir: ObjCBool = false
+            // fileExists works on the folder itself even without access; only its contents are protected.
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard let dir = opendir(path) else { return false }
+            closedir(dir)
+            return true
+        }
+        let fd = open(systemTCC.path, O_RDONLY)
         if fd >= 0 {
             close(fd)
             return true

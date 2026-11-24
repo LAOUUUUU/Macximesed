@@ -402,17 +402,19 @@ struct SettingsView: View {
                     }
                     Hairline()
                     section("This app") {
-                        HStack {
-                            Text("Open in the menu bar at login")
-                            Spacer()
-                            TwoState(label: "Open at login", isOn: loginItem) { on in setLogin(on) }
+                        // One row per setting: `section` lays its content out in an HStack, so two rows need a VStack.
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Text("Open in the menu bar at login").font(Fonts.sans(14))
+                                Spacer()
+                                TwoState(label: "Open at login", isOn: loginItem) { on in setLogin(on) }
+                            }
+                            HStack {
+                                Text("The first-run setup").font(Fonts.sans(14))
+                                Spacer()
+                                Button("Run setup again") { model.runSetup?() }.buttonStyle(PlainButtonStyle())
+                            }
                         }
-                        HStack {
-                            Text("The first-run setup")
-                            Spacer()
-                            Button("Run setup again") { model.runSetup?() }.buttonStyle(PlainButtonStyle())
-                        }
-                        .padding(.top, 14)
                     }
                 }
                 .padding(.horizontal, 48)
