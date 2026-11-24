@@ -60,6 +60,13 @@ struct ProfileTests {
                 "PayloadType": "com.apple.ManagedClient.preferences",
                 "PayloadContent": ["com.google.Chrome": ["Forced": [["mcx_preference_settings": ["HomepageLocation": "https://x"]]]]],
             ]) == [.browserPolicy])
+        #expect(
+            caps([
+                "PayloadType": "com.apple.ManagedClient.preferences",
+                "PayloadContent": [
+                    "PayloadContentManagedPreferences": ["com.brave.Browser": ["Forced": [["mcx_preference_settings": ["X": true]]]]]
+                ],
+            ]) == [.browserPolicy])
         #expect(caps(["PayloadType": "com.apple.dock"]).isEmpty)
     }
 
@@ -77,6 +84,21 @@ struct ProfileTests {
         #expect(ca.item.kind == .configurationProfile)
         #expect(ca.item.runsAsRoot)
         #expect(f.contains { $0.rule == "profile-installed-by-hand" && $0.severity == .low })
+    }
+
+    /// Real `sudo profiles show -output stdout-xml` from macOS 27.0.1 with a hand-installed test profile. Installed,
+    /// a custom-settings payload keeps its domains one level down, under PayloadContentManagedPreferences, not in
+    /// PayloadContent itself as in the .mobileconfig file.
+    @Test func realInstalledProfileWithABrowserPolicyIsHigh() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(
+            "Fixtures/profiles-show-installed.xml")
+        let profiles = try ConfigurationProfiles.parse(Data(contentsOf: url))
+        let p = try #require(profiles.first { $0.identifier == "dev.macximesed.profile-test" })
+        #expect(p.scope == .computer)
+        #expect(p.capabilities == [.browserPolicy])
+        let f = PersistenceRules.evaluate(
+            ConfigurationProfiles.items(profiles, managedByMDM: false), home: URL(fileURLWithPath: "/Users/v"))
+        #expect(f.contains { $0.rule == "profile-browser-policy" && $0.severity == .high })
     }
 
     @Test func forcedBrowserExtensionAndProxyAreHigh() throws {

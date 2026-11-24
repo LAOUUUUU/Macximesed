@@ -20,6 +20,6 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        .testTarget(name: "MacxCoreTests", dependencies: ["MacxCore"]),
+        .testTarget(name: "MacxCoreTests", dependencies: ["MacxCore"], exclude: ["Fixtures"]),
     ]
 )

@@ -64,7 +64,11 @@ public enum ProfileCapability: String, Codable, Sendable, CaseIterable, Comparab
         case "com.apple.webcontent-filter": out.insert(.contentFilter)
         case "com.apple.servicemanagement", "com.apple.loginitems.managed": out.insert(.loginItems)
         case "com.apple.ManagedClient.preferences":
-            if let domains = p["PayloadContent"] as? [String: Any], domains.keys.contains(where: browserDomains.contains) {
+            // In a .mobileconfig the domains sit in PayloadContent; `profiles show` puts them one level down, under
+            // PayloadContentManagedPreferences (seen on macOS 27.0.1 with a real installed profile).
+            let content = p["PayloadContent"] as? [String: Any] ?? [:]
+            let domains = content["PayloadContentManagedPreferences"] as? [String: Any] ?? content
+            if domains.keys.contains(where: browserDomains.contains) {
                 out.insert(.browserPolicy)
             }
         default:

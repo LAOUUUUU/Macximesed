@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>_computerlevel</key>
+	<array>
+		<dict>
+			<key>ProfileDescription</key>
+			<string>Test profile for macx persist. Sets one made-up preference nothing reads, and one Chrome policy name Chrome does not know (it ignores it). Remove it in System Settings when the test is done.</string>
+			<key>ProfileDisplayName</key>
+			<string>Macximesed profile test (harmless, remove after)</string>
+			<key>ProfileIdentifier</key>
+			<string>dev.macximesed.profile-test</string>
+			<key>ProfileInstallDate</key>
+			<string>2026-11-24 18:18:10 +0000</string>
+			<key>ProfileItems</key>
+			<array>
+				<dict>
+					<key>PayloadContent</key>
+					<dict>
+						<key>PayloadContentManagedPreferences</key>
+						<dict>
+							<key>com.google.Chrome</key>
+							<dict>
+								<key>Forced</key>
+								<array>
+									<dict>
+										<key>mcx_preference_settings</key>
+										<dict>
+											<key>MacximesedTestPolicyThatDoesNothing</key>
+											<true/>
+										</dict>
+									</dict>
+								</array>
+							</dict>
+						</dict>
+					</dict>
+					<key>PayloadIdentifier</key>
+					<string>dev.macximesed.profile-test.browser</string>
+					<key>PayloadType</key>
+					<string>com.apple.ManagedClient.preferences</string>
+					<key>PayloadUUID</key>
+					<string>28CDD238-B68B-4C0F-9CCC-D1AF0BB04AE2</string>
+					<key>PayloadVersion</key>
+					<integer>1</integer>
+				</dict>
+				<dict>
+					<key>PayloadContent</key>
+					<dict>
+						<key>PayloadContentManagedPreferences</key>
+						<dict>
+							<key>dev.macximesed.profile-test</key>
+							<dict>
+								<key>Forced</key>
+								<array>
+									<dict>
+										<key>mcx_preference_settings</key>
+										<dict>
+											<key>MacximesedTest</key>
+											<true/>
+										</dict>
+									</dict>
+								</array>
+							</dict>
+						</dict>
+					</dict>
+					<key>PayloadIdentifier</key>
+					<string>dev.macximesed.profile-test.nothing</string>
+					<key>PayloadType</key>
+					<string>com.apple.ManagedClient.preferences</string>
+					<key>PayloadUUID</key>
+					<string>22B2D0F9-B7A9-44BD-B884-03616E2BF480</string>
+					<key>PayloadVersion</key>
+					<integer>1</integer>
+				</dict>
+			</array>
+			<key>ProfileOrganization</key>
+			<string>Macximesed test</string>
+			<key>ProfileType</key>
+			<string>Configuration</string>
+			<key>ProfileUUID</key>
+			<string>F1F8A55C-C28D-40A6-845D-0095EF08650D</string>
+			<key>ProfileVersion</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+</dict>
+</plist>

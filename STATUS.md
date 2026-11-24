@@ -13,7 +13,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **A. Signed hash feed** (built 2026-11-23; goes live with the first release) on GitHub Pages: listed in the signed channel, cached locally, checked offline by `macx check` and `macx watch`.
 - [x] **B. Runs in the background** (2026-11-23): `sudo macx daemon install` (launchd), notifications for high and critical alerts, `macx alerts`, `macx daemon status`. Tested on macOS 27.0.1: watching, a test alert logged, about 1% CPU.
 - [x] **C. Network watching** for flagged processes (2026-11-23): libproc polling every 20 ms, `macx net`; miss rate in [research/evaluation/network-results.md](research/evaluation/network-results.md).
-- [x] **D. Configuration profiles** in `macx persist` (2026-11-23): yours without root, computer-wide ones with `sudo`; rules by payload type. Not yet checked against a real installed profile (CI runners can't install one: the `profiles` tool no longer installs).
+- [x] **D. Configuration profiles** in `macx persist` (2026-11-23): yours without root, computer-wide ones with `sudo`; rules by payload type. Checked against a real installed profile on 2026-11-24 (macOS 27.0.1): it found a bug, now fixed, and the real output is a test fixture.
 - [x] **E. `sfltool` stall understood** (2026-11-23): without root it asks for an admin password (`system.privilege.admin`) and waits on the dialog; as root it answers at once. It now runs only as root. Reading the BTM file directly is no better: its folder needs Full Disk Access.
 - [x] **F. Evaluations re-run** (2026-11-24, macOS 27.0.1, M3, with Macximesed's own Full Disk Access): static 17/17 attacks flagged (12 dangerous), 0/11 installers dangerous; runtime 7/7 steps alerted in 31–257 ms, frozen 5–6 ms after the alert, children frozen. CI on the final commit: see below.
   - [x] The daemon stops on SIGTERM: `daemon.log` shows "Stopped watching.", and launchd sent no SIGKILL (2026-11-23 19:39).
@@ -80,4 +80,3 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
 - `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.
 - `sfltool dumpbtm` is undocumented. The parser keeps unknown keys and types and skips what it can't read; re-check on each macOS release.
-- Configuration profiles: the parser follows the documented `profiles show -output stdout-xml` layout. Check it against a real installed profile when one is on hand.
