@@ -3,10 +3,16 @@ import Foundation
 /// Turns the light chamber's strace output into the events the chamber judge reads. The log comes from the
 /// guest, so it's untrusted: anything that doesn't parse is skipped and counted, never followed.
 ///
-/// Expected command: `strace -f -ttt -qq -s 4096 -e trace=execve,openat,rename,renameat,renameat2,connect,clone,clone3,fork,vfork`
+/// Expected command: `strace -f -ttt -qq -s 4096 -e trace=` + `traceSyscalls`.
 /// Lines: `PID EPOCH.MICROS syscall(args) = result`, plus `<unfinished ...>` / `<... name resumed>` pairs and
 /// `+++ exited with N +++`.
 public enum StraceLog {
+    /// The syscalls the guest agent traces, for both chamber architectures. Intel (x86_64) programs open files with
+    /// the old `open` and `creat`, which arm64 lacks; `?` tells strace to skip a name the architecture doesn't have
+    /// instead of refusing to start.
+    public static let traceSyscalls =
+        "execve,openat,?open,?creat,?rename,renameat,renameat2,connect,clone,clone3,?fork,?vfork"
+
     public struct Parsed: Sendable {
         public var events: [ESEvent]
         public var skipped: Int
@@ -63,13 +69,15 @@ public enum StraceLog {
                 x.target = ESProcessInfo(path: path, pid: pid, ppid: parent[pid], isPlatform: false, teamID: nil, signingID: nil)
                 x.args = call.strings(1)
                 e = x
-            case "openat":
-                guard call.result >= 0, let path = call.string(1) else { break }
+            case "openat", "open", "creat":
+                // openat(dirfd, path, flags), open(path, flags), creat(path, mode): creat always creates.
+                let at = call.name == "openat" ? 1 : 0
+                guard call.result >= 0, let path = call.string(at) else { break }
                 var o = ESEvent(kind: "open", process: process(pid))
                 o.filePath = path
                 o.time = time
                 events.append(o)
-                if (call.args.count > 2 ? call.args[2] : "").contains("O_CREAT") {
+                if call.name == "creat" || (call.args.count > at + 1 ? call.args[at + 1] : "").contains("O_CREAT") {
                     var c = ESEvent(kind: "create", process: process(pid))
                     c.filePath = path
                     e = c

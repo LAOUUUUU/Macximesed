@@ -116,7 +116,7 @@ Lao: "25.6 make it like 4 gigs bro like thats to huge". A macOS guest can't be t
 - arm64 kernels have no compressed format of their own; a distro `vmlinuz` may be gzip or EFI-zboot wrapped and must be unwrapped to a raw `Image`. Use a 4K-page kernel: 64K pages fail under VZLinuxBootLoader (Apple forums).
 
 **Watching:**
-- Inside the guest, `strace -f` records execve, openat, renameat, unlinkat and connect for the sample's tree. Each stub also writes a JSON line.
+- Inside the guest, `strace -f` records execve, openat, renameat, unlinkat and connect for the sample's tree (on Intel also `open` and `creat`: see the Intel section). Each stub also writes a JSON line.
 - The host turns both into the same events the chamber judge already understands (exec, open, create, rename), plus `connect` for network attempts.
 
 **A fake Mac inside:** `/Users/chamber` with canary files (a `login.keychain-db`, Chrome `Login Data`, an Exodus wallet), `/Library/LaunchDaemons`, `/Applications`. `uname`, `sw_vers` and `sysctl hw.model` answer like a real Mac (Mac15,3), so scripts take their Mac paths.
@@ -148,6 +148,8 @@ Intel Macs stop at macOS 26, so the chamber has to work there too: the `macx` bi
 - Nested virtualization is "only available on some hardware and software configurations" (SDK header, `isNestedVirtualizationSupported`, macOS 15+). The chamber doesn't need it.
 - **Not tested: an actual boot on an Intel Mac.** A project with the same plan (Ferrodock PR 165, Oct 2026) also calls it untested and "the riskiest part"; its fallback is an uncompressed `vmlinux`, which our reading of the loader says won't work.
 
+**Tracing differs on Intel:** x86_64 still has the old `open`, `creat`, `rename`, `fork` and `vfork` syscalls, and musl uses `open` and `creat` there, while arm64 only has `openat`. Tracing only `openat` would miss every file read on Intel. `StraceLog.traceSyscalls` lists both sets, with `?` before the x86-only names so strace skips them on arm64 instead of refusing to start (strace(1): `?` suppresses the error when nothing matches), and the reader handles `open` and `creat`.
+
 **CI:** GitHub's hosted macOS runners are themselves VMs. Apple-silicon runners can't start VMs at all (runner-images 9254, 9460: "an architectural issue"). Users report hypervisor support on the Intel runners, but nothing from GitHub confirms Virtualization.framework can boot a guest there, so **the macos-26-intel job can build and run the unit tests, not boot the chamber**. A boot test needs a real Intel Mac.
 
 **Downloads:** the x86_64 set is 15 files, 52.0 MB (`data/chamber/manifest-x86_64.json`), same Alpine 3.24.4 and package versions as aarch64; the minirootfs is 3.7 MB and linux-virt 44.6 MB.
@@ -161,4 +163,5 @@ Intel Macs stop at macOS 26, so the chamber has to work there too: the `macx` bi
 | Ferrodock PR 165 | https://github.com/manimovassagh/Ferrodock/pull/165 | Same bzImage plan, also untested on Intel |
 | runner-images 9254 | https://github.com/actions/runner-images/issues/9254 | No nested virtualization on arm64 runners |
 | runner-images 9460 | https://github.com/actions/runner-images/issues/9460 | Hypervisor reported on Intel runners only |
+| strace(1) man page | https://man7.org/linux/man-pages/man1/strace.1.html | `?` before a syscall name: no error if it doesn't match |
 | Alpine v3.24 x86_64 APKINDEX | https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/APKINDEX.tar.gz | Package versions and sizes |

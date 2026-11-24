@@ -3,7 +3,7 @@ import Testing
 
 @testable import MacxCore
 
-/// The light chamber records the sample with `strace -f -ttt -qq -s 4096 -e trace=execve,openat,rename,renameat2,connect,clone,clone3,fork,vfork`.
+/// The light chamber records the sample with `strace -f -ttt -qq -s 4096 -e trace=` + `StraceLog.traceSyscalls`.
 /// Lines look like `PID EPOCH.MICROS syscall(args) = result`.
 @Suite("Light chamber: strace lines to events")
 struct StraceTests {
@@ -42,6 +42,44 @@ struct StraceTests {
         #expect(e[0].filePath == "/Users/chamber/Library/Keychains/login.keychain-db")
         #expect(e[2].filePath == "/Library/LaunchDaemons/com.apple.helper.plist")
         #expect(e[2].process?.pid == 500)
+    }
+
+    /// On Intel (x86_64) musl calls the old `open` and `creat` syscalls, which arm64 doesn't have. Without them an
+    /// Intel chamber would miss every keychain and browser-data read.
+    @Test func intelOpenAndCreat() {
+        let e = events(
+            """
+            500 1795514401.3 open("/Users/chamber/Library/Keychains/login.keychain-db", O_RDONLY|O_LARGEFILE) = 3
+            500 1795514401.4 open("/Library/LaunchDaemons/com.apple.helper.plist", O_WRONLY|O_CREAT|O_TRUNC, 0644) = 4
+            500 1795514401.5 creat("/Users/chamber/Library/LaunchAgents/com.apple.update.plist", 0644) = 5
+            500 1795514401.6 open("/nope", O_RDONLY) = -1 ENOENT (No such file or directory)
+            """)
+        #expect(e.map(\.kind) == ["open", "open", "create", "open", "create"])
+        #expect(e[0].filePath == "/Users/chamber/Library/Keychains/login.keychain-db")
+        #expect(e[2].filePath == "/Library/LaunchDaemons/com.apple.helper.plist")
+        #expect(e[4].filePath == "/Users/chamber/Library/LaunchAgents/com.apple.update.plist")
+        #expect(e.allSatisfy { $0.time != nil })
+    }
+
+    @Test func intelTraceIsJudgedLikeArm() {
+        let text = """
+            500 1795514401.0 clone(child_stack=NULL, flags=SIGCHLD) = 501
+            501 1795514401.1 execve("/usr/bin/security", ["security", "dump-keychain"], 0x1 /* 1 var */) = 0
+            501 1795514401.2 open("/Users/chamber/Library/Keychains/login.keychain-db", O_RDONLY|O_LARGEFILE) = 3
+            """
+        let r = ChamberJudge(guestHome: URL(fileURLWithPath: "/Users/chamber")).judge(events: StraceLog.parse(text).events, samplePID: 500)
+        #expect(r.verdict == .dangerous)
+        #expect(r.alerts.contains { $0.rule == "reads-keychain" })
+    }
+
+    /// The command the guest agent runs. `?` makes strace skip a name the architecture doesn't have (arm64 has
+    /// no `open`, `creat`, `rename`, `fork` or `vfork`) instead of refusing to start.
+    @Test func traceListCoversBothArchitectures() {
+        let calls = StraceLog.traceSyscalls.split(separator: ",").map(String.init)
+        for name in ["execve", "openat", "renameat", "renameat2", "connect", "clone", "clone3"] {
+            #expect(calls.contains(name))
+        }
+        for name in ["open", "creat", "rename", "fork", "vfork"] { #expect(calls.contains("?" + name)) }
     }
 
     @Test func relativePathsUseTheCurrentDirectoryWhenKnown() {
