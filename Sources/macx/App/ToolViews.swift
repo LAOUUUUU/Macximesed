@@ -375,18 +375,18 @@ struct CleanView: View {
             PageHeader(
                 label: "Clean",
                 headline: model.cleanItems == nil
-                    ? "Measuring…" : (total == 0 ? "Nothing chosen." : "\(ByteCountFormatter.file(total)) can go."),
+                    ? "Measuring…" : (total == 0 ? "Nothing chosen." : "\(formatBytes(total)) can go."),
                 sentence: note ?? "Caches and logs that apps rebuild. Everything moves to the undo store first; nothing is deleted."
             ) {
                 if let lastBatch {
                     Button("Undo last clean") { undo(lastBatch) }.buttonStyle(PlainButtonStyle())
                 }
                 if held.batches > 0 {
-                    Button("Empty undo folder (\(ByteCountFormatter.file(held.bytes)))…") { emptyUndo() }
+                    Button("Empty undo folder (\(formatBytes(held.bytes)))…") { emptyUndo() }
                         .buttonStyle(PlainButtonStyle())
                 }
                 if model.cleanItems != nil {
-                    Button("Clean \(ByteCountFormatter.file(total))…") { clean() }
+                    Button("Clean \(formatBytes(total))…") { clean() }
                         .buttonStyle(PlainButtonStyle(kind: .primary)).disabled(total == 0)
                 }
             }
@@ -431,7 +431,7 @@ struct CleanView: View {
                         detail: item.paths.map { ProtectionView.short($0.path) }.prefix(6).joined(separator: "\n"))
                 }
                 Spacer()
-                Text(ByteCountFormatter.file(item.bytes)).font(Fonts.mono(12))
+                Text(formatBytes(item.bytes)).font(Fonts.mono(12))
             }
             .padding(.vertical, 10)
             .background(alignment: .bottom) { Hairline() }
@@ -458,14 +458,14 @@ struct CleanView: View {
         let picked = items.filter { model.cleanChosen.contains($0.id) && $0.inUseBy == nil }
         guard
             confirm(
-                "Clean \(ByteCountFormatter.file(total))?", "\(picked.count) items move to the undo store. Undo puts them back.",
+                "Clean \(formatBytes(total))?", "\(picked.count) items move to the undo store. Undo puts them back.",
                 action: "Clean")
         else { return }
         do {
             let batch = try CleanupCatalog.run(picked, store: UndoStore())
             lastBatch = batch
             note =
-                "Moved \(ByteCountFormatter.file(batch.totalBytes)) to the undo store."
+                "Moved \(formatBytes(batch.totalBytes)) to the undo store."
                 + (batch.failed.isEmpty ? "" : " \(batch.failed.count) couldn't move.")
             model.cleanItems = nil
             scan()
@@ -480,12 +480,12 @@ struct CleanView: View {
         guard
             confirm(
                 "Empty the undo folder?",
-                "\(use.batches) earlier cleans, removed apps and quarantined files (\(ByteCountFormatter.file(use.bytes))) are deleted for good. They can't be put back after this.",
+                "\(use.batches) earlier cleans, removed apps and quarantined files (\(formatBytes(use.bytes))) are deleted for good. They can't be put back after this.",
                 action: "Empty")
         else { return }
         do {
             try UndoStore().empty()
-            note = "Freed \(ByteCountFormatter.file(use.bytes)). The undo folder is empty."
+            note = "Freed \(formatBytes(use.bytes)). The undo folder is empty."
             lastBatch = nil
         } catch {
             note = "Couldn't empty the undo folder: \(error.localizedDescription)"
@@ -560,7 +560,7 @@ struct AppsView: View {
                     Text(app.bundleID + (app.version.map { " · \($0)" } ?? "")).font(Fonts.mono(11)).foregroundStyle(Ink.grey).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(ByteCountFormatter.file(app.bytes)).font(Fonts.mono(12)).frame(width: 80, alignment: .trailing)
+                Text(formatBytes(app.bytes)).font(Fonts.mono(12)).frame(width: 80, alignment: .trailing)
                 Text(
                     app.lastUsed.map {
                         (app.lastUsedIsEstimate ? "about " : "") + RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())
@@ -606,7 +606,7 @@ struct AppsView: View {
         guard
             confirm(
                 "Remove \(app.name)?",
-                "The app and \(plan.paths.count - 1) leftover items (\(ByteCountFormatter.file(plan.bytes))) move to the undo store.",
+                "The app and \(plan.paths.count - 1) leftover items (\(formatBytes(plan.bytes))) move to the undo store.",
                 action: "Remove")
         else { return }
         do {

@@ -232,7 +232,3 @@ struct PageHeader<Actions: View>: View {
         }
     }
 }
-
-extension ByteCountFormatter {
-    static func file(_ bytes: UInt64) -> String { ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) }
-}

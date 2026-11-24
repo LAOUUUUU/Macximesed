@@ -49,10 +49,24 @@ struct ThermalTests {
 
 @Suite("Byte formatting")
 struct ByteFormatTests {
-    @Test func formats() {
+    /// Decimal units (1 KB = 1000 bytes), as Finder and About This Mac count them. The CLI and the app both print
+    /// sizes with this, so `macx undo` and the app's Clean page show the same figure.
+    @Test func formatsInDecimalUnitsLikeFinder() {
+        #expect(formatBytes(0) == "0 B")
         #expect(formatBytes(512) == "512 B")
+        #expect(formatBytes(999) == "999 B")
+        #expect(formatBytes(1000) == "1.0 KB")
         #expect(formatBytes(1536) == "1.5 KB")
-        #expect(formatBytes(10 * 1024 * 1024 * 1024) == "10.0 GB")
+        #expect(formatBytes(2_500_000) == "2.5 MB")
+        #expect(formatBytes(5_000_000_000) == "5.0 GB")
+        // 5 GiB: binary units called this 5.0 GB, Finder calls it 5.4 GB.
+        #expect(formatBytes(5 * 1024 * 1024 * 1024) == "5.4 GB")
+        #expect(formatBytes(2_000_000_000_000) == "2.0 TB")
+    }
+
+    @Test func roundsUpIntoTheNextUnit() {
+        #expect(formatBytes(999_960) == "1.0 MB")  // not "1000.0 KB"
+        #expect(formatBytes(999_940) == "999.9 KB")
     }
 }
 

@@ -10,6 +10,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ### Fixed
 - The Updates row showed the hash feed line ("1 known samples") instead of whether an update was available.
+- **Sizes agree between the CLI and the app.** The CLI divided by 1024 and the app by 1000, so the same 5 GiB undo folder was 5.0 GB in `macx undo` and 5.37 GB in the app. Both now use one formatter (`formatBytes`) in decimal units, 1 KB = 1000 bytes, as Finder and About This Mac count: it's 5.4 GB in both.
 
 ## [0.3.0] - 2026-11-24
 

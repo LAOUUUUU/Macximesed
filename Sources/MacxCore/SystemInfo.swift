@@ -82,13 +82,17 @@ public struct DiskUsage: Sendable, Equatable {
     }
 }
 
+/// A size in decimal units (1 KB = 1000 bytes), the way Finder and About This Mac count. The CLI and the app
+/// both print sizes with this, so they show the same figure for the same bytes.
 public func formatBytes(_ bytes: UInt64) -> String {
-    let units = ["B", "KB", "MB", "GB", "TB"]
-    var value = Double(bytes)
+    guard bytes >= 1000 else { return "\(bytes) B" }
+    let units = ["KB", "MB", "GB", "TB", "PB"]
+    var value = Double(bytes) / 1000
     var unit = 0
-    while value >= 1024, unit < units.count - 1 {
-        value /= 1024
+    // Step up on the rounded figure, so 999,960 bytes reads 1.0 MB rather than 1000.0 KB.
+    while (value * 10).rounded() >= 10_000, unit < units.count - 1 {
+        value /= 1000
         unit += 1
     }
-    return unit == 0 ? "\(bytes) B" : String(format: "%.1f %@", value, units[unit])
+    return String(format: "%.1f %@", value, units[unit])
 }

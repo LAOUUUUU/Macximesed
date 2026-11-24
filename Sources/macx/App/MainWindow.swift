@@ -50,7 +50,7 @@ struct Sidebar: View {
         switch s {
         case .protection: model.unreadCritical > 0 ? "\(model.unreadCritical)" : ""
         case .startup: model.startupCount.map(String.init) ?? ""
-        case .clean: model.cleanBytes.map(ByteCountFormatter.file) ?? ""
+        case .clean: model.cleanBytes.map(formatBytes) ?? ""
         case .apps: model.appCount.map(String.init) ?? ""
         case .check, .settings: ""
         }
