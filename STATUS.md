@@ -15,7 +15,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
 
 - [x] **Full Disk Access for macx itself: solved** (2026-11-23). The Full Disk Access entry kept the code requirement from when it was first added (ad-hoc), and switching it off and on never refreshed it. tccd logged `Failed to match existing code requirement`. Fix: `sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx`, then add the signed app again.
-  - [ ] Confirm it survives a rebuild: reinstall, then `sudo macx daemon restart` still reports *watching*.
+  - [x] Survives rebuilds: after three reinstalls, `sudo macx daemon restart` still reports *watching* (2026-11-23 19:31).
 
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
