@@ -226,6 +226,23 @@ struct AdminCommandTests {
         let tricky = AdminCommand.appleScript(executable: "/tmp/a b/it's \"x\"", arguments: [])
         #expect(tricky == #"do shell script "'/tmp/a b/it'\\''s \"x\"'" with administrator privileges"#)
     }
+
+    /// AppleScript's admin shell runs as root with no SUDO_USER, so `daemon install` couldn't tell whose Mac it
+    /// was and refused after the password. The user rides along as MACX_USER, and the prompt says what it's for.
+    @Test func carriesTheUserAndSaysWhatThePasswordIsFor() {
+        let s = AdminCommand.appleScript(
+            executable: "/A/macx", arguments: ["daemon", "install"], user: "lao",
+            prompt: "Macximesed needs your password to install the background watch.")
+        #expect(s.hasPrefix(#"do shell script "MACX_USER='lao' '/A/macx' 'daemon' 'install'""#))
+        #expect(
+            s.hasSuffix(#" with prompt "Macximesed needs your password to install the background watch." with administrator privileges"#))
+    }
+
+    @Test func aUserNameCantBreakOut() {
+        let s = AdminCommand.appleScript(executable: "/A/macx", arguments: [], user: "x'; rm -rf /", prompt: "p\"q")
+        #expect(s.contains(#"MACX_USER='x'\\''; rm -rf /'"#))
+        #expect(s.contains(#"with prompt "p\"q""#))
+    }
 }
 
 @Suite("Mac app: pause gate in the watch loop")

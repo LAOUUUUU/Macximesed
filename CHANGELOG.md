@@ -170,6 +170,7 @@ The first release: the antivirus side is complete (the checklist in STATUS.md), 
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **The app's Install button failed after the password.** AppleScript's admin shell runs as root with no SUDO_USER, so `daemon install` couldn't tell whose Mac it was. The app now passes `MACX_USER`, and the password dialog says what each action is for.
 - **False alarms in the live watch** (from Lao's real alert log, 2026-11-24):
   - **Arguments aren't code:** command patterns only count when a shell or interpreter runs them, or when the tool is the attack itself (`dscl -authonly`, `xattr -d com.apple.quarantine`). `macx guard inspect -- "curl…|zsh"`, commit messages and `sudo` wrappers no longer alert (46 + 2 false criticals from the evaluation).
   - **Heredocs written to a file aren't run:** `cat > f <<EOF … EOF` bodies are skipped, while heredocs fed to a shell still count.

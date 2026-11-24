@@ -252,10 +252,17 @@ public enum WatchPause {
 public enum AdminCommand {
     static func shellQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
-    public static func appleScript(executable: String, arguments: [String]) -> String {
-        let shell = ([executable] + arguments).map(shellQuote).joined(separator: " ")
-        let escaped = shell.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        return "do shell script \"\(escaped)\" with administrator privileges"
+    static func appleScriptString(_ s: String) -> String {
+        "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    /// `user`: who the command works for. AppleScript's admin shell runs as root with no SUDO_USER, so it's passed
+    /// as MACX_USER (what the launchd daemon uses too). `prompt`: the line shown in the password dialog.
+    public static func appleScript(executable: String, arguments: [String], user: String? = nil, prompt: String? = nil) -> String {
+        var shell = ([executable] + arguments).map(shellQuote).joined(separator: " ")
+        if let user { shell = "MACX_USER=\(shellQuote(user)) " + shell }
+        let withPrompt = prompt.map { " with prompt \(appleScriptString($0))" } ?? ""
+        return "do shell script \(appleScriptString(shell))\(withPrompt) with administrator privileges"
     }
 }
 

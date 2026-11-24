@@ -115,16 +115,21 @@ final class AppModel {
 
     // MARK: Root actions (each asks for the administrator password)
 
-    func pause(_ duration: String = "1h") { runAdmin(["daemon", "pause", "--for", duration]) }
-    func resume() { runAdmin(["daemon", "resume"]) }
-    func install(suspend: Bool) { runAdmin(["daemon", "install"] + (suspend ? ["--suspend"] : [])) }
-    func uninstall() { runAdmin(["daemon", "uninstall"]) }
-    func restart() { runAdmin(["daemon", "restart"]) }
+    func pause(_ duration: String = "1h") {
+        runAdmin(["daemon", "pause", "--for", duration], why: "pause the background watch")
+    }
+    func resume() { runAdmin(["daemon", "resume"], why: "turn the background watch back on") }
+    func install(suspend: Bool) {
+        runAdmin(["daemon", "install"] + (suspend ? ["--suspend"] : []), why: "install the background watch")
+    }
+    func uninstall() { runAdmin(["daemon", "uninstall"], why: "remove the background watch") }
+    func restart() { runAdmin(["daemon", "restart"], why: "restart the background watch") }
 
-    func runAdmin(_ arguments: [String]) {
+    func runAdmin(_ arguments: [String], why: String) {
         busy = true
         adminError = nil
-        let script = AdminCommand.appleScript(executable: Self.executable, arguments: arguments)
+        let script = AdminCommand.appleScript(
+            executable: Self.executable, arguments: arguments, user: NSUserName(), prompt: "Macximesed needs your password to \(why).")
         Task.detached(priority: .userInitiated) {
             let result = OsaScript.run(script)
             await MainActor.run {
