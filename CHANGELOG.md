@@ -21,6 +21,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
   - **Cost of linking the app into one binary**, measured as a release build on an M3:
     - binary: 4.9 to 6.5 MB per architecture;
     - an idle CLI process: 11.7 to 14.3 MB of memory.
+  - **Auto-update adds the app switch (`LSEnvironment`) to bundles installed before the app existed**, so an updated Macximesed.app opens as the app.
   - **Root actions** (pause, resume, install, restart, uninstall) run the app's own `macx daemon …` through the administrator prompt.
 - **`sudo macx daemon pause [--for 1h]` and `resume`:**
   - While paused, the background watch still logs alerts but sends no notifications and freezes nothing.

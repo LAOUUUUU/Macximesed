@@ -257,3 +257,22 @@ struct PauseGateTests {
         #expect(PauseGate.effects(paused: false) == .init(log: true, notify: true, freeze: true))
     }
 }
+
+@Suite("Mac app: updates keep the app openable")
+struct UpdatedInfoTests {
+    @Test func updateAddsTheAppSwitchToAnOlderBundleAndKeepsEverythingElse() {
+        let old: [String: Any] = ["CFBundleIdentifier": "dev.macximesed.macx", "CFBundleShortVersionString": "0.2.0", "LSUIElement": true]
+        let new = UpdateInstaller.updatedInfo(old, version: "0.3.0")
+        #expect(new["CFBundleShortVersionString"] as? String == "0.3.0")
+        #expect(new["CFBundleVersion"] as? String == "0.3.0")
+        #expect(new["CFBundleIdentifier"] as? String == "dev.macximesed.macx")
+        #expect(new["LSUIElement"] as? Bool == true)
+        #expect((new["LSEnvironment"] as? [String: String])?["MACX_APP"] == "1")
+    }
+
+    @Test func otherLaunchEnvironmentValuesStay() {
+        let old: [String: Any] = ["LSEnvironment": ["OTHER": "x"]]
+        let env = UpdateInstaller.updatedInfo(old, version: "1.0.0")["LSEnvironment"] as? [String: String]
+        #expect(env == ["OTHER": "x", "MACX_APP": "1"])
+    }
+}

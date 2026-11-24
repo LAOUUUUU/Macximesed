@@ -269,6 +269,18 @@ public struct UpdateInstaller: Sendable {
         return macos.lastPathComponent == "MacOS" && contents.lastPathComponent == "Contents" && app.pathExtension == "app" ? app : nil
     }
 
+    /// The new Info.plist: the new version, and the switch that opens the Mac app from Finder (`LSEnvironment
+    /// MACX_APP=1`), which bundles installed before the app existed don't have.
+    static func updatedInfo(_ info: [String: Any], version: String) -> [String: Any] {
+        var info = info
+        info["CFBundleShortVersionString"] = version
+        info["CFBundleVersion"] = version
+        var env = info["LSEnvironment"] as? [String: String] ?? [:]
+        env["MACX_APP"] = "1"
+        info["LSEnvironment"] = env
+        return info
+    }
+
     /// After swapping the executable, update the bundle's version and sign the bundle again (ad-hoc), so
     /// its signature covers the new binary and Info.plist.
     static func reseal(_ app: URL, version: String) throws {
@@ -276,8 +288,7 @@ public struct UpdateInstaller: Sendable {
         if let data = try? Data(contentsOf: infoURL),
             var info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         {
-            info["CFBundleShortVersionString"] = version
-            info["CFBundleVersion"] = version
+            info = updatedInfo(info, version: version)
             try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: infoURL, options: .atomic)
         }
         let id =
