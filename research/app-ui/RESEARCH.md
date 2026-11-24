@@ -111,6 +111,7 @@ Menu bar: SwiftUI's `MenuBarExtra` gives no first-party way to reach its status 
   - Buttons are plain rectangles: primary filled ink, secondary a 1 px outline.
   - No gradients, glass, shadows (except the system's window shadow), pills, emoji, icon tiles or three-card rows.
   - Motion only where state changes, and none under Reduce Motion.
+- **Helper text goes behind an info button** (Lao, 2026-11-23: "the small info text make into the info thingy"). The screen shows only the facts and the state. Explanations, paths, pids and signing details sit behind a 14 pt outlined ⓘ button that opens a small popover on click (hairline border, 4 pt corners, Escape or a click outside closes it), with the same text on hover as a tooltip. In AppKit that's an NSPopover-free panel of our own, so it doesn't get the glass look either.
 - **Follows the system:** light/dark and accessibility text sizes (Dynamic Type isn't on macOS, so we scale our own sizes from the user's preferred text size) and Increase Contrast (hairlines become 1 px ink).
 
 ## Recommendation
