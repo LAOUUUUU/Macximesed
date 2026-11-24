@@ -50,13 +50,16 @@ public struct DaemonPlan {
 
     /// Check finished downloads (on unless turned off).
     public let downloads: Bool
+    /// How much the daemon writes to its own log (`MACX_LOG` in the plist; it can't take -v).
+    public let logLevel: LogLevel
 
-    public init(executable: URL, user: WatchUser, suspend: Bool, downloads: Bool = true) throws {
+    public init(executable: URL, user: WatchUser, suspend: Bool, downloads: Bool = true, logLevel: LogLevel = .info) throws {
         guard UpdateInstaller.enclosingApp(of: executable) != nil else { throw Problem.notInApp }
         self.executable = executable
         self.user = user
         self.suspend = suspend
         self.downloads = downloads
+        self.logLevel = logLevel
     }
 
     public var arguments: [String] { ["watch", "--background"] + (suspend ? ["--suspend"] : []) + (downloads ? [] : ["--no-downloads"]) }
@@ -65,7 +68,8 @@ public struct DaemonPlan {
         [
             "Label": Self.label,
             "ProgramArguments": [executable.path] + arguments,
-            "EnvironmentVariables": ["MACX_OWN_RESPONSIBILITY": "0", "MACX_NO_UPDATE_CHECK": "1", "MACX_USER": user.name],
+            "EnvironmentVariables": ["MACX_OWN_RESPONSIBILITY": "0", "MACX_NO_UPDATE_CHECK": "1", "MACX_USER": user.name]
+                .merging(logLevel == .info ? [:] : ["MACX_LOG": logLevel.name]) { a, _ in a },
             "RunAtLoad": true,
             "KeepAlive": ["SuccessfulExit": false],
             "ThrottleInterval": 30,
@@ -86,10 +90,12 @@ public struct DaemonPlan {
 public struct DaemonSettings: Sendable, Equatable {
     public var suspend: Bool
     public var downloads: Bool
+    public var logLevel: LogLevel
 
-    public init(suspend: Bool, downloads: Bool) {
+    public init(suspend: Bool, downloads: Bool, logLevel: LogLevel = .info) {
         self.suspend = suspend
         self.downloads = downloads
+        self.logLevel = logLevel
     }
 
     /// Nil unless it's the plist `macx daemon install` writes (our label, running `macx watch`).
@@ -99,6 +105,7 @@ public struct DaemonSettings: Sendable, Equatable {
         else { return nil }
         suspend = args.contains("--suspend")
         downloads = !args.contains("--no-downloads")
+        logLevel = ((plist["EnvironmentVariables"] as? [String: String])?["MACX_LOG"]).flatMap(LogLevel.init(name:)) ?? .info
     }
 
     public static func read(from url: URL = DaemonPlan.plistPath) -> DaemonSettings? {
@@ -119,10 +126,21 @@ public struct DaemonSettings: Sendable, Equatable {
         return out
     }
 
+    /// The same plist with the daemon's log level changed (`MACX_LOG`); everything else stays as installed.
+    public static func plist(_ plist: [String: Any], logLevel: LogLevel) -> [String: Any]? {
+        guard DaemonSettings(plist: plist) != nil else { return nil }
+        var env = plist["EnvironmentVariables"] as? [String: String] ?? [:]
+        env["MACX_LOG"] = logLevel == .info ? nil : logLevel.name
+        var out = plist
+        out["EnvironmentVariables"] = env
+        return out
+    }
+
     /// `macx daemon install` writes a fresh plist. To change freezing, it must carry over a Downloads watch that
-    /// was switched off, or reinstalling would quietly turn it back on.
+    /// was switched off and a raised log level, or reinstalling would quietly reset them.
     public static func installArguments(suspend: Bool, keeping current: DaemonSettings?) -> [String] {
         ["daemon", "install"] + (suspend ? ["--suspend"] : []) + (current?.downloads == false ? ["--no-downloads"] : [])
+            + (current.map { $0.logLevel == .info ? [] : ["--log-level", $0.logLevel.name] } ?? [])
     }
 }
 

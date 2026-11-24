@@ -109,6 +109,23 @@ Updates keep the app's signature, so Full Disk Access carries over. The updater 
 
 The background watch notices when its binary was updated and restarts on the new version by itself (within 30 s, no sudo).
 
+### Logs
+Add `-v` (or `-vv` for even more) to any command to see what it's doing, for example `macx -v update --check`. macx writes its own plain-text logs, one per part, each capped at 1 MB with two older files kept:
+
+| Part | Log | Who can change it |
+|---|---|---|
+| Commands you run | `~/Library/Logs/Macximesed/cli.log` | you |
+| The app | `~/Library/Logs/Macximesed/app.log` | you |
+| Commands run with sudo | `/Library/Logs/Macximesed/cli-root.log` | only root |
+| The background watch | `/Library/Logs/Macximesed/watch.log` | only root |
+
+- **Levels:** trace, debug, info (the default), warning, error. `MACX_LOG=debug` turns detail up without printing it, for the app and scripts.
+- **The background watch** can't take `-v`. `sudo macx daemon log debug` turns its log up and `sudo macx daemon log info` puts it back; `macx daemon log` shows the level without sudo. The level is kept in the root-owned launchd plist, and changing it restarts the watch.
+- **What's written:** your home folder is written as `~`, and the log names the command (`guard inspect`), never what you gave it: no file contents, pasted commands, links or secrets.
+- **Safe for root:** root only writes logs into `/Library/Logs/Macximesed` when that folder is root-owned and closed to everyone else, and never follows a symlink there.
+- **Copies:** warnings and errors also go to the system log (subsystem `dev.macximesed.macx`), so `log show` and a sysdiagnose include them.
+- `/Library/Logs/Macximesed/daemon.log` still holds the background watch's printed output, the place to look if it ever crashes on start.
+
 ## Build from source
 ```bash
 swift build -c release
@@ -145,7 +162,7 @@ swift build -c release
 | `macx chamber setup` / `run FILE [--seconds 60] [-y] [--no-quarantine]` / `status` / `remove` | **Detonation chamber.** Runs a suspicious script in a throwaway Linux VM (about 60 MB) with no network, no disk and nothing shared with this Mac. Mac-only commands are stand-ins, and bait files sit where stealers look. Everything it does is recorded and judged here. *DON'T OPEN THIS* offers to quarantine the file into a restorable incident case (exit code 2). Scripts only: Mac apps and programs keep `macx check`. See *Detonation chamber*. | No |
 | `macx net PID [--interval MS] [--seconds N] [--every] [--loopback]` | Shows where a process, and anything it starts, connects to, as it happens: each new remote address once. Reads the process's sockets from the kernel every 20 ms. Connections open for under about 20 ms can be missed ([measured](research/evaluation/network-results.md)). Your own processes work without sudo. | For other users' processes |
 | `macx incident [list]` / `show ID` / `contain ID [-y]` | **Incident response.** Each case is a private folder with read-only copies and SHA-256 hashes of the files involved, the process tree (who started it, what it started), the alert timeline, and a summary with what to do next. `contain` moves the case's launch items, hidden folders and temp-folder programs into the undo folder (nothing is deleted), prints the `launchctl bootout` commands for anything still running, and gives the password- and key-rotation checklist. | Sometimes |
-| `sudo macx daemon install [--suspend] [--no-downloads]` / `status` / `restart` / `pause [--for 1h]` / `resume` / `downloads [on\|off]` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `downloads on\|off` turns the Downloads watch on or off and restarts the watch. `status` and `downloads` without on or off need no sudo. See *Background watch*. | **Yes** (not `status` or showing `downloads`) |
+| `sudo macx daemon install [--suspend] [--no-downloads] [--log-level debug]` / `status` / `restart` / `pause [--for 1h]` / `resume` / `downloads [on\|off]` / `log [LEVEL]` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `downloads on\|off` turns the Downloads watch on or off and restarts the watch. `log debug` turns the watch's own log up (see *Logs*). `status`, and `downloads` or `log` without a value, need no sudo. See *Background watch*. | **Yes** (not `status` or showing `downloads`) |
 | `macx alerts [-n 20] [--min-severity low] [--follow]` | Shows saved alerts from the live and background watch. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
 | `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |

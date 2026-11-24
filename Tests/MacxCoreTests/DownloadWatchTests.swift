@@ -167,3 +167,36 @@ struct DownloadDaemonTests {
         #expect(DaemonSettings.installArguments(suspend: true, keeping: nil) == ["daemon", "install", "--suspend"])  // a first install
     }
 }
+
+@Suite("Background watch: log level")
+struct DaemonLogLevelTests {
+    let user = WatchUser(name: "v", uid: 501, gid: 20, home: URL(fileURLWithPath: "/Users/v"))
+    let exe = URL(fileURLWithPath: "/Users/v/Applications/Macximesed.app/Contents/MacOS/macx")
+
+    /// The daemon can't take -v, so its level is MACX_LOG in the root-owned plist: only root can turn it up.
+    @Test func levelLivesInThePlistEnvironment() throws {
+        let normal = try DaemonPlan(executable: exe, user: user, suspend: true)
+        #expect((normal.plist["EnvironmentVariables"] as? [String: String])?["MACX_LOG"] == nil)
+        #expect(DaemonSettings(plist: normal.plist)?.logLevel == .info)
+        let verbose = try DaemonPlan(executable: exe, user: user, suspend: true, logLevel: .debug)
+        #expect((verbose.plist["EnvironmentVariables"] as? [String: String])?["MACX_LOG"] == "debug")
+        #expect(DaemonSettings(plist: verbose.plist)?.logLevel == .debug)
+    }
+
+    @Test func switchingTheLevelKeepsEverythingElse() throws {
+        let installed = try DaemonPlan(executable: exe, user: user, suspend: true, downloads: false).plist
+        let debug = try #require(DaemonSettings.plist(installed, logLevel: .debug))
+        let env = try #require(debug["EnvironmentVariables"] as? [String: String])
+        #expect(env["MACX_LOG"] == "debug" && env["MACX_USER"] == "v" && env["MACX_OWN_RESPONSIBILITY"] == "0")
+        #expect(DaemonSettings(plist: debug) == DaemonSettings(suspend: true, downloads: false, logLevel: .debug))
+        let back = try #require(DaemonSettings.plist(debug, logLevel: .info))
+        #expect((back["EnvironmentVariables"] as? [String: String])?["MACX_LOG"] == nil)
+        #expect(DaemonSettings.plist(["Label": "com.example.other"], logLevel: .debug) == nil)
+    }
+
+    @Test func reinstallingKeepsTheLevel() {
+        let current = DaemonSettings(suspend: false, downloads: true, logLevel: .trace)
+        #expect(
+            DaemonSettings.installArguments(suspend: true, keeping: current) == ["daemon", "install", "--suspend", "--log-level", "trace"])
+    }
+}

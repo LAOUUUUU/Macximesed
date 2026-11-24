@@ -16,13 +16,21 @@ enum UpdateCheck {
 
         var state = UpdateState.load()
         let now = Date()
-        guard state.isCheckDue(now: now) else { return }
+        guard state.isCheckDue(now: now) else {
+            Log.trace("update", "daily check not due")
+            return
+        }
         state.lastCheck = now  // even on failure: don't retry on every command
         defer { try? state.save() }
 
-        guard let channel = try? UpdateClient.fetchChannel(timeout: 4) else { return }
-        _ = try? HashFeed.refresh(from: channel)
+        let channel: UpdateChannel
+        do { channel = try UpdateClient.fetchChannel(timeout: 4) } catch {
+            Log.warning("update", "daily check failed: \(error)")
+            return
+        }
+        do { _ = try HashFeed.refresh(from: channel) } catch { Log.warning("update", "hash feed not refreshed: \(error)") }
         let decision = UpdateDecision.decide(channel, installed: SemVer(macxVersion)!, state: state, now: now)
+        Log.info("update", "daily check: channel \(channel.sequence), latest \(channel.latest.version), \(decision.action)")
         state.lastSequence = max(state.lastSequence, channel.sequence)
         // Only the rollback warning here; "out of date" is shown by `macx update`, not before every command.
         decision.warnings.filter { !$0.contains("out of date") }.forEach { note("macx: \($0)") }
@@ -41,6 +49,7 @@ enum UpdateCheck {
                 try? state.save()
                 reexec()
             } catch {
+                Log.error("update", "security update failed: \(error)")
                 note("macx: couldn't update automatically (\(error)). Run `macx update` as soon as you can.")
             }
         }
@@ -125,9 +134,16 @@ struct Update: ParsableCommand {
         }
         guard let url = URL(string: channel.latest.url), url.scheme == "https" else { throw UpdateError.download("not an https link") }
         if !quiet { FileHandle.standardError.write(Data("Downloading macx \(channel.latest.version)…\n".utf8)) }
+        Log.info("update", "installing \(channel.latest.version) over \(macxVersion)")
         let data = try UpdateClient.get(url, timeout: 30)
-        try UpdateInstaller().install(
-            data, sha256: channel.latest.sha256, version: channel.latest.version, over: URL(fileURLWithPath: exe),
-            installed: SemVer(macxVersion)!)
+        do {
+            try UpdateInstaller().install(
+                data, sha256: channel.latest.sha256, version: channel.latest.version, over: URL(fileURLWithPath: exe),
+                installed: SemVer(macxVersion)!)
+        } catch {
+            Log.error("update", "install of \(channel.latest.version) failed: \(error)")
+            throw error
+        }
+        Log.info("update", "installed \(channel.latest.version)")
     }
 }
