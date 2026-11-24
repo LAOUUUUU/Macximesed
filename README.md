@@ -190,8 +190,15 @@ Stealer sites and IP addresses change all the time, so a list is always out of d
 | | `create`, `rename` (new files) | new launch items, fake `com.apple.*` launch items, hidden `.com.apple.*` folders |
 | | `deleteextattr` | quarantine flag removed. High, unless a signed updater did it, or Gatekeeper (`spctl`, run off the event loop) accepts the file as notarized or Apple's, as with `brew upgrade` |
 | | `btm_launch_item_add` | new login or background items, checked for unsigned programs |
+| | `xp_malware_detected`, `xp_malware_remediated` | Apple's XProtect found malware (critical, with a case) or removed it (high; critical if it couldn't). XProtect itself is never frozen |
+| | `tcc_modify` | Full Disk Access, Accessibility, Screen Recording, Input Monitoring or keyboard-and-mouse control given to something: medium when you clicked it, high when a program did it or the app sits in a hidden folder |
+| | `profile_add` | a configuration profile installed (medium; low from MDM) |
+| | `od_create_user`, `od_delete_user`, `od_group_add`, `od_modify_password` | accounts created or deleted (high), made administrator (high; critical and frozen when a non-Apple program did it), password changed (medium from macOS's own tools, high otherwise) |
+| | `gatekeeper_user_override` | *Open Anyway* on something Gatekeeper blocked (medium; critical when its SHA-256 is in the malware feed) |
+| | `remote_thread_create` | code injected into another program (critical and frozen for an unsigned program, high for a signed one) |
+| | `screensharing_attach`, `openssh_login` | someone connected to your screen (high) or logged in over SSH (medium) |
 | **Observed, not used** | `open` | Too noisy to watch live, so keychain and browser-file reads are only seen through what the reading program does next. |
-| | `setextattr`, `authentication`, `tcc_modify`, `xp_malware_detected`, others | Available (`eslogger --list-events`), not yet in the rules. |
+| | `setextattr`, `authentication`, `get_task`, `mmap`, others | Too frequent to watch live, or not yet in the rules. The newer events above are only asked for when this Mac's `eslogger --list-events` lists them, so an older macOS still starts the watch. |
 | **Prevented** | nothing | No auth events without Apple's entitlement. |
 | **Evidence** | every critical alert | A case is recorded right after the freeze, while the process still exists (see `macx incident`). Under sudo it's owned by you, not root. |
 | **After the fact** | `--suspend` | Stops (SIGSTOP) the flagged process and everything it started, top-down, so a stopped parent can't start new children. It re-reads the process tree until no new child appears, and shows who started the process. |

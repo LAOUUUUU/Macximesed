@@ -39,6 +39,9 @@ public struct ESEvent: Sendable, Equatable {
     public var instigator: ESProcessInfo?
     /// When it happened (eslogger's `time`), if the line had one.
     public var time: Date?
+    /// The event's own fields, flattened to dotted keys ("profile.display_name", "member.member_value.name"), for the
+    /// events read by `WatchRules.evaluateMore`. Numbers and bools are kept as text; byte arrays as hex.
+    public var fields: [String: String] = [:]
 
     public static func parse(_ line: String) -> ESEvent? {
         guard let data = line.data(using: .utf8), let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -77,9 +80,37 @@ public struct ESEvent: Sendable, Equatable {
             e.itemURL = (body["item"] as? [String: Any])?["item_url"] as? String
             e.executablePath = body["executable_path"] as? String
         default:
-            break
+            guard WatchRules.moreEvents.contains(kind) else { break }
+            e.instigator = ESProcessInfo.parse(body["instigator"])
+            e.target = ESProcessInfo.parse(body["target"])
+            e.fields = Self.flatten(body)
         }
         return e
+    }
+
+    /// Dotted keys to text. Arrays of small numbers (es_sha256_t as bytes) become hex; process objects are kept out
+    /// (they're read as ESProcessInfo), and depth is capped so an odd line can't blow up.
+    static func flatten(_ d: [String: Any], prefix: String = "", depth: Int = 0) -> [String: String] {
+        var out: [String: String] = [:]
+        guard depth < 5 else { return out }
+        for (k, v) in d {
+            let key = prefix.isEmpty ? k : prefix + "." + k
+            switch v {
+            case let s as String: out[key] = s
+            case let n as NSNumber:
+                out[key] = CFGetTypeID(n) == CFBooleanGetTypeID() ? (n.boolValue ? "true" : "false") : n.stringValue
+            case let sub as [String: Any]:
+                if sub["executable"] != nil, sub["audit_token"] != nil { continue }
+                out.merge(flatten(sub, prefix: key, depth: depth + 1)) { a, _ in a }
+            case let arr as [Any]:
+                let bytes = arr.compactMap { ($0 as? NSNumber)?.intValue }
+                if bytes.count == arr.count, !bytes.isEmpty, bytes.allSatisfy({ (0...255).contains($0) }) {
+                    out[key] = bytes.map { String(format: "%02x", $0) }.joined()
+                }
+            default: continue
+            }
+        }
+        return out
     }
 
     /// eslogger writes nanoseconds ("2026-11-24T10:00:01.250000000Z"), which ISO8601DateFormatter can't read.
@@ -133,7 +164,23 @@ public struct WatchRules: Sendable {
     let hashes = ExecHashCache()
 
     /// eslogger events the rules use. `open` is left out: it's far too noisy to watch live.
-    public static let events = ["exec", "create", "rename", "deleteextattr", "btm_launch_item_add"]
+    public static let events = ["exec", "create", "rename", "deleteextattr", "btm_launch_item_add"] + moreEvents
+
+    /// The events to ask this Mac's eslogger for: the original five always (all on macOS 13+), the newer ones only
+    /// if `eslogger --list-events` lists them. An unknown name makes eslogger refuse to start, which would stop the
+    /// whole watch on an older macOS.
+    public static func supportedEvents(listOutput: String?) -> [String] {
+        let base = Array(events.prefix(5))
+        let known = Set((listOutput ?? "").split(whereSeparator: \.isWhitespace).map(String.init))
+        guard !known.isEmpty else { return base }
+        return base + moreEvents.filter(known.contains)
+    }
+
+    /// Rare but serious events (research/watch-events/RESEARCH.md): a few a day, so they cost next to nothing.
+    public static let moreEvents = [
+        "xp_malware_detected", "xp_malware_remediated", "tcc_modify", "profile_add", "od_create_user", "od_delete_user", "od_group_add",
+        "od_modify_password", "gatekeeper_user_override", "remote_thread_create", "screensharing_attach", "openssh_login",
+    ]
 
     public init(
         home: URL, signatures: SignatureChecking = GuardedSignatureChecker(), feed: HashFeed? = nil, feedSource: HashFeedSource? = nil
@@ -226,7 +273,7 @@ public struct WatchRules: Sendable {
             }
 
         default:
-            break
+            out += evaluateMore(e)
         }
         return out.sorted { $0.severity > $1.severity }
     }

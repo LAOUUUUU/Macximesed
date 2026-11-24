@@ -98,14 +98,14 @@ On the last runtime evaluation (macOS 27.0.1, M3) all 7 simulated steps were ale
 - **Configuration profiles** checked against a real installed profile; installed browser policies are now caught.
 - **Diagnostics:** `-v` logs, redacted bug and crash reports, encrypted sending through the relay.
 - **Beta channel:** a build of every change, named by its commit, with its own signing key.
+- **More of what eslogger sees:** XProtect detections, privacy permissions granted, profiles installed, account and admin changes, *Open Anyway*, code injection, screen sharing and SSH logins.
 
 ### Next
 1. **Independent testing:** run Red Canary's [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) macOS tests against the watch, so the attacks aren't only ones we wrote ourselves, and publish the results.
 2. **Beta workflows:** build and sign every green push to `dev` automatically.
 3. **A real malware feed:** MalwareBazaar's macOS stealer tags in the feed at each release.
-4. **More of what eslogger sees:** extended attributes being set, authentication attempts, privacy (TCC) permission changes, and XProtect's own detections.
-5. **Chamber, phase 2:** a fake internet to see what a sample would upload, skipped sleeps, `.pkg` install scripts, Python and Perl.
-6. **Sharper checks:** known-bad domains, where a download came from, disguised file types.
+4. **Chamber, phase 2:** a fake internet to see what a sample would upload, skipped sleeps, `.pkg` install scripts, Python and Perl.
+5. **Sharper checks:** known-bad domains, where a download came from, disguised file types.
 
 ### Later
 - **Risky cleanup tier:** triple confirmation and an undo script.

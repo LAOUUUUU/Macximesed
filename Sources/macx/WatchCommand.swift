@@ -87,7 +87,8 @@ struct Watch: ParsableCommand {
 
         let es = Process()
         es.executableURL = URL(fileURLWithPath: "/usr/bin/eslogger")
-        es.arguments = WatchRules.events
+        let events = WatchRules.supportedEvents(listOutput: ProcessRunner.capture("/usr/bin/eslogger", ["--list-events"])?.stdout)
+        es.arguments = events
         let out = Pipe()
         let err = Pipe()
         es.standardOutput = out
@@ -133,7 +134,7 @@ struct Watch: ParsableCommand {
         let downloads = DownloadChecker(
             home: user.home, owner: (user.uid, user.gid), feed: feedSource, minimum: minimum, log: log, notify: notify)
         if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
-        print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
+        print("Watching (\(events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
         print("Alerts are also saved to \(log.file.path)\n")
 
