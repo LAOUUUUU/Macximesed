@@ -16,7 +16,7 @@ MAC_TYPES = {"macho", "mach-o", "dmg", "pkg", "app", "zip-app", "applescript", "
 # Tags that only ever name macOS malware: their zipped apps and shell loaders count too. Mixed tags (MetaStealer is
 # mostly Windows) keep only the file types above.
 MAC_ONLY_TAGS = {"AtomicStealer", "AMOS", "Banshee", "Cuckoo", "Poseidon", "PoseidonStealer", "MacStealer", "RustBucket", "macos"}
-MAC_ONLY_EXTRA = {"zip", "sh", "osascript"}
+MAC_ONLY_EXTRA = {"zip", "sh", "zsh", "bash", "osascript"}
 # Every recent sample of these types, however it was tagged.
 FILE_TYPES = ["macho", "dmg"]
 # Big answers time out at the gateway (502), so a query that fails is asked again for fewer samples.
