@@ -4,6 +4,10 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-24
+
+The first release: the antivirus side is complete (the checklist in STATUS.md), plus Safe cleanup, app removal and the signed auto-update channel.
+
 ### Added
 - **Background watch:** `sudo macx daemon install` runs `macx watch` as a launchd daemon from Macximesed.app, with `status`, `restart` and `uninstall`. High and critical alerts show as notifications, grouped to one every 10 seconds. The daemon records its state in `/Library/Logs/Macximesed/status.json` and stops cleanly when eslogger is refused. `macx alerts [--follow]` reads saved alerts. `macx persist` recognises Macximesed's own daemon, but only when it runs the installed macx.
 - **Configuration profiles in `macx persist`** (`profiles show -output stdout-xml`; computer-wide ones under `sudo`). Each profile's payloads are sorted by what they can do. Trusted certificates, proxies, forced browser settings or extensions, privacy grants and Gatekeeper changes are high on a Mac without MDM. DNS, VPN, content filters and managed login items are medium. Every hand-installed profile is low, and on an MDM-managed Mac everything is info. Profiles are in the baseline, so `--diff` shows a new one.

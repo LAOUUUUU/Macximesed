@@ -3,7 +3,7 @@ import Foundation
 
 // MARK: - Version
 
-public let macxVersion = "0.1.0"
+public let macxVersion = "0.2.0"
 
 /// Semantic version: MAJOR.MINOR.PATCH with an optional -pre.release part (sorted before the release).
 public struct SemVer: Comparable, Sendable, CustomStringConvertible {

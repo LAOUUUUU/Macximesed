@@ -4,7 +4,7 @@ The job list: what is being built now and what comes next. Finished work moves t
 
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
-## Antivirus checklist: the first release (0.2.0) ships when all of these are done
+## Antivirus checklist: done, released as 0.2.0 (2026-11-24)
 Lao, 2026-11-23: "we release when the anti virus is fully built".
 
 - [x] **A. Signed hash feed** (built 2026-11-23; goes live with the first release) on GitHub Pages: listed in the signed channel, cached locally, checked offline by `macx check` and `macx watch`.
