@@ -20,8 +20,9 @@ mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 export MACX_NO_UPDATE_CHECK=1
 now() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
-one() { pwsh -NoProfile -NonInteractive -File "$HERE/art-one.ps1" -Technique "$1" -Test "$2" -Mode "$3" -Atomics "$ATOMICS"; }
-rootone() { sudo pwsh -NoProfile -NonInteractive -File "$HERE/art-one.ps1" -Technique "$1" -Test "$2" -Mode "$3" -Atomics "$ATOMICS"; }
+# Every command gets /dev/null as input: sudo and pwsh read stdin, and would eat the rest of the test list.
+one() { pwsh -NoProfile -NonInteractive -File "$HERE/art-one.ps1" -Technique "$1" -Test "$2" -Mode "$3" -Atomics "$ATOMICS" < /dev/null; }
+rootone() { sudo pwsh -NoProfile -NonInteractive -File "$HERE/art-one.ps1" -Technique "$1" -Test "$2" -Mode "$3" -Atomics "$ATOMICS" < /dev/null; }
 
 # The watch in its own process group (eslogger leaves out events from its own group).
 set -m
@@ -30,14 +31,17 @@ set +m
 for _ in $(seq 1 60); do grep -q "^Watching" "$OUT/watch.out" 2>/dev/null && break; sleep 1; done
 grep "^Watching" "$OUT/watch.out" || { echo "The watch didn't start:"; cat "$OUT/watch.out"; exit 1; }
 sleep 3
+ls -ld "$HOME/Library/Application Support/Macximesed" "$HOME/Library/Application Support/Macximesed"/* > "$OUT/support-owners.txt" 2>&1
 
-baseline() { "$MACX" persist --baseline >/dev/null 2>&1; sudo "$MACX" persist --baseline >/dev/null 2>&1; }
+baseline() {
+    { echo "== $(date -u +%T) user"; "$MACX" persist --baseline; echo "== sudo"; sudo "$MACX" persist --baseline; } >> "$OUT/baselines.log" 2>&1 < /dev/null
+}
 persist_diff() {  # $1 = file
-    { echo "== as the user"; "$MACX" persist --diff 2>&1; echo "== with sudo"; sudo "$MACX" persist --diff 2>&1; } > "$1"
+    { echo "== as the user"; "$MACX" persist --diff 2>&1; echo "== with sudo"; sudo "$MACX" persist --diff 2>&1; } > "$1" < /dev/null
 }
 
 n=0
-while read -r tech test want _; do
+while read -r tech test want _ <&3; do
     case "$tech" in "" | \#*) continue ;; esac
     n=$((n + 1))
     id="$tech-$test"
@@ -58,7 +62,7 @@ while read -r tech test want _; do
     echo "::endgroup::"
     python3 -c 'import json,sys; print(json.dumps(dict(id=sys.argv[1], technique=sys.argv[2], test=int(sys.argv[3]), want=sys.argv[4], as_=sys.argv[5], start=float(sys.argv[6]), end=float(sys.argv[7]), status=int(sys.argv[8]), persist=sys.argv[9] or None)))' \
         "$id" "$tech" "$test" "$want" "$as" "$start" "$end" "$status" "$pfile" >> "$OUT/tests.jsonl"
-done < "$HERE/art-tests.txt"
+done 3< "$HERE/art-tests.txt"
 
 # Ordinary work with the watch on: every alert here at medium or above is a false alarm.
 echo "::group::benign workload"
@@ -72,7 +76,7 @@ W="$(mktemp -d)"
     tar -xzf release.tar.gz
     python3 -m venv venv && ./venv/bin/pip install --quiet requests
     mkdir pkg && cd pkg && swift package init --type executable --name Hello >/dev/null && swift build -c release >/dev/null
-) > "$OUT/benign.log" 2>&1
+) > "$OUT/benign.log" 2>&1 < /dev/null
 sleep 5
 end=$(now)
 echo "::endgroup::"
@@ -80,7 +84,11 @@ python3 -c 'import json,sys; print(json.dumps(dict(id="benign", technique="benig
 
 # Privacy grants: what eslogger's tcc_modify really contains, and which ways of granting don't show up at all.
 echo "::group::privacy grants (tcc_modify)"
+# eslogger buffers what it writes to a file and loses it when killed. With job control on, the background job
+# doesn't ignore SIGINT, which eslogger handles by flushing and exiting.
+set -m
 sudo /usr/bin/eslogger tcc_modify > "$OUT/tcc.jsonl" 2> "$OUT/tcc.err" &
+set +m
 sleep 3
 start=$(now)
 {
@@ -95,7 +103,8 @@ start=$(now)
 } > "$OUT/tcc-actions.log" 2>&1
 sleep 5
 end=$(now)
-sudo pkill -TERM -f "^/usr/bin/eslogger tcc_modify" || true
+sudo pkill -INT -f "^/usr/bin/eslogger tcc_modify" || true
+sleep 3
 python3 -c 'import json,sys; print(json.dumps(dict(id="tcc", technique="tcc", test=0, want="privacy-granted", as_="both", start=float(sys.argv[1]), end=float(sys.argv[2]), status=0, persist=None)))' "$start" "$end" >> "$OUT/tests.jsonl"
 cat "$OUT/tcc-actions.log"
 echo "tcc_modify events: $(wc -l < "$OUT/tcc.jsonl")"
