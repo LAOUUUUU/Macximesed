@@ -285,7 +285,12 @@ public struct UpdateInstaller: Sendable {
                 "CFBundleIdentifier"] as? String ?? "dev.macximesed.macx"
         // Same identity install.sh used, so the app keeps its Full Disk Access after the update.
         let sign = SigningIdentity.codesignArgument(SigningIdentity.preferred())
-        guard ProcessRunner.capture("/usr/bin/codesign", ["--force", "--sign", sign, "--identifier", id, app.path])?.status == 0 else {
+        // Keep the entitlements too, or an update would take the chamber's Virtualization permission away.
+        let entitlements = FileManager.default.temporaryDirectory.appendingPathComponent("macx-\(UUID().uuidString).entitlements")
+        try Data(SigningIdentity.entitlementsPlist.utf8).write(to: entitlements)
+        defer { try? FileManager.default.removeItem(at: entitlements) }
+        let args = SigningIdentity.resealArguments(sign: sign, id: id, app: app, entitlements: entitlements)
+        guard ProcessRunner.capture("/usr/bin/codesign", args)?.status == 0 else {
             throw UpdateError.download("updated, but couldn't re-sign \(app.path)")
         }
     }
@@ -334,6 +339,24 @@ public enum UpdateClient {
 /// gives macOS a stable identity, so privacy permissions like Full Disk Access survive rebuilds and
 /// updates; ad-hoc signing doesn't. install.sh and the updater must use the same one.
 public struct SigningIdentity: Sendable, Equatable {
+    /// The app's entitlements: the Virtualization framework, for the detonation chamber. Kept identical to
+    /// scripts/macx.entitlements (a test checks), so install.sh and the updater sign the same way.
+    public static let entitlementsPlist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+        \t<key>com.apple.security.virtualization</key>
+        \t<true/>
+        </dict>
+        </plist>
+
+        """
+
+    static func resealArguments(sign: String, id: String, app: URL, entitlements: URL) -> [String] {
+        ["--force", "--sign", sign, "--identifier", id, "--entitlements", entitlements.path, app.path]
+    }
+
     public var hash: String
     public var name: String
 

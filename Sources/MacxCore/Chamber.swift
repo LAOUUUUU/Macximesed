@@ -96,10 +96,13 @@ public struct ChamberJudge: Sendable {
         var alerts: [WatchAlert] = []
         var seen: Set<String> = []
         func keep(_ a: WatchAlert) {
-            let key = "\(a.rule)|\(a.detail ?? "")"
+            // One line per kind of read (a copied "Login Data" is the same theft); other rules per detail.
+            let key = a.rule.hasPrefix("reads-") ? a.rule : "\(a.rule)|\(a.detail ?? "")"
             if seen.insert(key).inserted { alerts.append(a) }
         }
         var vmCheckAt: Date?
+        var pipeQuery: [Int: (Date, String)] = [:]
+        var pipeFilter: [Int: (Date, String)] = [:]
         var quitAfterVMCheck = false
 
         for e in parsed.events {
@@ -115,6 +118,28 @@ public struct ChamberJudge: Sendable {
                 if a.rule == CommandPattern.vmCheck.rawValue, vmCheckAt == nil { vmCheckAt = e.time ?? .distantPast }
             }
             for a in Self.fileRules(e, home: guestHome.path) { keep(a) }
+            // A VM check split across a pipe: a hardware query and a VM-name filter started by the same shell.
+            if e.kind == "exec", let t = e.target, let parent = t.ppid {
+                let tool = (t.path as NSString).lastPathComponent
+                let line = e.args.joined(separator: " ")
+                let isQuery = ["system_profiler", "ioreg"].contains(tool) || (tool == "sysctl" && line.contains("hw.model"))
+                // Next to a hardware query, a bare "virtual" means the same.
+                let namesVM =
+                    line.range(of: CommandPatterns.vmNames + #"|\bvirtual"#, options: [.regularExpression, .caseInsensitive]) != nil
+                let when = e.time ?? .distantPast
+                if isQuery { pipeQuery[parent] = (when, line) }
+                if namesVM, !isQuery { pipeFilter[parent] = (when, line) }
+                if let q = pipeQuery[parent], let f = pipeFilter[parent], abs(q.0.timeIntervalSince(f.0)) <= 5 {
+                    let p = CommandPattern.vmCheck
+                    keep(
+                        WatchAlert(
+                            rule: p.rawValue, severity: p.severity, title: p.title, detail: "\(q.1) | \(f.1)", pid: t.pid,
+                            processPath: t.path))
+                    if vmCheckAt == nil { vmCheckAt = when }
+                    pipeQuery[parent] = nil
+                    pipeFilter[parent] = nil
+                }
+            }
             if e.kind == "exit", e.process?.pid == samplePID, let checked = vmCheckAt {
                 let gap = (e.time ?? .distantFuture).timeIntervalSince(checked)
                 if gap >= 0, gap <= quitWindow { quitAfterVMCheck = true }
@@ -158,8 +183,17 @@ public struct ChamberJudge: Sendable {
             // The chamber has no network, so this always fails; the attempt shows where it wanted to send things.
             return [
                 WatchAlert(
-                    rule: "network-attempt", severity: .medium, title: "Tried to connect to the internet", detail: endpoint, pid: pid,
+                    rule: "network-attempt", severity: .medium, title: "Tried to reach the internet", detail: endpoint, pid: pid,
                     processPath: who)
+            ]
+        }
+        if e.kind == "exec", let t = e.target, ["curl", "wget"].contains((t.path as NSString).lastPathComponent),
+            let url = e.args.dropFirst().first(where: { $0.hasPrefix("http://") || $0.hasPrefix("https://") || $0.hasPrefix("ftp://") })
+        {
+            return [
+                WatchAlert(
+                    rule: "network-attempt", severity: .medium, title: "Tried to reach the internet", detail: url, pid: t.pid,
+                    processPath: t.path)
             ]
         }
         guard e.kind == "open", let path = e.filePath else { return [] }

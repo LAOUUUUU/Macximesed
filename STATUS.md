@@ -26,10 +26,10 @@ Run a suspicious file in a throwaway macOS VM with no network, judge it on the r
 - [x] Switched to the **light chamber** (Lao: 25.6 GB is too big). It's a tiny Alpine Linux VM, 52 MB in all, that runs scripts with Mac commands replaced by stand-ins. Mac apps and binaries keep the static checks.
 - [x] Light chamber pieces: strace reader, `network-attempt` rule, initramfs (cpio) writer.
 - [x] Boot test (2026-11-24): verified Alpine downloads, zboot kernel unwrapped, booted with no disk or network, ran a pretend stealer in 1.6 s, judged *DON'T OPEN THIS* from the real trace.
-- [ ] `macx chamber setup`: download and verify in Swift (signature + hashes, pinned manifest), unwrap the kernel, store about 60 MB. Needs the virtualization entitlement added to the app's signing (scripts/install.sh).
-- [ ] `macx chamber run FILE`: build the initramfs with CPIOArchive (stand-ins, bait files, agent, sample), boot, collect the trace, judge, quarantine.
-- [x] Intel Macs, data side: x86_64 manifest pinned (52 MB), kernel check `ChamberKernel` (bzImage on Intel, EFI-zboot unwrapped on Apple silicon). Booting on a real Intel Mac is untested; CI can't boot VMs.
-- [ ] Hints from `macx check` and `guard inspect` when the verdict is *partly unknown*.
+- [x] `macx chamber setup` (2026-11-24): pinned manifest (15 files, 49.6 MB), SHA-256 checks, unpacking with macOS's tar, kernel unwrap; 61 MB on disk. The app and the updater sign with the Virtualization entitlement.
+- [x] `macx chamber run FILE` (2026-11-24): a pretend AMOS-style script gave *DON'T OPEN THIS* in 1.6 s (password box, dscl check, keychain and Chrome reads, fake Apple LaunchDaemon, piped VM check, upload attempt). An ordinary script gave *Nothing seen*. Quarantine and undo restore checked.
+- [x] Intel Macs, data side: x86_64 manifest pinned (52 MB), kernel check `ChamberKernel` (bzImage on Intel, EFI-zboot unwrapped on Apple silicon). Booting on a real Intel Mac is untested; CI can't boot VMs. Setup picks the manifest by processor, so it now finds the x86_64 one. Still to do: setup should check the kernel with `ChamberKernel` (on Intel it's used unchecked), and the run image's strace command should use `StraceLog.traceSyscalls` (today it traces `openat` only, which misses Intel's `open` and `creat`).
+- [x] `macx check` suggests the chamber for scripts it rates *Be careful* or *partly unknown*. (`guard inspect` still to do: it holds the fetched script in memory, not a file.)
 
 ## Check on macOS 27.3 (expected early December 2026)
 Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.com/news?id=oqng0zjk), 2026-11-16): users are guided to grant only specific folders, there's a new grant prompt and a menu-bar list of apps with access, and grants made before the update stay in effect. Endpoint Security and eslogger aren't mentioned, and the new entitlements are only for backup and assistive-technology apps.

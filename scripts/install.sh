@@ -45,7 +45,8 @@ LOCAL=$(printf '%s\n' "$IDS" | sed -nE 's/^ *[0-9]+\) ([0-9A-F]{40}) "Macximesed
 SIGN="${MACX_SIGN_IDENTITY:-${DEV:-$LOCAL}}"
 SIGN="${SIGN:--}"
 if [ "$SIGN" = "-" ]; then SIGNED_AS="ad-hoc (Full Disk Access won't stick on macOS 27; see README)"; elif [ "$SIGN" = "$LOCAL" ]; then SIGNED_AS="local self-signed identity (Macximesed Local Signing)"; else SIGNED_AS="identity $SIGN"; fi
-codesign --force --sign "$SIGN" --identifier dev.macximesed.macx "$NEW"
+# The entitlements let `macx chamber` use the Virtualization framework (no paid Apple account needed).
+codesign --force --sign "$SIGN" --identifier dev.macximesed.macx --entitlements "$(dirname "$0")/macx.entitlements" "$NEW"
 codesign --verify --strict "$NEW"
 rm -rf "$APP"
 mv "$NEW" "$APP"

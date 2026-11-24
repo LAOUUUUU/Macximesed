@@ -180,3 +180,39 @@ struct RealChamberRunTests {
         #expect(r.alerts.first { $0.rule == "network-attempt" }?.detail == "203.0.113.9:443")
     }
 }
+
+@Suite("Light chamber: judging pipelines and repeats")
+struct ChamberPipelineTests {
+    let judge = ChamberJudge(guestHome: URL(fileURLWithPath: "/Users/chamber"))
+
+    @Test func vmCheckSplitAcrossAPipeIsCaught() {
+        // `system_profiler SPHardwareDataType | grep -qi virtual`: two programs, started by the same shell.
+        let text = """
+            500 1795514401.00 clone(child_stack=NULL, flags=SIGCHLD) = 501
+            500 1795514401.01 clone(child_stack=NULL, flags=SIGCHLD) = 502
+            501 1795514401.02 execve("/usr/sbin/system_profiler", ["system_profiler", "SPHardwareDataType"], 0x1 /* 1 var */) = 0
+            502 1795514401.03 execve("/bin/grep", ["grep", "-qi", "virtual"], 0x1 /* 1 var */) = 0
+            """
+        let r = judge.judge(events: StraceLog.parse(text).events, samplePID: 500)
+        #expect(r.alerts.contains { $0.rule == "vm-check" })
+    }
+
+    @Test func aGrepWithoutAHardwareQueryIsNotAVMCheck() {
+        let text = """
+            500 1795514401.00 clone(child_stack=NULL, flags=SIGCHLD) = 502
+            502 1795514401.03 execve("/bin/grep", ["grep", "-i", "vmware", "notes.txt"], 0x1 /* 1 var */) = 0
+            """
+        #expect(!judge.judge(events: StraceLog.parse(text).events, samplePID: 500).alerts.contains { $0.rule == "vm-check" })
+    }
+
+    @Test func repeatedReadsOfTheSameKindAreOneLine() {
+        let text = """
+            500 1795514401.1 openat(AT_FDCWD, "/Users/chamber/Library/Application Support/Google/Chrome/Default/Login Data", O_RDONLY) = 3
+            500 1795514401.2 openat(AT_FDCWD, "/tmp/.loot/Login Data", O_RDONLY) = 4
+            500 1795514401.3 openat(AT_FDCWD, ".loot/Login Data", O_RDONLY) = 5
+            """
+        let r = judge.judge(events: StraceLog.parse(text).events, samplePID: 500)
+        #expect(r.alerts.filter { $0.rule == "reads-browser-data" }.count == 1)
+        #expect(r.alerts.first { $0.rule == "reads-browser-data" }?.detail?.hasPrefix("/Users/chamber/") == true)
+    }
+}
