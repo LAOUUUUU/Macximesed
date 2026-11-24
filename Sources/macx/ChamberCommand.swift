@@ -113,7 +113,7 @@ struct Chamber: ParsableCommand {
                 return
             }
             if report.verdict == .dangerous,
-                yes || askYes("Quarantine \(url.lastPathComponent)? It moves into a case folder and the undo store, restorable.")
+                yes || askYes("Quarantine \(url.lastPathComponent)? It moves into a case folder and the undo folder, restorable.")
             {
                 let (incident, batch) = try ChamberQuarantine().quarantine(sample, report: report)
                 print("Quarantined. Case: macx incident show \(incident.id)    Undo: macx undo restore \(batch.id)")

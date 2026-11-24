@@ -197,12 +197,12 @@ struct StartupView: View {
     func remove(_ item: PersistenceItem, name: String) {
         guard
             confirm(
-                "Remove \(name)?", "It moves to the undo store and stops starting at login. You can put it back with macx undo.",
+                "Remove \(name)?", "It moves to the undo folder and stops starting at login. You can put it back with macx undo.",
                 action: "Remove")
         else { return }
         do {
             let batch = try UndoStore().stash([URL(fileURLWithPath: item.path)], reason: "startup item: \(name)")
-            note = "Moved \(name) to the undo store (\(batch.id))."
+            note = "Moved \(name) to the undo folder (\(batch.id))."
             scan()
         } catch {
             note = "Couldn't remove it: \(error.localizedDescription)"
@@ -459,14 +459,14 @@ struct CleanView: View {
         let picked = items.filter { model.cleanChosen.contains($0.id) && $0.inUseBy == nil }
         guard
             confirm(
-                "Clean \(formatBytes(total))?", "\(picked.count) items move to the undo store. Undo puts them back.",
+                "Clean \(formatBytes(total))?", "\(picked.count) items move to the undo folder. Undo puts them back.",
                 action: "Clean")
         else { return }
         do {
             let batch = try CleanupCatalog.run(picked, store: UndoStore())
             lastBatch = batch
             note =
-                "Moved \(formatBytes(batch.totalBytes)) to the undo store."
+                "Moved \(formatBytes(batch.totalBytes)) to the undo folder."
                 + (batch.failed.isEmpty ? "" : " \(batch.failed.count) couldn't move.")
             model.cleanItems = nil
             scan()
@@ -607,12 +607,12 @@ struct AppsView: View {
         guard
             confirm(
                 "Remove \(app.name)?",
-                "The app and \(plan.paths.count - 1) leftover items (\(formatBytes(plan.bytes))) move to the undo store.",
+                "The app and \(plan.paths.count - 1) leftover items (\(formatBytes(plan.bytes))) move to the undo folder.",
                 action: "Remove")
         else { return }
         do {
             let batch = try AppUninstaller.run(plan, store: UndoStore())
-            note = "Moved \(app.name) to the undo store (\(batch.id))."
+            note = "Moved \(app.name) to the undo folder (\(batch.id))."
             model.apps = nil
             scan()
         } catch {

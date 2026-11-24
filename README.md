@@ -38,7 +38,7 @@ Open **Macximesed** from your Applications folder (or run `macx app`). It's the 
 - **Menu bar:** a small square mark. It's filled while the watch runs, an outline while it's paused, and struck through when nothing is watching. A red dot means a critical alert you haven't looked at. Click it for the state and the latest alerts. Right-click it for Pause, Resume, Open and Quit.
 - **The window** has these screens:
   - **Protection:** the watch's state and the last 7 days of alerts, grouped by rule and program, with counts.
-  - **Startup items:** the `persist` scan, with a baseline. Your own items can be removed, and they go to the undo store.
+  - **Startup items:** the `persist` scan, with a baseline. Your own items can be removed, and they go to the undo folder.
   - **Check a file:** drop a file on it or choose one.
   - **Clean:** the Safe tier, with undo.
   - **Apps:** remove an app and its leftovers, with undo.
