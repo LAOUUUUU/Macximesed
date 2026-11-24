@@ -87,6 +87,14 @@ public struct URLSessionChamberDownloader: ChamberDownloading {
     }
 }
 
+/// Reads the files from a local folder by name instead of downloading them (MACX_CHAMBER_MIRROR): offline
+/// setups and tests. The SHA-256 checks are exactly the same.
+public struct LocalMirrorDownloader: ChamberDownloading {
+    public var folder: URL
+    public init(folder: URL) { self.folder = folder }
+    public func fetch(_ url: URL) throws -> Data { try Data(contentsOf: folder.appendingPathComponent(url.lastPathComponent)) }
+}
+
 /// Downloads the pinned files, checks every SHA-256, unpacks the Alpine system and unwraps the kernel.
 /// Nothing is used unless its hash matches the manifest.
 public struct ChamberSetup: Sendable {
