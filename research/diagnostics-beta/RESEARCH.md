@@ -1,6 +1,6 @@
 # Research: verbose logs, bug and crash reports, and a beta channel of dev builds
 **Date:** 2026-11-24
-**Status:** Complete, waiting for Lao's decisions and approval
+**Status:** Complete. Lao's decisions made 2026-11-24 (below); waiting for the go-ahead to build
 **Researcher:** Claude Code
 
 ## Question
@@ -161,16 +161,17 @@ Three features:
   - Updates work as they do now: a notice, then *Install* or `macx update`. A beta can never force an update; only the stable floor can.
 - **Leaving beta:** you stay on the dev build until the next stable release replaces it. There's no instant downgrade in the first version: a downgrade path is one more thing that has to be secured.
 
-## Decisions for Lao
-1. **Beta signing:**
-   - **(a) Recommended:** each dev build waits in the `beta` environment until you approve it. Approving the newest one skips the older ones, so it's one click whenever you feel like it, and nothing reaches beta Macs without you.
-   - **(b)** Fully automatic: every push to dev is signed and goes out. Convenient, but a bad or compromised push to dev reaches every beta Mac on its own.
-2. **Where reports go:**
-   - **(a) Recommended:** an encrypted relay to a private Discord channel. You set up the Worker, the channel and its webhook, and make a report key; I write the Worker, the client and the decrypt script.
-   - **(b)** Save/copy plus a prefilled GitHub issue only. No relay to run, but it's public and never anonymous.
-   - **(c)** Both, with (b) as the offline fallback. That's what the recommendation already includes.
-3. **Default for crash reports:** *Ask each time*, recommended, or *Never* until switched on.
-4. **Contact field in reports:** none, recommended, or an optional "email if you want a reply" marked as not anonymous.
+## Lao's decisions (2026-11-24)
+1. **Beta signing: fully automatic.**
+   - Every push to `dev` that passes the tests is signed with the beta key and published, with no approval step.
+   - The `beta` environment has no reviewer. Its deployment branches are limited to `main`, because `beta-publish.yml` runs main's copy through `workflow_run`.
+   - Lao chose this over approving each build, knowing that a bad or compromised push to `dev` reaches beta Macs on its own. The hardening below matters more because of it:
+     - a ruleset on `dev` (no force-push, no deletion, restricted pushers);
+     - the beta key never trusted for stable;
+     - the stable floor still applies to beta Macs.
+2. **Reports go through the encrypted relay:** HPKE on the Mac, then a Cloudflare Worker, then a private Discord channel. *Copy*, *Save…* and a prefilled GitHub issue stay as fallbacks.
+3. **Crash reports default to *Ask each time*.**
+4. **No contact field.** The report ID is how someone follows up.
 
 ## Test plan sketch
 - [ ] Logger:
@@ -202,7 +203,7 @@ Three features:
   - a beta file can never force.
 
 ## Risks & unknowns
-- **Automatic beta signing** (decision 1b) ships whatever reaches dev to beta Macs. With 1a, one approval is still a rubber stamp unless the diff was reviewed, which today it is, by the coordinator.
+- **Automatic beta signing** (Lao's choice) ships whatever reaches dev to beta Macs. Anyone or anything with push access to `dev` (including a stolen GitHub token) can reach them, so `dev` needs a ruleset and the beta key must stay out of stable trust.
 - **Redaction can miss things** in free-text alert details. Mitigations:
   - list-of-fields first;
   - fixture tests;
@@ -217,7 +218,7 @@ Three features:
   - whether "immutable releases" is off in the repo settings (a rolling prerelease needs it off).
 
 ## Next steps
-- [ ] Lao answers the four decisions.
+- [x] Lao answers the four decisions (2026-11-24).
 - [ ] Then, in this order, each test-first:
   1. logger and `--verbose`;
   2. report builder, redaction, crash summaries, *Copy* / *Save*;
