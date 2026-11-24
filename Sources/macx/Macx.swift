@@ -23,6 +23,10 @@ enum Entry {
         }
         Responsibility.becomeOwnResponsibleProcessIfNeeded()
         UpdateCheck.runIfDue(arguments: Array(CommandLine.arguments.dropFirst()))
+        // A game session whose game quit while macx wasn't watching (crash, closed terminal) leaves Boost on.
+        if geteuid() != 0, GameSessionGuard.recoverIfNeeded() {
+            FileHandle.standardError.write(Data("macx: the last game session ended without macx; Boost was turned off.\n".utf8))
+        }
         Macx.main()
     }
 }
@@ -34,7 +38,7 @@ struct Macx: ParsableCommand {
         version: macxVersion,
         subcommands: [
             Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Daemon.self, Alerts.self, Net.self,
-            Chamber.self, Top.self, BoostCommand.self, TuneCommand.self, ESPassthrough.self,
+            Chamber.self, Top.self, BoostCommand.self, TuneCommand.self, GamesCommand.self, ESPassthrough.self,
             Incident.self, Privacy.self,
             Update.self,
             Undo.self,

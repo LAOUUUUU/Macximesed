@@ -301,11 +301,11 @@ public enum Boost {
 
     /// Applies a plan, recording each change first. Refuses if a Boost is already on (turn it off first).
     @discardableResult
-    public static func apply(_ plan: BoostPlan, ledgerAt file: URL = defaultLedger, system: SystemControl = RealSystem()) throws
-        -> TweakLedger
-    {
+    public static func apply(
+        _ plan: BoostPlan, purpose: String = "boost", ledgerAt file: URL = defaultLedger, system: SystemControl = RealSystem()
+    ) throws -> TweakLedger {
         guard TweakLedger.load(at: file) == nil else { throw Problem.alreadyOn }
-        var ledger = try TweakLedger.open(at: file, purpose: "boost")
+        var ledger = try TweakLedger.open(at: file, purpose: purpose)
         for p in plan.demote { try? ledger.demote(pid: p.pid, system: system) }
         for s in plan.settings { try? ledger.setDefault(domain: s.domain, key: s.key, to: s.value, system: system) }
         if plan.keepAwake { try ledger.keepAwake(system: system) }
