@@ -168,7 +168,9 @@ struct UpdateInstallTests {
     }
 
     func installer(reports version: String?) -> UpdateInstaller {
-        UpdateInstaller(versionOf: { _ in version })
+        UpdateInstaller(
+            versionOf: { _ in version },
+            previousFolder: FileManager.default.temporaryDirectory.appendingPathComponent("macx-test-previous-\(UUID().uuidString)"))
     }
 
     @Test func installsAtomicallyAndKeepsThePrevious() throws {
@@ -265,7 +267,8 @@ struct AppBundleUpdateTests {
         _ = try ProcessRunner().run("/usr/bin/tar", ["-czf", tgz.path, "-C", pkg.path, "macx"])
         let data = try Data(contentsOf: tgz)
 
-        try UpdateInstaller(versionOf: { _ in "0.3.0" }).install(
+        let previous = tmp.url.appendingPathComponent("support", isDirectory: true)
+        try UpdateInstaller(versionOf: { _ in "0.3.0" }, previousFolder: previous).install(
             data, sha256: sha256(data), version: "0.3.0", over: exe, installed: SemVer("0.2.0")!)
 
         // Re-signing rewrites the signature inside the binary, so compare what it is, not its bytes.
@@ -279,6 +282,8 @@ struct AppBundleUpdateTests {
         #expect(plist?["CFBundleShortVersionString"] as? String == "0.3.0")
         // The previous binary is kept outside the bundle, so it doesn't break the seal.
         #expect(!FileManager.default.fileExists(atPath: exe.deletingLastPathComponent().appendingPathComponent("macx.previous").path))
+        // ...and in the folder it was given, never the real Application Support.
+        #expect(FileManager.default.fileExists(atPath: previous.appendingPathComponent("macx.previous").path))
     }
 }
 
