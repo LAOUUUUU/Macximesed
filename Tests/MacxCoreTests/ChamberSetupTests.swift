@@ -120,6 +120,15 @@ struct ChamberSetupTests {
         #expect(!f.store.isInstalled(for: f.manifest))
     }
 
+    @Test func intelKernelIsCheckedToo() throws {
+        // An arm64 zboot kernel in an x86_64 manifest isn't a bzImage: setup refuses it instead of installing it unchecked.
+        var f = try fixture()
+        f.manifest.arch = "x86_64"
+        let setup = ChamberSetup(manifest: f.manifest, store: f.store, downloader: f.downloader, freeBytes: { 10_000_000_000 })
+        #expect(throws: ChamberSetup.Problem.self) { try setup.run() }
+        #expect(!f.store.isInstalled(for: f.manifest))
+    }
+
     @Test func refusesWithoutEnoughDiskSpace() throws {
         let f = try fixture()
         let setup = ChamberSetup(manifest: f.manifest, store: f.store, downloader: f.downloader, freeBytes: { 1000 })
@@ -141,11 +150,5 @@ struct ChamberSetupTests {
         #expect(m.files.contains { $0.role == "rootfs" })
         #expect(m.files.allSatisfy { $0.sha256.count == 64 && $0.url.hasPrefix("https://dl-cdn.alpinelinux.org/") })
         #expect(throws: (any Error).self) { try ChamberManifest.bundled(arch: "sparc") }
-    }
-
-    @Test func unwrapsZbootAndRejectsOtherFormats() throws {
-        let tmp = try TempDir()
-        #expect(try ChamberSetup.unwrapArm64Kernel(zboot(fakeKernel(), in: tmp)) == fakeKernel())
-        #expect(throws: ChamberSetup.Problem.self) { try ChamberSetup.unwrapArm64Kernel(Data("not a kernel at all, nope".utf8)) }
     }
 }

@@ -187,7 +187,11 @@ public struct ChamberSetup: Sendable {
                 guard let raw = try? Data(contentsOf: kdir.appendingPathComponent("boot/vmlinuz-virt")) else {
                     throw Problem.kernelFormat("no boot/vmlinuz-virt in \(f.name)")
                 }
-                kernel = manifest.arch == "aarch64" ? try Self.unwrapArm64Kernel(raw) : raw
+                do {
+                    kernel = try ChamberKernel.prepare(raw, arch: manifest.arch)
+                } catch {
+                    throw Problem.kernelFormat("\(error)")
+                }
             } else {
                 try Self.untar(file, into: rootfs, name: f.name)
             }
@@ -218,46 +222,5 @@ public struct ChamberSetup: Sendable {
         try p.run()
         p.waitUntilExit()
         guard p.terminationStatus == 0 else { throw Problem.unpackFailed(name) }
-    }
-
-    /// Alpine's arm64 kernel is wrapped in EFI zboot ("MZ" + "zimg", gzip payload offset and size at bytes 8
-    /// and 12). VZLinuxBootLoader needs the raw Image inside (magic "ARMd" at 0x38).
-    static func unwrapArm64Kernel(_ data: Data) throws -> Data {
-        let d = [UInt8](data)
-        func isRaw(_ b: [UInt8]) -> Bool { b.count > 0x3C && Array(b[0x38..<0x3C]) == Array("ARMd".utf8) }
-        if isRaw(d) { return data }
-        guard d.count > 0x20, d[0] == 0x4D, d[1] == 0x5A, Array(d[4..<8]) == Array("zimg".utf8) else {
-            throw Problem.kernelFormat("not EFI zboot and not a raw arm64 Image")
-        }
-        func u32(_ o: Int) -> Int { Int(d[o]) | Int(d[o + 1]) << 8 | Int(d[o + 2]) << 16 | Int(d[o + 3]) << 24 }
-        let offset = u32(8)
-        let size = u32(12)
-        let comp = String(decoding: d[0x18..<0x20].prefix { $0 != 0 }, as: UTF8.self)
-        guard comp == "gzip", offset + size <= d.count else { throw Problem.kernelFormat("zboot payload is \(comp)") }
-        let raw = try gunzip(Data(d[offset..<offset + size]))
-        guard isRaw([UInt8](raw)) else { throw Problem.kernelFormat("unwrapped data isn't an arm64 Image") }
-        return raw
-    }
-
-    static func gunzip(_ data: Data) throws -> Data {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
-        p.arguments = ["-dc"]
-        let input = Pipe()
-        let output = Pipe()
-        p.standardInput = input
-        p.standardOutput = output
-        p.standardError = FileHandle.nullDevice
-        try p.run()
-        // Feed and read at the same time, so a large kernel can't fill the pipe and stall.
-        let writer = Thread {
-            input.fileHandleForWriting.write(data)
-            try? input.fileHandleForWriting.close()
-        }
-        writer.start()
-        let out = output.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else { throw Problem.kernelFormat("gzip failed") }
-        return out
     }
 }

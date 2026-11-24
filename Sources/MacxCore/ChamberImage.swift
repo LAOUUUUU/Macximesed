@@ -105,7 +105,7 @@ public enum ChamberImage {
         export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
         echo "==MACX-READY=="
         cd \(guestHome)/Downloads
-        strace -f -ttt -qq -s 4096 -e trace=execve,openat,rename,renameat,renameat2,connect,clone,clone3,fork,vfork -o /tmp/trace \\
+        strace -f -ttt -qq -s 4096 -e trace=\(StraceLog.traceSyscalls) -o /tmp/trace \\
             timeout -s KILL \(seconds) \(interpreter) ./\(sample) > /tmp/out 2>&1 < /dev/null
         echo "==MACX-TRACE=="; cat /tmp/trace; echo "==MACX-END=="
         echo "==MACX-OUTPUT=="; head -c 65536 /tmp/out; echo; echo "==MACX-OUTPUT-END=="

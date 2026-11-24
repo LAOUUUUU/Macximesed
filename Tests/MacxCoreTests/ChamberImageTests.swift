@@ -29,6 +29,8 @@ struct ChamberImageTests {
         #expect(try #require(e["init"]).mode & 0o777 == 0o755)
         #expect(initScript.contains("timeout -s KILL 45"))
         #expect(initScript.contains("strace -f -ttt -qq -s 4096"))
+        // The syscall list comes from StraceLog, so the agent and the reader agree (Intel's musl uses open/creat).
+        #expect(initScript.contains("trace=\(StraceLog.traceSyscalls) "))
         #expect(initScript.contains("/bin/zsh ./installer.sh"))
         #expect(initScript.contains("==MACX-TRACE=="))
         // The sample sits in a fake Mac home, runnable.
