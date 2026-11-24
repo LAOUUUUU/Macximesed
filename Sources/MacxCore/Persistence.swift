@@ -68,7 +68,7 @@ public struct CodeSignatureChecker: SignatureChecking {
 public enum PersistenceKind: String, Codable, Sendable, CaseIterable {
     case launchDaemon, launchAgent, userLaunchAgent, loginItem, backgroundTask, cron, shellStartup, hiddenFolder
     case appExtension, authorizationPlugin, periodicScript, sudoersFile, pamModule, atJob, loginHook
-    case systemExtension, kernelExtension, browserExtension
+    case systemExtension, kernelExtension, browserExtension, configurationProfile
 
     public var label: String {
         switch self {
@@ -90,6 +90,7 @@ public enum PersistenceKind: String, Codable, Sendable, CaseIterable {
         case .systemExtension: "System extension"
         case .kernelExtension: "Kernel extension"
         case .browserExtension: "Browser extension"
+        case .configurationProfile: "Configuration profile"
         }
     }
 }
@@ -113,6 +114,9 @@ public struct PersistenceItem: Codable, Sendable, Equatable {
     public var detail: String?
     /// Libraries forced into the program with DYLD_* environment variables (launch plists).
     public var injectedLibraries: [String]?
+    /// Configuration profiles: what their payloads can do, and whether an MDM manages this Mac.
+    public var profileCapabilities: [ProfileCapability]?
+    public var managedByMDM: Bool?
 
     public init(
         kind: PersistenceKind, path: String, label: String?, program: String?, arguments: [String], runsAsRoot: Bool,
@@ -409,7 +413,10 @@ public enum PersistenceScanner {
         let cron = try? runner.run("/usr/bin/crontab", ["-l"])
         let (btm, note) = BTMParser.currentWithNote()
         if let note { FileHandle.standardError.write(Data("macx: \(note)\n".utf8)) }
+        let profiles = ConfigurationProfiles.current()
+        if let note = profiles.note { FileHandle.standardError.write(Data("macx: \(note)\n".utf8)) }
         return scan(.current, btm: btm, cron: cron) + OtherPersistence.scan(.current)
+            + ConfigurationProfiles.items(profiles.profiles, managedByMDM: profiles.managedByMDM)
     }
 }
 
@@ -471,6 +478,14 @@ public enum PersistenceRules {
                 continue
             case .loginHook:
                 add("login-hook", .high, "A login or logout hook (old mechanism, runs as root; rarely used except by malware)")
+            case .configurationProfile:
+                if item.managedByMDM == true {
+                    add("profile-managed", .info, "Configuration profile on a Mac your organisation manages (MDM)")
+                    continue
+                }
+                add("profile-installed-by-hand", .low, "Configuration profile installed by hand (no MDM here): make sure you know it")
+                for c in item.profileCapabilities ?? [] { add(c.rule, c.severity, c.title) }
+                continue
             case .systemExtension, .kernelExtension, .browserExtension:
                 continue  // listed so the baseline can show new ones; not judged on their own
             default: break

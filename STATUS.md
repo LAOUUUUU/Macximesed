@@ -10,7 +10,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **A. Signed hash feed** (built 2026-11-23; goes live with the first release) on GitHub Pages: listed in the signed channel, cached locally, checked offline by `macx check` and `macx watch`.
 - [ ] **B. Runs in the background** without a terminal open: a launchd daemon running `macx watch`, with a way to see alerts. This depends on solving Full Disk Access below; a launchd daemon is one of the untried routes.
 - [x] **C. Network watching** for flagged processes (2026-11-23): libproc polling every 20 ms, `macx net`; miss rate in [research/evaluation/network-results.md](research/evaluation/network-results.md).
-- [ ] **D. Configuration profiles** in the persistence checks (root: done inside the daemon or `sudo macx persist`).
+- [x] **D. Configuration profiles** in `macx persist` (2026-11-23): yours without root, computer-wide ones with `sudo`; rules by payload type. Not yet checked against a real installed profile (CI runners can't install one: the `profiles` tool no longer installs).
 - [x] **E. `sfltool` stall understood** (2026-11-23): without root it asks for an admin password (`system.privilege.admin`) and waits on the dialog; as root it answers at once. It now runs only as root. Reading the BTM file directly is no better: its folder needs Full Disk Access.
 - [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
 
@@ -58,4 +58,4 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
 - `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.
 - `sfltool dumpbtm` is undocumented. The parser keeps unknown keys and types and skips what it can't read; re-check on each macOS release.
-- Configuration profiles: `profiles` needs root to list them, so the persistence scan doesn't cover them yet.
+- Configuration profiles: the parser follows the documented `profiles show -output stdout-xml` layout. Check it against a real installed profile when one is on hand.

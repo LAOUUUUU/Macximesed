@@ -12,6 +12,7 @@ This brief was written in three rounds on 2026-11-23, and later rounds changed e
 4. **Payload inspection** (download, inspect, run the exact copy) is its own milestone: `macx guard inspect`. It checks the SHA-256 again before running, and feeds pipe-form scripts on stdin.
 5. **Paste guard confirmation:** a flagged command needs a typed `RUN`. Pressing Enter twice is no longer enough.
 6. **`sfltool dumpbtm` only as root** (2026-11-23): without root it requests `system.privilege.admin` through SecurityAgent and blocks on the dialog (seen with `sample` on a CI runner: stuck in `AuthorizationCopyRights`). As root it returns at once. The BTM store in `/private/var/db/com.apple.backgroundtaskmanagement` needs Full Disk Access, so it isn't a way around this.
+7. **Configuration profiles** (2026-11-23): since macOS 11, `profiles install` is refused ("profiles tool no longer supports installs", checked on a macOS 15 CI runner), so a profile arrives only through System Settings approval or an MDM. Malware has to talk the user into installing one (ChromeLoader and AdLoad did, for forced browser extensions and proxies). Rules go by payload type, and an MDM-managed Mac only lists them. The layout comes from the documented `stdout-xml` format, because no runner could install a real profile.
 
 ## Question
 How should we build a macOS 27 tool that (1) frees space and background resources in three risk tiers and (2) watches for stealer-style malware (AMOS) better than XProtect does, using only what an unsigned, personal build can do?
