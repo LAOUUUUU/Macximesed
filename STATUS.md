@@ -31,7 +31,7 @@ Run a suspicious file in a throwaway macOS VM with no network, judge it on the r
 - [x] Boot test (2026-11-24): verified Alpine downloads, zboot kernel unwrapped, booted with no disk or network, ran a pretend stealer in 1.6 s, judged *DON'T OPEN THIS* from the real trace.
 - [x] `macx chamber setup` (2026-11-24): pinned manifest (15 files, 49.6 MB), SHA-256 checks, unpacking with macOS's tar, kernel unwrap; 61 MB on disk. The app and the updater sign with the Virtualization entitlement.
 - [x] `macx chamber run FILE` (2026-11-24): a pretend AMOS-style script gave *DON'T OPEN THIS* in 1.6 s (password box, dscl check, keychain and Chrome reads, fake Apple LaunchDaemon, piped VM check, upload attempt). An ordinary script gave *Nothing seen*. Quarantine and undo restore checked.
-- [x] Intel Macs, data side: x86_64 manifest pinned (52 MB), kernel check `ChamberKernel` (bzImage on Intel, EFI-zboot unwrapped on Apple silicon). Booting on a real Intel Mac is untested; CI can't boot VMs. Setup picks the manifest by processor, so it now finds the x86_64 one. Still to do: setup should check the kernel with `ChamberKernel` (on Intel it's used unchecked), and the run image's strace command should use `StraceLog.traceSyscalls` (today it traces `openat` only, which misses Intel's `open` and `creat`).
+- [x] Intel Macs, data side: x86_64 manifest pinned (52 MB), kernel check `ChamberKernel` (bzImage on Intel, EFI-zboot unwrapped on Apple silicon). Booting on a real Intel Mac is untested; CI can't boot VMs. Setup picks the manifest by processor, checks every kernel with `ChamberKernel.prepare` on both chips, and the run image traces `StraceLog.traceSyscalls`, so Intel's `open` and `creat` are seen (0.3.0).
 - [x] `macx check` and `macx guard inspect` suggest the chamber for scripts they rate *Be careful* or *partly unknown*. `guard inspect` hands it the copy it inspected, saved in a private folder (2026-11-24).
 
 ## Check on macOS 27.3 (expected early December 2026)
@@ -76,7 +76,7 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 - Metal HUD via `open --env MTL_HUD_ENABLED=1` is untested on macOS 27, and doesn't reach games started by Steam or CrossOver.
 - `~/Library/Preferences/NSGlobalDomain.plist` (empty) was left by the global-domain bug on Lao's Mac (2026-11-24 00:31). It's harmless; remove it if Lao says so.
 - `macx persist` labels a program signed with the local self-signed certificate as "ad-hoc (no identity)". It should say self-signed.
-- Should purging old undo batches happen automatically? It's manual for now (`macx undo purge`), because it's the only real delete.
+- Should purging old undo batches happen automatically? It's manual for now (`macx undo purge`, or `macx undo empty` and Clean > *Empty undo folder* for everything), because those are the only real deletes.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
 - `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.
 - `sfltool dumpbtm` is undocumented. The parser keeps unknown keys and types and skips what it can't read; re-check on each macOS release.
