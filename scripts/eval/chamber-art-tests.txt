@@ -1,0 +1,28 @@
+# Atomic Red Team tests for the detonation chamber (research/detonation-chamber/PHASE2.md, step 4).
+# Same atomics and test numbers as art-tests.txt (pinned a0e3f9bc69fe); written BEFORE the first chamber run.
+#   TECHNIQUE  TEST#  WANT  [note]
+# WANT: chamber rule(s), any of which counts as caught; "-" = verdict must be "Nothing seen"; "?" = not scored.
+# The chamber sees every file a script opens, so the keychain and browser tests should be caught here.
+
+T1056.002 3 password-prompt                      osascript dialog "with hidden answer" (the stand-in types the canary)
+T1059.002 1 base64-to-shell                      osascript runs python exec(base64.b64decode(...))
+T1059.004 2 network-attempt,download-to-shell    curl ... | bash
+T1140     10 base64-to-shell                     python decodes and runs a command
+T1027     1 exec-from-hidden-or-temp             base64 -d into /tmp/art.sh, then runs it
+T1140     3 -                                    python decodes base64 and prints it
+T1140     5 -                                    base64 -d to the screen and to a file
+T1555.001 1 reads-keychain                       security dump-keychain (the stand-in reads the bait keychain)
+T1555.001 4 reads-keychain                       cat login.keychain-db
+T1555.003 2 reads-browser-data                   grep in Safari Cookies.binarycookies
+T1555.003 14 reads-browser-data                  cp Chrome Login Data to /tmp
+T1555.003 18 reads-browser-data                  sqlite3 query of Chrome Login Data
+T1497.001 4 vm-check                             ioreg grep for VM names (the stand-in answers like a Mac)
+T1497.001 6 vm-check                             sysctl -n hw.model | grep -v Mac
+T1553.001 1 quarantine-strip                     xattr -d com.apple.quarantine
+T1543.001 1 new-launch-item                      user LaunchAgent
+T1543.004 1 new-launch-item                      /Library/LaunchDaemons
+T1546.004 1 ?                                    command added to ~/.bash_profile
+T1053.003 1 ?                                    crontab (no crontab in the chamber)
+T1560.001 13 ?                                   ditto zip of a sensitive folder
+T1518.001 3 -                                    ps aux | egrep for security tools
+T1059.004 1 -                                    writes and runs a small shell script

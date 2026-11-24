@@ -69,10 +69,20 @@ struct Chamber: ParsableCommand {
         @Option(help: "Seconds the script may run (5-300).") var seconds: Int = 60
         @Flag(name: .shortAndLong, help: "Quarantine without asking when the verdict is DON'T OPEN THIS.") var yes = false
         @Flag(help: "Never quarantine, just report.") var noQuarantine = false
+        @Flag(
+            help:
+                "Fetch what the script downloads (read only, on this Mac, like guard inspect) and run it again with that inside. The site sees your IP."
+        )
+        var follow = false
 
         func run() throws {
             setvbuf(stdout, nil, _IOLBF, 0)
             guard (5...300).contains(seconds) else { throw UserError("--seconds must be between 5 and 300.") }
+            if follow { throw UserError(ChamberPhase2Error.notBuiltYet("--follow").description) }
+            if (file as NSString).pathExtension.lowercased() == "pkg" {
+                throw UserError(
+                    ChamberPhase2Error.notBuiltYet("Running a package's install scripts").description + " Meanwhile: macx check \(file)")
+            }
             let manifest = try ChamberManifest.bundled()
             let store = ChamberStore()
             guard store.isInstalled(for: manifest) else { throw UserError("The chamber isn't set up yet. Run: macx chamber setup") }

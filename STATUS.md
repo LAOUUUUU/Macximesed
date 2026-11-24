@@ -34,6 +34,14 @@ Run a suspicious file in a throwaway macOS VM with no network, judge it on the r
 - [x] Intel Macs, data side: x86_64 manifest pinned (52 MB), kernel check `ChamberKernel` (bzImage on Intel, EFI-zboot unwrapped on Apple silicon). Booting on a real Intel Mac is untested; CI can't boot VMs. Setup picks the manifest by processor, checks every kernel with `ChamberKernel.prepare` on both chips, and the run image traces `StraceLog.traceSyscalls`, so Intel's `open` and `creat` are seen (0.3.0).
 - [x] `macx check` and `macx guard inspect` suggest the chamber for scripts they rate *Be careful* or *partly unknown*. `guard inspect` hands it the copy it inspected, saved in a private folder (2026-11-24).
 
+## Detonation chamber phase 2 (Lao picked all four 2026-11-24; [brief](research/detonation-chamber/PHASE2.md))
+Skeleton on dev: `ChamberNet.swift` (request log, `uploads-stolen-data`, `waits-before-acting`, `--follow` limits), `ChamberPackage.swift` (finds pre/postinstall scripts), `chamber run --follow` and `.pkg` say "not built yet", `scripts/eval/chamber-art.sh` writes the 22 test scripts.
+- [ ] 1. Python and Perl scripts allowed; `sleep` stand-in that records and returns.
+- [ ] 2. Fake-internet recorder in the `curl`/`wget`/`nscurl` stand-ins (agent prints `/tmp/macx-requests`), then `--follow` rounds.
+- [ ] 3. `.pkg`: expand, run each script as Installer would.
+- [ ] 4. Chamber ART run on the Mac, score against `chamber-art-tests.txt`, fix misses.
+- [ ] 5. `LD_PRELOAD` sleep shim for Python/Perl (riskiest, last).
+
 ## Check on macOS 27.3 (expected early December 2026)
 Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.com/news?id=oqng0zjk), 2026-11-16): users are guided to grant only specific folders, there's a new grant prompt and a menu-bar list of apps with access, and grants made before the update stay in effect. Endpoint Security and eslogger aren't mentioned, and the new entitlements are only for backup and assistive-technology apps.
 - [ ] After updating: the background watch still says *watching* (the existing grant should carry over).
