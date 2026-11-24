@@ -98,6 +98,8 @@ struct Watch: ParsableCommand {
         }
 
         let screenUser = background ? WatchUser.resolve() : nil
+        let screen = ScreenNotifier(user: screenUser)
+        let notify: @Sendable (WatchAlert) -> Void = { screen.send($0) }
         if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
@@ -112,7 +114,7 @@ struct Watch: ParsableCommand {
                 pid: e.pid, processPath: e.path)
             log.append(a)
             if a.severity >= minimum { Self.printAlert(a) }
-            if let screenUser { AlertNotifier.notify(user: screenUser, title: "Macximesed: \(a.severity.label)", message: a.title) }
+            notify(a)
         }
 
         let handle = out.fileHandleForReading
@@ -136,9 +138,7 @@ struct Watch: ParsableCommand {
                     if a.severity >= .high, let pid = a.pid { net?.watch(pid: pid, reason: a.rule, path: a.processPath ?? "") }
                     guard a.severity >= minimum else { continue }
                     Self.printAlert(a)
-                    if let screenUser, a.severity >= .high {
-                        AlertNotifier.notify(user: screenUser, title: "Macximesed: \(a.severity.label)", message: a.title)
-                    }
+                    if a.severity >= .high { notify(a) }
                     // Critical: stop it first (if asked), then keep the evidence while the process is still there.
                     if a.severity == .critical {
                         var frozen: [Int] = []
@@ -169,6 +169,9 @@ struct Watch: ParsableCommand {
                     Responsibility.isOwnResponsibleProcess
                     ? (UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe))?.path ?? exe) : "your terminal app"
                 hint += " (macx privacy --open), then try again."
+                hint +=
+                    "\nIf it's already on: macOS keeps the signature the app had when it was first added. Remove it (−) and add it again (+),"
+                    + " or run: sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx, then add it again."
             }
             if background {
                 // Exit cleanly so launchd doesn't restart it every 30 s; the status file says why.
@@ -222,6 +225,22 @@ struct Watch: ParsableCommand {
             return (URL(fileURLWithPath: String(cString: dir)), pw.pointee.pw_uid, pw.pointee.pw_gid)
         }
         return (FileManager.default.homeDirectoryForCurrentUser, getuid(), getgid())
+    }
+}
+
+/// Notifications for the background watch, grouped by NotificationThrottle. Called from the eslogger loop
+/// and the network queue, so it locks.
+final class ScreenNotifier: @unchecked Sendable {
+    let user: WatchUser?
+    let lock = NSLock()
+    var throttle = NotificationThrottle()
+
+    init(user: WatchUser?) { self.user = user }
+
+    func send(_ a: WatchAlert) {
+        guard let user else { return }
+        let message = lock.withLock { throttle.offer(a.title) }
+        if let message { AlertNotifier.notify(user: user, title: "Macximesed: \(a.severity.label)", message: message) }
     }
 }
 

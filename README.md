@@ -35,13 +35,18 @@ Then click **+**, choose **Macximesed** from the Applications folder in your hom
 
 The installed macx counts as **its own app** for privacy permissions. Normally macOS credits a command-line tool's access to the terminal that started it. macx relaunches itself with `responsibility_spawnattrs_setdisclaim`, the call LLDB uses for the programs it debugs, so the permission belongs to macx, not to Terminal or your editor. Development builds in `.build/` don't do this. To force it either way, set `MACX_OWN_RESPONSIBILITY=0` or `=1`.
 
-**macOS 27 ignores Full Disk Access for the bare `macx` binary.** It shows in the list as on, but isn't honoured, which matches a report about macOS 26.1 and later. Until macx ships as an app bundle, give Full Disk Access to your terminal app instead, and run macx with `MACX_OWN_RESPONSIBILITY=0` so the terminal's access applies (for example `sudo MACX_OWN_RESPONSIBILITY=0 macx watch`).
+**Full Disk Access needs the app and a stable signature.** macOS 27 ignores Full Disk Access for a bare binary, so `scripts/install.sh` builds `~/Applications/Macximesed.app` and signs it with a stable identity: a free Apple Development certificate if you have one (Xcode → Settings → Accounts → Manage Certificates → **+**), otherwise a self-signed certificate called "Macximesed Local Signing" in your login keychain (no Apple ID needed). Without either it falls back to ad-hoc signing, and each rebuild looks like a new program to macOS.
 
-**Known limit (macOS 27.0.1):** Full Disk Access for macx itself didn't take in testing. That covered the bare binary, the app ad-hoc signed, and the app signed with a self-signed certificate, untrusted and then trusted. What works is giving Full Disk Access to Terminal.app and running `sudo MACX_OWN_RESPONSIBILITY=0 macx watch` there. Stable signing (below) is still used, so a future fix carries over to updates.
+**If Macximesed is listed and switched on but macx still says no:** macOS keeps the signature the app had when it was *first added* to the list, and switching it off and on doesn't update that. An entry added while the app was ad-hoc signed never matches the signed app. Remove it and add it again:
 
-**For Full Disk Access to work, macx needs a stable signature.** Either use a self-signed certificate called "Macximesed Local Signing" in your login keychain (no Apple ID needed; `codesign` uses it even though it's not trusted, and it gives a stable designated requirement), or a free Apple Development certificate. In Xcode, open Settings → Accounts, add your Apple ID, then Manage Certificates → **+** → Apple Development. `scripts/install.sh` finds it and signs the app with it, and the updater uses it too, so the permission sticks across updates. Without it, macx is ad-hoc signed and macOS 27 ignores its Full Disk Access.
+```bash
+sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx
+```
 
-The binary is ad-hoc signed, so each reinstall looks new to macOS. After updating, switch Full Disk Access off and on again.
+Then `macx privacy --open`, **+**, and choose Macximesed again. To see why access was refused, look for "Failed to match existing code requirement" in `/usr/bin/log show --last 5m --predicate 'process == "tccd"'`.
+
+### Background watch
+`sudo macx daemon install` runs the live watch from startup on, without a terminal. It's a launchd daemon that runs Macximesed.app's own `macx watch`, so Full Disk Access is checked against the app, not against Terminal or sudo. High and critical alerts show as notifications (at most one every 10 seconds; the rest are counted), and every alert goes to `~/Library/Logs/Macximesed/watch.jsonl`. `macx alerts [--follow]` shows them, and `macx daemon status` says whether it's running and, if not, why. Add `--suspend` to the install to freeze whatever is behind a critical alert. `sudo macx daemon restart` restarts it (after giving Full Disk Access, say), and `sudo macx daemon uninstall` removes it. Measured on an M3: about 1% CPU and 16 MB.
 
 ### Updates
 macx checks [the update channel](https://laouuuuu.github.io/Macximesed/) once a day and tells you when a new version is out. **Updating is up to you** (`macx update`), with one exception: if the signed channel says your version has a security problem (`minimumSafe`), macx updates itself before running your next command, and then carries on. If it can't (offline, say), it keeps working and keeps warning you. `macx update --notices off` turns off the "new version" message. The security check can't be turned off. `MACX_NO_UPDATE_CHECK=1` skips it entirely, for CI and tests.
@@ -53,7 +58,7 @@ How it stays safe:
 - **Downloads are checked.** A download must match the signed SHA-256, be a Mach-O called `macx`, and report the signed version. It must also be newer than what's installed.
 - **Swaps are safe.** The new binary is swapped in atomically, and the old one is kept as `macx.previous`.
 
-macx is still ad-hoc signed, so macOS sees each update as a new program. If you gave macx Full Disk Access, switch it off and on again after an update.
+Updates keep the app's signature (the updater re-signs with the same identity), so Full Disk Access carries over.
 
 ## Build from source
 ```bash
@@ -86,6 +91,8 @@ swift build -c release
 | `macx watch --replay FILE` | Runs the same rules over a saved eslogger JSON Lines file. | No |
 | `macx net PID [--interval MS] [--seconds N] [--every] [--loopback]` | Shows where a process, and anything it starts, connects to, as it happens: each new remote address once. Reads the process's sockets from the kernel every 20 ms. Connections open for under about 20 ms can be missed ([measured](research/evaluation/network-results.md)). Your own processes work without sudo. | For other users' processes |
 | `macx incident [list]` / `show ID` / `contain ID [-y]` | **Incident response.** Each case is a private folder with read-only copies and SHA-256 hashes of the files involved, the process tree (who started it, what it started), the alert timeline, and a summary with what to do next. `contain` moves the case's launch items, hidden folders and temp-folder programs into the undo folder (nothing is deleted), prints the `launchctl bootout` commands for anything still running, and gives the password- and key-rotation checklist. | Sometimes |
+| `sudo macx daemon install [--suspend]` / `status` / `restart` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `status` needs no sudo. See *Background watch*. | **Yes** (not `status`) |
+| `macx alerts [-n 20] [--min-severity low] [--follow]` | Shows saved alerts from the live and background watch. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
 | `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |
 | `macx undo [list]` | Lists undo batches. | No |

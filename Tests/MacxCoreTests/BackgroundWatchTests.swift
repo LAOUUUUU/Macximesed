@@ -82,3 +82,37 @@ struct BackgroundWatchTests {
         #expect(records[1].severity == .info)
     }
 }
+
+@Suite("Background watch: own daemon and notification grouping")
+struct OwnDaemonTests {
+    let exe = "/Users/v/Applications/Macximesed.app/Contents/MacOS/macx"
+
+    func daemon(program: String) -> PersistenceItem {
+        PersistenceItem(
+            kind: .launchDaemon, path: "/Library/LaunchDaemons/dev.macximesed.watch.plist", label: "dev.macximesed.watch",
+            program: program, arguments: ["watch", "--background"], runsAsRoot: true, runAtLoad: true, keepAlive: true,
+            signature: .adHoc, teamID: nil, contentHash: "x")
+    }
+
+    @Test func ownDaemonIsRecognisedOnlyWhenItRunsThisMacx() {
+        let home = URL(fileURLWithPath: "/Users/v")
+        let ours = PersistenceRules.evaluate([daemon(program: exe)], home: home, ownProgram: exe)
+        #expect(ours.map(\.rule) == ["macximesed-background-watch"])
+        #expect(ours.first?.severity == .info)
+        // Same label, different program: judged like anything else.
+        let fake = PersistenceRules.evaluate([daemon(program: "/Users/Shared/.x/macx")], home: home, ownProgram: exe)
+        #expect(fake.contains { $0.severity >= .high })
+        #expect(!fake.contains { $0.rule == "macximesed-background-watch" })
+    }
+
+    @Test func notificationsAreGroupedAndCounted() {
+        var t = NotificationThrottle(window: 10)
+        let t0 = Date(timeIntervalSince1970: 0)
+        #expect(t.offer("A", now: t0) == "A")
+        #expect(t.offer("B", now: t0.addingTimeInterval(1)) == nil)
+        #expect(t.offer("C", now: t0.addingTimeInterval(2)) == nil)
+        // After the window, the next one says how many were held back.
+        #expect(t.offer("D", now: t0.addingTimeInterval(11)) == "D (and 2 more: macx alerts)")
+        #expect(t.offer("E", now: t0.addingTimeInterval(30)) == "E")
+    }
+}

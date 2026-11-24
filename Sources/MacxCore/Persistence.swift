@@ -440,12 +440,18 @@ public enum PersistenceRules {
         "sh", "bash", "zsh", "dash", "ksh", "tcsh", "csh", "fish", "python", "python3", "perl", "ruby", "osascript", "node",
     ]
 
-    public static func evaluate(_ items: [PersistenceItem], home: URL) -> [Finding] {
+    /// `ownProgram`: the running macx. Macximesed's own background watch is listed as such only when its
+    /// plist runs exactly that program; anything else under the same label is judged like any other item.
+    public static func evaluate(_ items: [PersistenceItem], home: URL, ownProgram: String? = nil) -> [Finding] {
         var out: [Finding] = []
         let homePath = home.standardizedFileURL.path
         for item in items {
             func add(_ rule: String, _ severity: Severity, _ title: String) {
                 out.append(Finding(rule: rule, severity: severity, title: title, item: item))
+            }
+            if item.kind == .launchDaemon, item.label == DaemonPlan.label, let own = ownProgram, item.program == own {
+                add("macximesed-background-watch", .info, "Macximesed's own background watch (macx daemon)")
+                continue
             }
             switch item.kind {
             case .hiddenFolder:

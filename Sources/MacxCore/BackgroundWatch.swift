@@ -158,3 +158,23 @@ public struct AlertRecord: Sendable, Equatable {
         }
     }
 }
+
+/// At most one notification per window; the next one after it says how many were held back (they're all in
+/// the alert log). One pasted command can raise three alerts in the same second.
+public struct NotificationThrottle: Sendable {
+    let window: TimeInterval
+    var last: Date?
+    var held = 0
+
+    public init(window: TimeInterval = 10) { self.window = window }
+
+    public mutating func offer(_ message: String, now: Date = Date()) -> String? {
+        if let last, now.timeIntervalSince(last) < window {
+            held += 1
+            return nil
+        }
+        last = now
+        defer { held = 0 }
+        return held > 0 ? "\(message) (and \(held) more: macx alerts)" : message
+    }
+}

@@ -8,24 +8,14 @@ Steps run from easiest to hardest, and each one needs only steps already built. 
 Lao, 2026-11-23: "we release when the anti virus is fully built".
 
 - [x] **A. Signed hash feed** (built 2026-11-23; goes live with the first release) on GitHub Pages: listed in the signed channel, cached locally, checked offline by `macx check` and `macx watch`.
-- [ ] **B. Runs in the background** without a terminal open: a launchd daemon running `macx watch`, with a way to see alerts. This depends on solving Full Disk Access below; a launchd daemon is one of the untried routes.
+- [x] **B. Runs in the background** (2026-11-23): `sudo macx daemon install` (launchd), notifications for high and critical alerts, `macx alerts`, `macx daemon status`. Tested on macOS 27.0.1: watching, a test alert logged, about 1% CPU.
 - [x] **C. Network watching** for flagged processes (2026-11-23): libproc polling every 20 ms, `macx net`; miss rate in [research/evaluation/network-results.md](research/evaluation/network-results.md).
 - [x] **D. Configuration profiles** in `macx persist` (2026-11-23): yours without root, computer-wide ones with `sudo`; rules by payload type. Not yet checked against a real installed profile (CI runners can't install one: the `profiles` tool no longer installs).
 - [x] **E. `sfltool` stall understood** (2026-11-23): without root it asks for an admin password (`system.privilege.admin`) and waits on the dialog; as root it answers at once. It now runs only as root. Reading the BTM file directly is no better: its folder needs Full Disk Access.
 - [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
 
-- [ ] **(Needed for B) Full Disk Access for macx itself is unsolved on macOS 27.0.1.** Tried 2026-11-23, all refused by eslogger ("responsible process needs TCC Full Disk Access") even with the switch on in Settings:
-  1. the bare ad-hoc binary;
-  2. an ad-hoc signed `Macximesed.app`;
-  3. the app signed with a self-signed "Macximesed Local Signing" certificate (untrusted);
-  4. the same with the certificate trusted for code signing.
-
-  **Works:** Full Disk Access on Terminal.app, then `sudo MACX_OWN_RESPONSIBILITY=0 macx watch` from Terminal.
-
-  **Not tried yet:**
-  - an Apple Development certificate (needs an Apple ID in Xcode);
-  - running the watcher as a launchd daemon registered with SMAppService from the app;
-  - checking whether `sudo` itself breaks the responsibility hand-off. Test `macx watch` started some other way than sudo, for example from launchd.
+- [x] **Full Disk Access for macx itself: solved** (2026-11-23). The Full Disk Access entry kept the code requirement from when it was first added (ad-hoc), and switching it off and on never refreshed it. tccd logged `Failed to match existing code requirement`. Fix: `sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx`, then add the signed app again.
+  - [ ] Confirm it survives a rebuild: reinstall, then `sudo macx daemon restart` still reports *watching*.
 
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
@@ -54,6 +44,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Open questions
+- `macx persist` labels a program signed with the local self-signed certificate as "ad-hoc (no identity)". It should say self-signed.
 - Should purging old undo batches happen automatically? It's manual for now (`macx undo purge`), because it's the only real delete.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
 - `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.

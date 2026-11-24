@@ -32,7 +32,8 @@ struct Privacy: ParsableCommand {
             if Responsibility.isOwnResponsibleProcess {
                 print("  1. Run `macx privacy --open`.")
                 print("  2. Click +, press Cmd-Shift-G, paste \(grantee), then Open, and switch it on.")
-                print("  Reinstalling macx makes a new binary, so switch it off and on again after an update.")
+                print("  If Macximesed is already listed and on, remove it (−) and add it again (+): macOS keeps the signature")
+                print("  it had when it was first added (sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx does the same).")
             } else {
                 print("  Install one stable copy with scripts/install.sh, then run `macx privacy --open` from that copy.")
                 print("  (This copy runs under your terminal, so macOS would credit the terminal instead.)")

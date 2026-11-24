@@ -52,7 +52,9 @@ struct Persist: ParsableCommand {
                 print("\(title):")
                 list.forEach { print("  \(describe($0))") }
             }
-            let fresh = PersistenceRules.evaluate(d.added + d.changed, home: home)
+            let fresh = PersistenceRules.evaluate(
+                d.added + d.changed, home: home,
+                ownProgram: Responsibility.executablePath.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path })
             if !fresh.isEmpty {
                 print("\nFindings on added or changed items:")
                 printFindings(fresh)
@@ -60,7 +62,9 @@ struct Persist: ParsableCommand {
             return
         }
 
-        let findings = PersistenceRules.evaluate(items, home: home).filter { $0.severity >= minimum }
+        let findings = PersistenceRules.evaluate(
+            items, home: home, ownProgram: Responsibility.executablePath.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
+        ).filter { $0.severity >= minimum }
         if all {
             for kind in PersistenceKind.allCases {
                 let ofKind = items.filter { $0.kind == kind }
