@@ -49,13 +49,19 @@ public protocol SystemControl: Sendable {
 public struct RealSystem: SystemControl {
     public init() {}
 
+    /// `defaults` calls the global domain NSGlobalDomain; CFPreferences wants kCFPreferencesAnyApplication.
+    static func cfDomain(_ domain: String) -> CFString {
+        domain == "NSGlobalDomain" || domain == "-g" ? kCFPreferencesAnyApplication : domain as CFString
+    }
+
     public func read(domain: String, key: String) -> PlistValue? {
-        PlistValue(CFPreferencesCopyAppValue(key as CFString, domain as CFString))
+        PlistValue(CFPreferencesCopyAppValue(key as CFString, Self.cfDomain(domain)))
     }
 
     public func write(domain: String, key: String, value: PlistValue?) throws {
-        CFPreferencesSetAppValue(key as CFString, value?.object as CFPropertyList?, domain as CFString)
-        guard CFPreferencesAppSynchronize(domain as CFString) else { throw CocoaError(.fileWriteNoPermission) }
+        let d = Self.cfDomain(domain)
+        CFPreferencesSetAppValue(key as CFString, value?.object as CFPropertyList?, d)
+        guard CFPreferencesAppSynchronize(d) else { throw CocoaError(.fileWriteNoPermission) }
     }
 
     /// The same call taskpolicy -b / -B makes: background QoS (E cores, throttled I/O). Own processes only.
