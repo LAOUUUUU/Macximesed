@@ -80,8 +80,15 @@ public struct ChamberJudge: Sendable {
         self.quitWindow = quitWindow
     }
 
+    /// From the guest's eslogger log (JSON lines).
     public func judge(log: Data, samplePID: Int?) -> ChamberReport {
         let parsed = ChamberLog.parse(log)
+        return judge(events: parsed.events, samplePID: samplePID, skipped: parsed.skipped, truncated: parsed.truncated)
+    }
+
+    /// From events already parsed (the light chamber's strace log goes through `StraceLog`).
+    public func judge(events: [ESEvent], samplePID: Int?, skipped: Int = 0, truncated: Bool = false) -> ChamberReport {
+        let parsed = ChamberLog.Parsed(events: events, skipped: skipped, truncated: truncated)
         let rules = WatchRules(home: guestHome, signatures: GuestSignatures(), feed: nil)
         var tree: Set<Int> = samplePID.map { [$0] } ?? []
         func inTree(_ pid: Int?) -> Bool { samplePID == nil || pid.map(tree.contains) == true }
@@ -145,9 +152,17 @@ public struct ChamberJudge: Sendable {
 
     /// What a stealer reads: keychains, browser password and cookie stores, wallets.
     static func fileRules(_ e: ESEvent, home: String) -> [WatchAlert] {
-        guard e.kind == "open", let path = e.filePath else { return [] }
         let pid = e.process?.pid
         let who = e.process?.path
+        if e.kind == "connect", let endpoint = e.filePath {
+            // The chamber has no network, so this always fails; the attempt shows where it wanted to send things.
+            return [
+                WatchAlert(
+                    rule: "network-attempt", severity: .medium, title: "Tried to connect to the internet", detail: endpoint, pid: pid,
+                    processPath: who)
+            ]
+        }
+        guard e.kind == "open", let path = e.filePath else { return [] }
         func alert(_ rule: String, _ sev: Severity, _ title: String) -> [WatchAlert] {
             [WatchAlert(rule: rule, severity: sev, title: title, detail: path, pid: pid, processPath: who)]
         }
