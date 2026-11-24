@@ -5,6 +5,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Added
+- **Downloads watch:** the background watch checks every finished download in `~/Downloads` (browser temp names are understood, subfolders skipped) with the full file check, offline, on its own queue. *DON'T OPEN THIS* is quarantined automatically into an incident case and the undo store, owned by the user, with a notification. `macx undo restore` adds a restored download to an allow list, so it isn't quarantined again. `--no-downloads` turns it off.
 - **First-run setup** in the Mac app (research and design in `research/app-onboarding/RESEARCH.md`, approved 2026-11-24):
   - **Screens:** welcome; then Full Disk Access, the background watch, notifications and extras; then a Ready summary.
   - **Live checks:** every step checks every second, and Continue appears once the check passes. If eslogger is refused, the watch step sends you back to Full Disk Access.

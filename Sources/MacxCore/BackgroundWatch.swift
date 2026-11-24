@@ -48,14 +48,18 @@ public struct DaemonPlan {
     public let suspend: Bool
     public var plistPath: URL { Self.plistPath }
 
-    public init(executable: URL, user: WatchUser, suspend: Bool) throws {
+    /// Check finished downloads (on unless turned off).
+    public let downloads: Bool
+
+    public init(executable: URL, user: WatchUser, suspend: Bool, downloads: Bool = true) throws {
         guard UpdateInstaller.enclosingApp(of: executable) != nil else { throw Problem.notInApp }
         self.executable = executable
         self.user = user
         self.suspend = suspend
+        self.downloads = downloads
     }
 
-    public var arguments: [String] { ["watch", "--background"] + (suspend ? ["--suspend"] : []) }
+    public var arguments: [String] { ["watch", "--background"] + (suspend ? ["--suspend"] : []) + (downloads ? [] : ["--no-downloads"]) }
 
     public var plist: [String: Any] {
         [

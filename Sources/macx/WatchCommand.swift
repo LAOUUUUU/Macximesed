@@ -32,6 +32,9 @@ struct Watch: ParsableCommand {
 
     @Flag(help: .hidden) var background = false
 
+    @Flag(help: "Don't check finished downloads in ~/Downloads (they're checked, and dangerous ones quarantined, by default).")
+    var noDownloads = false
+
     @Option(help: "Milliseconds between looks at the network connections of flagged processes (0 = off).")
     var netInterval: Int = 20
 
@@ -118,6 +121,9 @@ struct Watch: ParsableCommand {
             Self.keepTimer = timer
         }
         let notify: @Sendable (WatchAlert) -> Void = { screen.send($0) }
+        let downloadsDir = user.home.appendingPathComponent("Downloads").path
+        let downloads = DownloadChecker(
+            home: user.home, owner: (user.uid, user.gid), feed: feed, minimum: minimum, log: log, notify: notify)
         if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
         if suspend { print("Critical alerts freeze the process behind them.") }
@@ -150,6 +156,9 @@ struct Watch: ParsableCommand {
                 seen += 1
                 if background, seen == 1 {
                     try? DaemonStatus(state: .watching, message: "Watching; alerts go to \(log.file.path).").write()
+                }
+                if !noDownloads, let path = DownloadWatch.finishedDownload(e, downloads: downloadsDir) {
+                    downloads.check(URL(fileURLWithPath: path))
                 }
                 for a in rules.evaluate(e) {
                     log.append(a)
@@ -275,6 +284,52 @@ final class ScreenNotifier: @unchecked Sendable {
         guard !AppPresence.isAppRunning(userUID: user.uid) else { return }
         let message = lock.withLock { throttle.offer(a.title) }
         if let message { AlertNotifier.notify(user: user, title: "Macximesed: \(a.severity.label)", message: message) }
+    }
+}
+
+/// Checks finished downloads one at a time on its own queue, so the eslogger loop never waits on a check.
+final class DownloadChecker: @unchecked Sendable {
+    let queue = DispatchQueue(label: "macx.downloads", qos: .utility)
+    let home: URL
+    let owner: (uid: uid_t, gid: gid_t)
+    let feed: HashFeed?
+    let minimum: Severity
+    let log: AlertLog
+    let notify: @Sendable (WatchAlert) -> Void
+
+    init(
+        home: URL, owner: (uid: uid_t, gid: gid_t), feed: HashFeed?, minimum: Severity, log: AlertLog,
+        notify: @escaping @Sendable (WatchAlert) -> Void
+    ) {
+        self.home = home
+        self.owner = owner
+        self.feed = feed
+        self.minimum = minimum
+        self.log = log
+        self.notify = notify
+    }
+
+    func check(_ file: URL) {
+        queue.async { [self] in
+            DownloadWatch.waitUntilSettled(file)
+            guard FileManager.default.fileExists(atPath: file.path) else { return }
+            let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: feed)
+            guard let report = try? checker.check(file) else { return }
+            if let sha = report.sha256, DownloadWatch.isAllowed(sha, home: home) { return }
+            var alert = DownloadWatch.alert(for: report)
+            if alert.rule == "download-dangerous" {
+                // Lao's choice: quarantine automatically, so it can't be opened by accident. Restorable.
+                if let q = try? DownloadWatch.quarantine(file, report: report, home: home, owner: owner) {
+                    alert.title = "Dangerous download quarantined: \(file.lastPathComponent)"
+                    alert.detail =
+                        (alert.detail ?? "") + "\n  Case: macx incident show \(q.caseID)\n  Put it back: macx undo restore \(q.batchID)"
+                }
+            }
+            log.append(alert)
+            guard alert.severity >= minimum else { return }
+            Watch.printAlert(alert)
+            if alert.severity >= .high { notify(alert) }
+        }
     }
 }
 

@@ -57,6 +57,7 @@ struct Daemon: ParsableCommand {
     struct Install: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Install and start the background watch.")
         @Flag(help: "Freeze (SIGSTOP) the process behind each critical alert.") var suspend = false
+        @Flag(help: "Don't check finished downloads in ~/Downloads.") var noDownloads = false
 
         func run() throws {
             try requireRoot("install")
@@ -68,7 +69,7 @@ struct Daemon: ParsableCommand {
             }
             let plan: DaemonPlan
             do {
-                plan = try DaemonPlan(executable: exe, user: user, suspend: suspend)
+                plan = try DaemonPlan(executable: exe, user: user, suspend: suspend, downloads: !noDownloads)
             } catch {
                 throw UserError(
                     "macx must run from Macximesed.app (Full Disk Access belongs to the app). Install it with scripts/install.sh, then run:\n  sudo ~/.local/bin/macx daemon install"

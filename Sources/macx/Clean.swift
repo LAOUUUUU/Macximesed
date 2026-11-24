@@ -115,8 +115,15 @@ struct Undo: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Put a batch back where it came from.")
         @Argument(help: "Batch ID from `macx undo list`.") var id: String
         func run() throws {
-            let r = try UndoStore().restore(id: id)
+            let store = UndoStore()
+            let batch = try store.batches().first { $0.id == id }
+            let r = try store.restore(id: id)
             print("Restored \(r.restored.count) paths.")
+            // A quarantined download you put back is one you decided is fine: the Downloads watch leaves it alone.
+            if let batch, batch.reason.contains("download-dangerous") {
+                DownloadWatch.allowRestored(batch, home: FileManager.default.homeDirectoryForCurrentUser)
+                print("The Downloads watch won't quarantine that file again.")
+            }
             if !r.skipped.isEmpty {
                 print("Kept \(r.skipped.count) in the undo folder because something new is already at the original place:")
                 r.skipped.forEach { print("  \($0)") }
