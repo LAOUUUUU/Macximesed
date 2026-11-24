@@ -7,3 +7,5 @@ DerivedData/
 .claude/settings.local.json
 .env
 research/evaluation/runtime-watch-output.txt
+announcements/*.message-id
+dist/

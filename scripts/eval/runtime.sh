@@ -110,8 +110,11 @@ echo "Running simulations…"
 # 1. Pasted base64-to-shell, then a busy counter: how far does it get before it's frozen?
 CNT="$WORK/count1"; touch "$CNT"; chmod 666 "$CNT"
 start=$(now)
-as_user /bin/zsh -c "echo ZWNobyBzaW0= | base64 -D | zsh; i=0; while true; do i=\$((i+1)); echo \$i >> $CNT; done # macx-sim-1" &
+# Its own process group (set -m): when the watch freezes it, sudo suspends its whole job, which must not be this script.
+set -m
+as_user /bin/zsh -c "echo ZWNobyBzaW0= | base64 -D | zsh; i=0; while true; do i=\$((i+1)); echo \$i >> $CNT; done # macx-sim-1" < /dev/null &
 SIM=$!
+set +m
 sleep 3
 read -r got ms fms <<< "$(alert_ms base64-to-shell "$start")"
 # Appended, not rewritten: a rewrite empties the file for an instant, and the freeze can land right there.
@@ -122,8 +125,10 @@ pkill -KILL -f "macx-sim-1"; kill -KILL $SIM 2>/dev/null
 
 # 2. Same, but it starts a background child first: is the child frozen too?
 start=$(now)
-as_user /bin/zsh -c "/bin/sleep 120 & echo ZWNobyBzaW0= | base64 -D | zsh; while true; do :; done # macx-sim-2" &
+set -m
+as_user /bin/zsh -c "/bin/sleep 120 & echo ZWNobyBzaW0= | base64 -D | zsh; while true; do :; done # macx-sim-2" < /dev/null &
 SIM=$!
+set +m
 sleep 3
 read -r got ms fms <<< "$(alert_ms base64-to-shell "$start")"
 child=$(pgrep -f "sleep 120" | head -1)

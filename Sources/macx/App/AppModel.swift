@@ -130,20 +130,25 @@ final class AppModel {
     // MARK: Notifications (shown by the app while it's open; the daemon uses osascript only when it isn't)
 
     func readNotificationStatus() {
-        Task {
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            notifications = Self.map(settings.authorizationStatus)
-        }
+        Task { notifications = Self.map(await Self.authorizationStatus()) }
     }
 
     func requestNotifications() {
         Task {
             let center = UNUserNotificationCenter.current()
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
-            notifications = Self.map(await center.notificationSettings().authorizationStatus)
+            notifications = Self.map(await Self.authorizationStatus())
             if notifications == .denied {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
             }
+        }
+    }
+
+    /// Only the status crosses back: UNNotificationSettings isn't Sendable in the macOS 15 SDK, and the async
+    /// `notificationSettings()` would hand it across actors (a build error there, fine on 26).
+    static func authorizationStatus() async -> UNAuthorizationStatus {
+        await withCheckedContinuation { c in
+            UNUserNotificationCenter.current().getNotificationSettings { c.resume(returning: $0.authorizationStatus) }
         }
     }
 
