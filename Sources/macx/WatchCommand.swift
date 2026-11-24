@@ -173,6 +173,7 @@ struct Watch: ParsableCommand {
                 hint +=
                     "\nIf it's already on: macOS keeps the signature the app had when it was first added. Remove it (−) and add it again (+),"
                     + " or run: sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx, then add it again."
+                    + "\nOn macOS 27.3 and later, give it full access, not specific folders: eslogger needs full Full Disk Access."
             }
             if background {
                 // Exit cleanly so launchd doesn't restart it every 30 s; the status file says why.

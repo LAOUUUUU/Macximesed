@@ -32,6 +32,7 @@ struct Privacy: ParsableCommand {
             if Responsibility.isOwnResponsibleProcess {
                 print("  1. Run `macx privacy --open`.")
                 print("  2. Click +, press Cmd-Shift-G, paste \(grantee), then Open, and switch it on.")
+                print("     On macOS 27.3 and later, choose full access, not specific folders: macx watch needs it.")
                 print("  If Macximesed is already listed and on, remove it (−) and add it again (+): macOS keeps the signature")
                 print("  it had when it was first added (sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx does the same).")
             } else {

@@ -31,7 +31,7 @@ To include those folders, give the installed binary Full Disk Access once:
 macx privacy --open
 ```
 
-Then click **+**, choose **Macximesed** from the Applications folder in your home folder, and switch it on. On macOS 27 Full Disk Access only counts for the app, not the bare binary.
+Then click **+**, choose **Macximesed** from the Applications folder in your home folder, and switch it on. On macOS 27 Full Disk Access only counts for the app, not the bare binary. **On macOS 27.3 and later**, if macOS offers to give it only specific folders, choose full access instead: the live watch runs Apple's `eslogger`, which needs full Full Disk Access (a folders-only grant is untested and very likely refused). Grants made before updating to 27.3 stay in effect.
 
 The installed macx counts as **its own app** for privacy permissions. Normally macOS credits a command-line tool's access to the terminal that started it. macx relaunches itself with `responsibility_spawnattrs_setdisclaim`, the call LLDB uses for the programs it debugs, so the permission belongs to macx, not to Terminal or your editor. Development builds in `.build/` don't do this. To force it either way, set `MACX_OWN_RESPONSIBILITY=0` or `=1`.
 

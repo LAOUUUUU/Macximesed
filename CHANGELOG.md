@@ -4,6 +4,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Changed
+- README, `macx privacy` and the watch's refusal message say to give full access, not specific folders, on macOS 27.3 and later (eslogger needs full Full Disk Access).
+
 ## [0.2.0] - 2026-11-24
 
 The first release: the antivirus side is complete (the checklist in STATUS.md), plus Safe cleanup, app removal and the signed auto-update channel.

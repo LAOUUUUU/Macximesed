@@ -18,6 +18,12 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **Full Disk Access for macx itself: solved** (2026-11-23). The Full Disk Access entry kept the code requirement from when it was first added (ad-hoc), and switching it off and on never refreshed it. tccd logged `Failed to match existing code requirement`. Fix: `sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx`, then add the signed app again.
   - [x] Survives rebuilds: after three reinstalls, `sudo macx daemon restart` still reports *watching* (2026-11-23 19:31).
 
+## Check on macOS 27.3 (expected early December 2026)
+Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.com/news?id=oqng0zjk), 2026-11-16): users are guided to grant only specific folders, there's a new grant prompt and a menu-bar list of apps with access, and grants made before the update stay in effect. Endpoint Security and eslogger aren't mentioned, and the new entitlements are only for backup and assistive-technology apps.
+- [ ] After updating: the background watch still says *watching* (the existing grant should carry over).
+- [ ] On a fresh grant: does a folders-only grant let eslogger start? If not, can `macx privacy` tell full from scoped access without reading a guarded folder (which would set off a popup)?
+- [ ] Re-check the steps in README and `macx privacy` against the new prompt.
+
 ## Next
 - [ ] **7. Boost + throttle view + Medium tier**: background QoS, App Nap, visual effects, Spotlight pause; every change restorable.
 - [ ] **8. Games**: per-game profiles (Boost, Rosetta check, Metal HUD), heat graph, best way to run (native, CrossOver, cloud).
