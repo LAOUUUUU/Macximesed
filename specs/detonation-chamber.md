@@ -25,17 +25,22 @@ Approved by Lao on 2026-11-24 ("Yes, go ahead") after [research/detonation-chamb
      Never "safe": the wording says that a VM check, a long sleep or waiting for a click can hide behaviour.
    - `ChamberSample`: pins the file by SHA-256 when the run is requested, and refuses to start if the file changed.
    - `ChamberQuarantine`: on *DON'T OPEN THIS* (or `--quarantine` on *Be careful*), records an incident case with the original (read-only copy, hashes, the chamber's alert timeline), then moves the original into the undo store. Restorable with `macx undo restore`. Nothing is deleted.
-2. **VM side (after the host side, needs disk space)**
-   - `macx chamber setup [--at DIR]`: download the image (asks first, shows the size), install the guest, one manual Setup Assistant pass in a window, install the guest agent, grant it Full Disk Access inside the guest, save a clean snapshot.
+2. **VM side: the light chamber** (changed 2026-11-24: a tiny Linux VM, about 100 MB, not a 25.6 GB macOS guest)
+   - `macx chamber setup`:
+     - downloads about 70 MB from Alpine 3.24.4 (asks first, shows files and sizes);
+     - checks each file against the SHA-256 pinned in `data/chamber/manifest.json`;
+     - unpacks the kernel (raw arm64 `Image`) and keeps the base system and packages in `~/Library/Application Support/Macximesed/Chamber`.
    - `macx chamber run FILE [--seconds 60]`:
-     - restore the clean snapshot, with no network device;
-     - put the pinned file into a fresh, single-use shared folder;
-     - the guest agent runs it with eslogger recording `exec create rename deleteextattr btm_launch_item_add open exit`;
-     - the agent writes the log back, and the VM stops and is discarded.
+     - builds a fresh initramfs (base system, bash/zsh/python3/perl/strace, Mac stand-in stubs, the agent, a fake `/Users/chamber` with canary keychain, browser and wallet files, the pinned sample);
+     - boots it with no disk, no network and no shared folder;
+     - the agent runs the sample under `strace -f`, and stubs and strace write to the console port;
+     - after the time limit, or when the sample exits, the VM stops. Nothing survives.
+   - The host turns strace lines and stub records into events (exec, open, create, rename, connect) and passes them to `ChamberJudge`.
+   - Scripts only: a Mach-O binary or an app gets "can't run in the light chamber", with the static check's result instead.
 3. **Entry points:** `macx chamber run`, and a hint from `macx check` and `macx guard inspect` when their verdict is *partly unknown*.
 
 ## Not in Phase 1
-Network (none at all), answering password prompts (canary credentials), hiding VM tells. Phases 2 and 3 in the research brief.
+Network (none at all), answering password prompts (canary credentials), hiding VM tells, and the full macOS chamber for apps and binaries. Phases 2 and 3 in the research brief.
 
 ## Tests first (host side)
 - An empty log gives *Nothing seen*, and the summary says nothing seen is not the same as safe.

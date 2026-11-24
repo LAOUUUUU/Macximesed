@@ -1,6 +1,6 @@
 # Research: Detonation chamber (run a suspicious file somewhere safe, judge it, quarantine it)
 **Date:** 2026-11-24
-**Status:** Complete. Waiting for Lao's approval.
+**Status:** Complete. Approved 2026-11-24, then changed to the light chamber (below) the same day.
 **Researcher:** Claude Code
 
 ## Question
@@ -100,3 +100,36 @@ How it would work:
 - [ ] Spike: does a self-signed macx with `com.apple.security.virtualization` boot a macOS guest? Measure restore image size and setup time.
 - [ ] Write `specs/detonation-chamber.md`, then TDD Phase 1, starting with the host-side verdict and quarantine on fixture logs (no VM needed for those tests).
 - [ ] Ship the static and live `vm-check` rule on its own first.
+
+## Update 2026-11-24: the light chamber (what we're building)
+Lao: "25.6 make it like 4 gigs bro like thats to huge". A macOS guest can't be that small: the restore image alone is 25.6 GB (spike), and Lao's Mac has 31 GB free. Lao chose the **light chamber**: a tiny Linux VM under the same Virtualization framework (same isolation boundary), well under 4 GB.
+
+**What it can run:** scripts (shell, zsh, python, perl, osascript-style pastes), which is AMOS's entry route. Mac-only commands are replaced by recording stand-ins (stubs): `osascript`, `security`, `dscl`, `system_profiler`, `sw_vers`, `launchctl`, `xattr`, `codesign`, `spctl`, `open`, `killall`, `defaults`, `ditto`, `hdiutil`, `sysctl`, `ioreg`, `curl`, `wget`. **What it can't run:** Mac apps and Mach-O binaries. Those keep the existing static checks, and the full macOS chamber stays possible later (external disk).
+
+**Facts checked (2026-11-24):**
+- **Alpine:** latest stable 3.24.4. `alpine-minirootfs-3.24.4-aarch64.tar.gz` is 4.0 MB (official `latest-releases.yaml`).
+- **Packages** (v3.24 APKINDEX, download / installed): linux-virt 6.18.65 41.8 / 73.4 MB, bash 0.5 / 3.6, zsh 1.6 / 5.9, strace 0.5 / 1.2, python3 8.4 / 26.4, perl 10.1 / 41.8.
+- **Total:** about 70 MB of downloads and about 100 MB on disk, since only the kernel and a few modules are kept.
+
+**Boot design:**
+- `VZLinuxBootLoader` with the kernel and an initramfs that macx builds per run (Alpine minirootfs, packages, stubs, agent, the sample). No disk, no network device, no shared folder. The log comes out over a virtio console port.
+- arm64 kernels have no compressed format of their own; a distro `vmlinuz` may be gzip or EFI-zboot wrapped and must be unwrapped to a raw `Image`. Use a 4K-page kernel: 64K pages fail under VZLinuxBootLoader (Apple forums).
+
+**Watching:**
+- Inside the guest, `strace -f` records execve, openat, renameat, unlinkat and connect for the sample's tree. Each stub also writes a JSON line.
+- The host turns both into the same events the chamber judge already understands (exec, open, create, rename), plus `connect` for network attempts.
+
+**A fake Mac inside:** `/Users/chamber` with canary files (a `login.keychain-db`, Chrome `Login Data`, an Exodus wallet), `/Library/LaunchDaemons`, `/Applications`. `uname`, `sw_vers` and `sysctl hw.model` answer like a real Mac (Mac15,3), so scripts take their Mac paths.
+
+**Supply chain:**
+- Every downloaded file is pinned by SHA-256 in `data/chamber/manifest.json` (Alpine release URLs) and checked before use.
+- An update means re-pinning in a reviewed commit.
+
+| Source | URL | Key takeaway |
+|---|---|---|
+| Alpine latest-releases.yaml | https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml | 3.24.4, minirootfs 4.0 MB with SHA-256 |
+| Alpine v3.24 APKINDEX | https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/APKINDEX.tar.gz | Package versions and sizes |
+| Kernel EFI stub doc | https://docs.kernel.org/admin-guide/efi-stub.html | arm64 `Image` is uncompressed |
+| unzboot | https://github.com/wavevector/unzboot | Distro kernels may be EFI-zboot wrapped |
+| Apple forums: 64K kernel | https://developer.apple.com/forums/thread/780165 | 64K-page kernels fail under VZLinuxBootLoader |
+| Lima PR 2562 | https://github.com/lima-vm/lima/pull/2562 | VZLinuxBootLoader gives the guest no EFI |
