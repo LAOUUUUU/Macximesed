@@ -68,6 +68,18 @@ struct ByteFormatTests {
         #expect(formatBytes(999_960) == "1.0 MB")  // not "1000.0 KB"
         #expect(formatBytes(999_940) == "999.9 KB")
     }
+
+    /// Memory in binary units (1 KB = 1024 bytes), as Activity Monitor, `top` and About This Mac's "16 GB" count RAM.
+    @Test func memoryIsInBinaryUnitsLikeActivityMonitor() {
+        #expect(formatMemory(17_179_869_184) == "16.0 GB")  // a 16 GB Mac
+        #expect(formatMemory(512) == "512 B")
+        #expect(formatMemory(1023) == "1023 B")
+        #expect(formatMemory(1024) == "1.0 KB")
+        #expect(formatMemory(1536) == "1.5 KB")
+        #expect(formatMemory(150 * 1024 * 1024) == "150.0 MB")
+        #expect(formatMemory(1_048_570) == "1.0 MB")  // 1023.99 KB rounds up into MB, not "1024.0 KB"
+        #expect(formatMemory(1_048_500) == "1023.9 KB")
+    }
 }
 
 @Suite("Scan report text")
@@ -88,6 +100,18 @@ struct ReportTests {
         #expect(text.contains("throttling"))
         #expect(report.warnings.contains { $0.contains("Gatekeeper") })
         #expect(report.warnings.contains { $0.contains("Disk") })
+    }
+
+    @Test func processMemoryIsBinaryAndDiskIsDecimal() {
+        let report = ScanReport(
+            protections: Protections(sip: .on, gatekeeper: .on, fileVault: .on, firewall: .on),
+            topProcesses: [ProcessSample(pid: 5, cpuPercent: 1, memoryBytes: 150 * 1024 * 1024, path: "/usr/bin/hog")],
+            disk: DiskUsage(totalBytes: 500_000_000_000, availableBytes: 100_000_000_000),
+            thermal: .nominal
+        )
+        let text = report.render()
+        #expect(text.contains("150.0 MB"))  // what Activity Monitor shows; decimal would read 157.3 MB
+        #expect(text.contains("100.0 GB free of 500.0 GB"))  // what Finder shows
     }
 
     @Test func healthyReportHasNoWarnings() {

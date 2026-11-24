@@ -15,7 +15,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - The folder of inspected copies (`~/Library/Application Support/Macximesed/Inspected`) was created with default permissions (0755). It's now private (0700), and one made by an older macx is tightened the next time `guard inspect` saves a copy. The copies themselves were already owner-only and not executable.
 - The Updates row showed the hash feed line ("1 known samples") instead of whether an update was available.
 - The Clean page and `macx clean` said "nothing is deleted", which stopped being true once *Empty undo folder* existed. They now say that cleaning moves things to the undo folder and that only *Empty undo folder*, `macx undo empty` and `macx undo purge` delete for good. After a clean, `macx clean` names `macx undo empty` as well as `purge`.
-- **Sizes agree between the CLI and the app.** The CLI divided by 1024 and the app by 1000, so the same 5 GiB undo folder was 5.0 GB in `macx undo` and 5.37 GB in the app. Both now use one formatter (`formatBytes`) in decimal units, 1 KB = 1000 bytes, as Finder and About This Mac count: it's 5.4 GB in both.
+- **Sizes agree between the CLI and the app.** The CLI divided by 1024 and the app by 1000, so the same 5 GiB undo folder was 5.0 GB in `macx undo` and 5.37 GB in the app. Both now use one formatter (`formatBytes`) in decimal units, 1 KB = 1000 bytes, as Finder and About This Mac count storage: it's 5.4 GB in both. Memory keeps binary units (1 KB = 1024 bytes), as Activity Monitor and `top` show it: the busiest processes in `macx scan` use `formatMemory`.
 
 ## [0.3.0] - 2026-11-24
 
