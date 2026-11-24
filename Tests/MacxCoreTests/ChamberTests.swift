@@ -96,7 +96,7 @@ struct ChamberJudgeTests {
 
     @Test func vmCheckThenQuit() {
         let check =
-            #"{"target":\#(proc("/usr/sbin/system_profiler", pid: 502, ppid: 500, platform: true)),"args":["sh","-c","system_profiler SPHardwareDataType | grep -i 'Apple Virtual Machine'"]}"#
+            #"{"target":\#(proc("/bin/sh", pid: 502, ppid: 500, platform: true)),"args":["sh","-c","system_profiler SPHardwareDataType | grep -i 'Apple Virtual Machine'"]}"#
         let r = report([
             chamberLine("exec", pid: sample, path: "/private/tmp/sample", body: check, time: "2026-11-24T10:00:01.000000000Z"),
             chamberLine("exit", pid: sample, path: "/private/tmp/sample", body: #"{"stat":0}"#, time: "2026-11-24T10:00:04.000000000Z"),
@@ -108,7 +108,7 @@ struct ChamberJudgeTests {
 
     @Test func vmCheckWithoutQuittingIsNotThenQuit() {
         let check =
-            #"{"target":\#(proc("/usr/sbin/system_profiler", pid: 502, ppid: 500, platform: true)),"args":["sh","-c","system_profiler SPHardwareDataType | grep -i VMware"]}"#
+            #"{"target":\#(proc("/bin/sh", pid: 502, ppid: 500, platform: true)),"args":["sh","-c","system_profiler SPHardwareDataType | grep -i VMware"]}"#
         let r = report([
             chamberLine("exec", pid: sample, path: "/private/tmp/sample", body: check, time: "2026-11-24T10:00:01.000000000Z"),
             chamberLine("exit", pid: sample, path: "/private/tmp/sample", body: #"{"stat":0}"#, time: "2026-11-24T10:00:30.000000000Z"),

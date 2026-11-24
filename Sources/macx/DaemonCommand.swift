@@ -198,6 +198,7 @@ struct Alerts: ParsableCommand {
                 let when = DateFormatter.localizedString(from: r.time, dateStyle: .short, timeStyle: .medium)
                 print("[\(when)] \(r.severity.label.padding(toLength: 8, withPad: " ", startingAt: 0)) \(r.title)  [\(r.rule)]")
                 if !r.process.isEmpty { print("           by \(r.process)") }
+                if r.isSystemProgram { print("           (\(WatchAlert.systemProgramNote))") }
                 for line in r.detail.split(separator: "\n").prefix(4) { print("           \(line)") }
             }
             printed += records.count

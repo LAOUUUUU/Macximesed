@@ -102,6 +102,16 @@ public struct WatchAlert: Sendable, Equatable {
     public var pid: Int?
     public var processPath: String?
 
+    /// The program named is part of macOS (a shell, dscl, sudo...). It's never the thing to delete: what it was
+    /// asked to run is the problem.
+    public var isSystemProgram: Bool { processPath.map(Self.isSystemPath) ?? false }
+
+    public static func isSystemPath(_ p: String) -> Bool {
+        ["/bin/", "/sbin/", "/usr/bin/", "/usr/sbin/", "/usr/libexec/", "/System/"].contains { p.hasPrefix($0) }
+    }
+
+    public static let systemProgramNote = "macOS's own program: don't delete it. What it was asked to run is the problem."
+
     public init(rule: String, severity: Severity, title: String, detail: String?, pid: Int?, processPath: String?) {
         self.rule = rule
         self.severity = severity
@@ -141,8 +151,16 @@ public struct WatchRules: Sendable {
         switch e.kind {
         case "exec":
             let command = Self.redact(e.args).joined(separator: " ")
-            let result = PasteGuard.check(e.args.joined(separator: " "))
-            for p in result.patterns.sorted(by: { $0.rawValue < $1.rawValue }) {
+            // Arguments are only code when a shell or interpreter runs them, or when the tool is the attack itself
+            // (dscl -authonly, xattr -d quarantine). `macx check "curl|sh"` or a commit message is just text.
+            let tool = ((e.target?.path ?? e.args.first ?? "") as NSString).lastPathComponent
+            let wanted: Set<CommandPattern>? =
+                Self.interpreters.contains(tool) ? nil : tool == "dscl" ? [.passwordCheck] : tool == "xattr" ? [.quarantineStrip] : []
+            let code =
+                Self.interpreters.contains(tool)
+                ? e.args.map(ShellText.stripDataHeredocs).joined(separator: " ") : e.args.joined(separator: " ")
+            let result = wanted == [] ? GuardResult.none : PasteGuard.check(code)
+            for p in result.patterns.sorted(by: { $0.rawValue < $1.rawValue }) where wanted?.contains(p) ?? true {
                 var detail = String(command.prefix(300))
                 if !result.decoded.isEmpty { detail += "\n  decodes to: " + result.decoded.joined(separator: "\n  decodes to: ") }
                 add(p.rawValue, p.severity, p.title, detail)
@@ -151,7 +169,11 @@ public struct WatchRules: Sendable {
                 add("known-malware", .critical, "A known malware program started", "\(name)\n  SHA-256 \(hash)\n  \(t.path)")
             }
             if let t = e.target, t.isUnsignedThirdParty, Self.isHiddenOrTemp(t.path, home: h) {
-                add("exec-from-hidden-or-temp", .high, "An unsigned program started from a hidden or temporary folder", t.path)
+                if Self.isBuildFolder(t.path) {
+                    add("exec-from-hidden-or-temp", .low, "A program you built ran from a developer build folder", t.path)
+                } else {
+                    add("exec-from-hidden-or-temp", .high, "An unsigned program started from a hidden or temporary folder", t.path)
+                }
             }
 
         case "create", "rename":
@@ -174,9 +196,17 @@ public struct WatchRules: Sendable {
 
         case "deleteextattr":
             if e.extattr == "com.apple.quarantine" {
-                add(
-                    "quarantine-removed", .high, "The download-safety (quarantine) flag was removed, so macOS won't check this file",
-                    e.filePath)
+                // App updaters (Squirrel's ShipIt, Sparkle) clear the flag on the update they just verified. A signed
+                // third-party program doing that is normal; xattr or an unsigned program doing it is the AMOS move.
+                if let p = e.process, !p.isPlatform, !(p.teamID ?? "").isEmpty {
+                    add(
+                        "quarantine-removed", .low, "A signed app cleared the download flag (usually its updater installing an update)",
+                        e.filePath)
+                } else {
+                    add(
+                        "quarantine-removed", .high, "The download-safety (quarantine) flag was removed, so macOS won't check this file",
+                        e.filePath)
+                }
             }
 
         case "btm_launch_item_add":
@@ -195,6 +225,15 @@ public struct WatchRules: Sendable {
             break
         }
         return out.sorted { $0.severity > $1.severity }
+    }
+
+    /// Programs whose arguments are code.
+    static let interpreters: Set<String> = [
+        "sh", "bash", "zsh", "dash", "ksh", "tcsh", "csh", "fish", "python", "python3", "perl", "ruby", "node", "osascript", "env",
+    ]
+
+    static func isBuildFolder(_ path: String) -> Bool {
+        ["/.build/", "/DerivedData/", "/Build/Products/"].contains { path.contains($0) }
     }
 
     static func isHiddenOrTemp(_ path: String, home: String) -> Bool {

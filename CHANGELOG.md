@@ -169,6 +169,12 @@ The first release: the antivirus side is complete (the checklist in STATUS.md), 
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **False alarms in the live watch** (from Lao's real alert log, 2026-11-24):
+  - **Arguments aren't code:** command patterns only count when a shell or interpreter runs them, or when the tool is the attack itself (`dscl -authonly`, `xattr -d com.apple.quarantine`). `macx guard inspect -- "curl…|zsh"`, commit messages and `sudo` wrappers no longer alert (46 + 2 false criticals from the evaluation).
+  - **Heredocs written to a file aren't run:** `cat > f <<EOF … EOF` bodies are skipped, while heredocs fed to a shell still count.
+  - **Updaters:** a signed third-party app clearing the quarantine flag (its updater, such as Discord's ShipIt, 564 times) is low, not high. xattr and unsigned programs stay high.
+  - **Developer builds:** unsigned programs from developer build folders (`.build`, `DerivedData`) are low.
+  - **Don't delete macOS:** alerts naming a macOS program (/bin/zsh, dscl, sudo) now say "macOS's own program: don't delete it", in the terminal, the log (`systemProgram`) and the app, and the app no longer offers "Show in Finder" for them.
 - Preference writes to the global domain now use `kCFPreferencesAnyApplication`; "NSGlobalDomain" as a CFPreferences app ID wrote to a stray domain.
 - **Runtime evaluation harness measured the wrong processes.** With the re-launching installed macx, it sampled the idle parent and the background daemon's eslogger. It now follows the tree from the watcher it started. The eslogger benchmark goes through a hidden `macx eslogger EVENTS…` (root only, event names only), so Full Disk Access is Macximesed's and not the terminal's. The busy-loop counter is appended instead of rewritten, because a freeze could land while the file was empty.
 - **`macx watch` ignored SIGTERM and SIGHUP.** Its handler ran on the main queue, which never got a turn because the main thread is blocked reading eslogger. It now has its own queue.

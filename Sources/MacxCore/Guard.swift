@@ -271,3 +271,34 @@ public struct GuardHook: Sendable {
 
     func shellQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }
+
+extension GuardResult {
+    static let none = GuardResult(patterns: [], decoded: [])
+}
+
+/// Shell text cleanup for the live watch.
+enum ShellText {
+    static let heredoc = try? NSRegularExpression(pattern: #"<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?"#)
+
+    /// Drops the body of heredocs that only write data (`cat > file <<EOF`, `tee file <<EOF`): that text is never
+    /// run. A heredoc fed to anything else (`bash <<EOF`, `python3 - <<EOF`) stays, because it is code.
+    static func stripDataHeredocs(_ text: String) -> String {
+        var out: [Substring] = []
+        var terminator: String?
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if let t = terminator {
+                if line.trimmingCharacters(in: .whitespaces) == t { terminator = nil }
+                continue
+            }
+            out.append(line)
+            let s = String(line)
+            guard let re = heredoc, let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+                let wordRange = Range(m.range(at: 1), in: s), let whole = Range(m.range, in: s)
+            else { continue }
+            let segment = s[..<whole.lowerBound].split(whereSeparator: { ";|&(".contains($0) }).last ?? Substring(s[..<whole.lowerBound])
+            let command = segment.trimmingCharacters(in: .whitespaces).split(separator: " ").first.map(String.init) ?? ""
+            if ["cat", "tee"].contains((command as NSString).lastPathComponent) { terminator = String(s[wordRange]) }
+        }
+        return out.joined(separator: "\n")
+    }
+}

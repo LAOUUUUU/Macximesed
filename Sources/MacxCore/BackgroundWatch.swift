@@ -145,6 +145,8 @@ public struct AlertRecord: Sendable, Equatable {
     public var title: String
     public var detail: String
     public var process: String
+    /// The program named belongs to macOS: never the thing to delete.
+    public var isSystemProgram: Bool { WatchAlert.isSystemPath(process) }
 
     public static func parse(_ text: String) -> [AlertRecord] {
         text.split(separator: "\n").compactMap { line in

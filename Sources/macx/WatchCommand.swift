@@ -200,6 +200,7 @@ struct Watch: ParsableCommand {
         let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(time)] \(a.severity.label.padding(toLength: 8, withPad: " ", startingAt: 0)) \(a.title)  [\(a.rule)]")
         if let p = a.processPath { print("           by \(p)\(a.pid.map { " (pid \($0))" } ?? "")") }
+        if a.isSystemProgram { print("           (\(WatchAlert.systemProgramNote))") }
         if let d = a.detail { d.split(separator: "\n").forEach { print("           \($0)") } }
     }
 
@@ -318,6 +319,7 @@ struct AlertLog {
             "time": Self.timeFormat.string(from: Date()), "epoch": Date().timeIntervalSince1970,
             "rule": a.rule, "severity": String(describing: a.severity),
             "title": a.title, "detail": a.detail ?? "", "pid": a.pid ?? -1, "process": a.processPath ?? "",
+            "systemProgram": a.isSystemProgram,
         ]
         write(record)
     }

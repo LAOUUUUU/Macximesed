@@ -220,8 +220,12 @@ struct ProtectionView: View {
                     SeverityWord(severity: g.severity).frame(width: 96, alignment: .leading)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(g.latest.title).font(Fonts.sans(13.5)).lineLimit(1)
-                        Text(g.process.isEmpty ? "unknown program" : Self.short(g.process))
-                            .font(Fonts.mono(11)).foregroundStyle(Ink.grey).lineLimit(1).truncationMode(.middle)
+                        Text(
+                            g.process.isEmpty
+                                ? "unknown program"
+                                : Self.short(g.process) + (WatchAlert.isSystemPath(g.process) ? "  · part of macOS" : "")
+                        )
+                        .font(Fonts.mono(11)).foregroundStyle(Ink.grey).lineLimit(1).truncationMode(.middle)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Text(g.rule).font(Fonts.mono(11)).foregroundStyle(Ink.grey).lineLimit(1).frame(width: 170, alignment: .leading)
@@ -250,6 +254,10 @@ struct ProtectionView: View {
                         Text(String(line)).lineLimit(3)
                     }
                     Text("program  \(g.process.isEmpty ? "unknown" : g.process)").foregroundStyle(Ink.grey)
+                    if WatchAlert.isSystemPath(g.process) {
+                        // Never send people after /bin/zsh or dscl: the command they ran is what matters.
+                        Text("         \(WatchAlert.systemProgramNote)").foregroundStyle(Ink.grey)
+                    }
                     Text(
                         "seen     \(g.count == 1 ? "once" : "\(g.count) times"), first \(WatchState.clock(g.first)), last \(WatchState.clock(g.last))"
                     )
@@ -263,7 +271,7 @@ struct ProtectionView: View {
                         }
                         .buttonStyle(PlainButtonStyle(kind: .primary))
                     }
-                    if !g.process.isEmpty, FileManager.default.fileExists(atPath: g.process) {
+                    if !g.process.isEmpty, !WatchAlert.isSystemPath(g.process), FileManager.default.fileExists(atPath: g.process) {
                         Button("Show in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: g.process)])
                         }
