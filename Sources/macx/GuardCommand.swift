@@ -158,6 +158,8 @@ struct Guard: ParsableCommand {
                 case .dangerous: "DON'T RUN THIS"
                 }
             print("\nVerdict: \(verdict)")
+            // As in `macx check`: reading can't show everything a script would do, and the chamber can run the inspected copy.
+            for copy in report.chamberCandidates { print("  " + ChamberHint.line(path: copy.path)) }
             guard !noRun else { throw report.verdict == .dangerous ? ExitCode(2) : ExitCode.success }
 
             let runnable = report.runs.filter { $0.savedCopy != nil && ($0.inspection?.kind == .script || $0.inspection?.kind == .binary) }

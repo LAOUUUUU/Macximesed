@@ -237,6 +237,26 @@ public struct ChamberSample: Sendable {
     }
 }
 
+/// When the static checks send a file on to the chamber: a script that reading couldn't settle (*Be careful* or
+/// *partly unknown*). A dangerous one needs no run to decide, a clean one has nothing more to show, and apps and
+/// programs keep the static checks. One rule for `macx check` and `macx guard inspect`.
+public enum ChamberHint {
+    public static func applies(isScript: Bool, verdict: Verdict) -> Bool {
+        isScript && (verdict == .caution || verdict == .partlyUnknown)
+    }
+
+    /// The line both commands print, with the path quoted when the shell needs it, so it can be pasted back.
+    public static func line(path: String) -> String {
+        "See what it actually does, safely: macx chamber run \(shellWord(path))"
+    }
+
+    static func shellWord(_ s: String) -> String {
+        let bare = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+,:@")
+        if !s.isEmpty, s.unicodeScalars.allSatisfy(bare.contains) { return s }
+        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+}
+
 /// Puts a sample the chamber judged bad into an incident case and the undo store. Nothing is deleted.
 public struct ChamberQuarantine: Sendable {
     public var recorder: IncidentRecorder

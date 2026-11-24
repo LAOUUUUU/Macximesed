@@ -557,6 +557,15 @@ public struct PasteReport: Sendable {
     }
 
     public var verdict: Verdict { Verdict.from(findings) }
+
+    /// Saved copies of the scripts that reading couldn't settle: `macx chamber run` can show what they actually do.
+    public var chamberCandidates: [URL] {
+        runs.compactMap { r in
+            guard let saved = r.savedCopy, let i = r.inspection, ChamberHint.applies(isScript: i.kind == .script, verdict: i.verdict)
+            else { return nil }
+            return saved
+        }
+    }
 }
 
 public struct PasteInspector: Sendable {
@@ -594,9 +603,13 @@ public struct PasteInspector: Sendable {
         return PasteReport(command: command, guardResult: result, runs: runs)
     }
 
-    /// Owner-only and not executable, so nothing runs it by accident.
+    /// Owner-only and not executable, so nothing runs it by accident. The folder is private too (0700), since
+    /// this copy is what `macx chamber run` is pointed at.
     func save(_ data: Data, sha: String, name: String) throws -> URL {
-        try FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        try fm.createDirectory(at: saveDir.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createDirectory(at: saveDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: saveDir.path)  // one made by an older macx was 0755
         let safeName = name.isEmpty || name == "/" ? "script" : name.replacingOccurrences(of: "/", with: "_")
         let file = saveDir.appendingPathComponent("\(sha.prefix(12))-\(safeName)")
         try data.write(to: file, options: .atomic)

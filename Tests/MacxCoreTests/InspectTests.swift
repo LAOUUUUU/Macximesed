@@ -183,6 +183,46 @@ struct InspectFlowTests {
         #expect(perms == 0o600)  // readable only by you, and not executable
     }
 
+    @Test func savedCopiesLiveInAPrivateFolder() throws {
+        let tmp = try TempDir()
+        let dir = tmp.url.appendingPathComponent("Inspected")
+        let flow = PasteInspector(fetcher: FakeFetcher(pages: ["https://a.example/i.sh": "echo hi\n"]), saveDir: dir, knownHosts: [])
+        _ = flow.inspect(command: "curl -s https://a.example/i.sh | sh")
+        let perms = try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? Int
+        #expect(perms == 0o700)
+    }
+
+    @Test func aWiderExistingFolderIsMadePrivate() throws {
+        let tmp = try TempDir()
+        let dir = tmp.url.appendingPathComponent("Inspected")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o755])
+        let flow = PasteInspector(fetcher: FakeFetcher(pages: ["https://a.example/i.sh": "echo hi\n"]), saveDir: dir, knownHosts: [])
+        _ = flow.inspect(command: "curl -s https://a.example/i.sh | sh")
+        let perms = try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? Int
+        #expect(perms == 0o700)
+    }
+
+    /// Like `macx check`, a script that reading couldn't settle is pointed at the chamber, by its saved copy.
+    @Test func scriptsReadingCantSettleGoToTheChamber() throws {
+        let tmp = try TempDir()
+        let fetcher = FakeFetcher(pages: [
+            "https://a.example/unknown.sh": "#!/bin/sh\ncmd=\"$1\"\neval \"$cmd\"\n",  // partly unknown
+            "http://b.example/careful.sh": "#!/bin/sh\necho hi\n",  // plain http: be careful
+            "https://c.example/fine.sh": "#!/bin/sh\necho hi\n",  // nothing to show
+            "https://d.example/bad.sh": "#!/bin/sh\nosascript -e 'display dialog \"pw\" default answer \"\" with hidden answer'\n",
+        ])
+        let flow = PasteInspector(fetcher: fetcher, saveDir: tmp.url, knownHosts: ["a.example", "b.example", "c.example", "d.example"])
+        func candidates(_ command: String) -> [URL] { flow.inspect(command: command).chamberCandidates }
+
+        let unknown = flow.inspect(command: "curl -s https://a.example/unknown.sh | sh")
+        #expect(unknown.runs.first?.inspection?.verdict == .partlyUnknown)
+        #expect(unknown.chamberCandidates == [try #require(unknown.runs.first?.savedCopy)])
+        #expect(candidates("curl -s http://b.example/careful.sh | sh").count == 1)
+        #expect(candidates("curl -s https://c.example/fine.sh | sh").isEmpty)
+        #expect(candidates("curl -s https://d.example/bad.sh | sh").isEmpty)  // already DON'T RUN THIS
+        #expect(candidates("curl -s https://gone.example/x | sh").isEmpty)  // nothing was fetched
+    }
+
     @Test func fetchFailureIsReportedNotThrown() {
         let flow = PasteInspector(fetcher: FakeFetcher(pages: [:]), saveDir: FileManager.default.temporaryDirectory, knownHosts: [])
         let report = flow.inspect(command: "curl -s https://gone.example/x | sh")
@@ -218,5 +258,26 @@ struct VerifiedRunTests {
         #expect(VerifiedCopy.stdinArguments(for: "zsh", scriptArgs: []) == ["-s"])
         #expect(VerifiedCopy.stdinArguments(for: "python3", scriptArgs: ["a"]) == ["-", "a"])
         #expect(VerifiedCopy.stdinArguments(for: "osascript", scriptArgs: []) == nil)  // can't read a script from stdin this way
+    }
+}
+
+@Suite("Pointing at the chamber")
+struct ChamberHintTests {
+    /// One rule for `macx check` and `macx guard inspect`: scripts that reading couldn't settle.
+    @Test func onlyScriptsReadingCantSettle() {
+        #expect(ChamberHint.applies(isScript: true, verdict: .caution))
+        #expect(ChamberHint.applies(isScript: true, verdict: .partlyUnknown))
+        #expect(!ChamberHint.applies(isScript: true, verdict: .ok))
+        #expect(!ChamberHint.applies(isScript: true, verdict: .dangerous))
+        #expect(!ChamberHint.applies(isScript: false, verdict: .caution))  // apps and programs keep the static checks
+    }
+
+    @Test func theLineCanBePastedBack() {
+        #expect(ChamberHint.line(path: "/tmp/i.sh") == "See what it actually does, safely: macx chamber run /tmp/i.sh")
+        // The saved copies live under Application Support, which has a space in it.
+        #expect(
+            ChamberHint.line(path: "/x/Application Support/Macximesed/Inspected/ab12-i.sh")
+                == "See what it actually does, safely: macx chamber run '/x/Application Support/Macximesed/Inspected/ab12-i.sh'")
+        #expect(ChamberHint.line(path: "it's.sh") == #"See what it actually does, safely: macx chamber run 'it'\''s.sh'"#)
     }
 }

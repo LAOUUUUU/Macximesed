@@ -44,8 +44,8 @@ struct Check: ParsableCommand {
             printReport(report)
             worst = max(worst, report.verdict)
             // Reading a script can't show everything it would do; the chamber can run it safely.
-            if report.kind == .script, report.verdict == .partlyUnknown || report.verdict == .caution {
-                print("  See what it actually does, safely: macx chamber run \(path)")
+            if ChamberHint.applies(isScript: report.kind == .script, verdict: report.verdict) {
+                print("  " + ChamberHint.line(path: path))
             }
         }
         if worst == .dangerous { throw ExitCode(2) }
