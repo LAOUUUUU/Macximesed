@@ -48,6 +48,7 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [ ] 5. Beta workflows (`beta-build.yml`, `beta-publish.yml`): after Lao makes the beta key, the `beta` environment (deployment branches: main) and a ruleset on `dev`; check that immutable releases are off.
 
 ## Next
+- [ ] **Independent testing with Atomic Red Team** ([plan](research/independent-testing/PLAN.md), written 2026-11-24, waiting for Lao's OK): ~60 macOS atomics on GitHub's throwaway macOS runners (eslogger works there; SIP is off), expected results written first, plus a benign workload for false alarms and the `tcc_modify` field check.
 - [x] **.pkg + .dmg downloads** (2026-11-24, [research/installers/RESEARCH.md](research/installers/RESEARCH.md)): built on dev. Left: Lao runs `scripts/release/make-release-cert.sh` once (and saves the .p12 in Bitwarden); after the next release, try the .pkg on a Mac (Open Anyway, install, setup, then an update through the app archive).
 - [x] **7. Boost + throttle view + Medium tier** (2026-11-24): `macx top`, `macx boost` (with `measure`), `macx tune`. Spotlight pause and Low Power Mode are left out: they need root, and Boost writes your own settings, so it runs without sudo. The research found pausing Spotlight saves little.
 - [x] **8. Games** (2026-11-24): `macx games` list, add, forget and play, with Boost, the Metal HUD, heat and load timelines, and how best to run each game. Game Mode can't be forced (no public switch), so macx reports it and reminds you to play full screen.
