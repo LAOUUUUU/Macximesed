@@ -1,9 +1,26 @@
 import ArgumentParser
+import Foundation
 import MacxCore
 
 @main
 enum Entry {
     static func main() {
+        let args = Array(CommandLine.arguments.dropFirst())
+        if LaunchMode.decide(arguments: args, environment: ProcessInfo.processInfo.environment) == .app {
+            // From a terminal (`macx app`) hand over to LaunchServices, so the app is its own process with its own
+            // Full Disk Access, not a child of the terminal. A development build outside the app runs in place.
+            if args == ["app"], let exe = Responsibility.executablePath,
+                let bundle = UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe).resolvingSymlinksInPath())
+            {
+                let open = Process()
+                open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                open.arguments = [bundle.path]
+                try? open.run()
+                open.waitUntilExit()
+                return
+            }
+            MainActor.assumeIsolated { MacxApp.run() }
+        }
         Responsibility.becomeOwnResponsibleProcessIfNeeded()
         UpdateCheck.runIfDue(arguments: Array(CommandLine.arguments.dropFirst()))
         Macx.main()

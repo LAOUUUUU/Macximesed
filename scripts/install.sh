@@ -34,6 +34,10 @@ cat > "$NEW/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSUIElement</key><true/>
+  <key>NSHumanReadableCopyright</key><string>MIT licence</string>
+  <!-- Set only when opened from Finder, the Dock, open or a login item: then macx starts the Mac app.
+       A shell run, the daemon and scripts never get it, so they stay the command-line tool. -->
+  <key>LSEnvironment</key><dict><key>MACX_APP</key><string>1</string></dict>
 </dict>
 </plist>
 PLIST

@@ -134,6 +134,11 @@ public struct LaunchdInfo: Sendable, Equatable {
     public var state: String?
     public var pid: Int?
 
+    public init(state: String? = nil, pid: Int? = nil) {
+        self.state = state
+        self.pid = pid
+    }
+
     public static func parse(_ output: String) -> LaunchdInfo {
         var info = LaunchdInfo()
         for raw in output.split(separator: "\n") {
