@@ -13,6 +13,10 @@ func residentMB() -> Int {
     return Int(info.resident_size / 1_000_000)
 }
 
+/// AddressSanitizer keeps freed memory in a quarantine (256 MB by default) to catch use-after-free, so resident
+/// memory grows under it whatever the code does. The memory checks only mean something without it.
+let underAddressSanitizer = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "__asan_init") != nil
+
 @Suite("Reading eslogger's output", .serialized)
 struct LineReaderTests {
     func pipe(_ script: String) throws -> (Process, FileHandle) {
@@ -33,7 +37,7 @@ struct LineReaderTests {
         #expect(lines == ["one", "two", "", "three"])
     }
 
-    @Test func memoryStaysFlatOverHoursOfEvents() throws {
+    @Test(.disabled(if: underAddressSanitizer, "ASan keeps freed memory")) func memoryStaysFlatOverHoursOfEvents() throws {
         // The watch reads eslogger for days. Without a pool per chunk every chunk stayed in memory (370 MB in the eval).
         let line = #"{"event":{"exec":{}},"process":{"executable":{"path":"/bin/zsh"}}}"#
         let (p, h) = try pipe("yes '\(line)' | head -c 200000000")
@@ -45,7 +49,7 @@ struct LineReaderTests {
         #expect(residentMB() - before < 60)
     }
 
-    @Test func hashingABigFileDoesntKeepIt() throws {
+    @Test(.disabled(if: underAddressSanitizer, "ASan keeps freed memory")) func hashingABigFileDoesntKeepIt() throws {
         let tmp = try TempDir()
         let file = tmp.url.appendingPathComponent("big")
         FileManager.default.createFile(atPath: file.path, contents: nil)
