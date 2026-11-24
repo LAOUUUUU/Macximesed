@@ -87,7 +87,8 @@ struct Watch: ParsableCommand {
         let child = es.processIdentifier
         for sig in [SIGINT, SIGTERM, SIGHUP] {
             signal(sig, SIG_IGN)
-            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            // Not .main: the main thread is blocked reading eslogger, so a main-queue handler would never run.
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: Self.signalQueue)
             src.setEventHandler {
                 kill(child, SIGTERM)
                 print("\nStopped watching.")
@@ -192,6 +193,7 @@ struct Watch: ParsableCommand {
     }
 
     nonisolated(unsafe) static var keep: [DispatchSourceSignal] = []
+    static let signalQueue = DispatchQueue(label: "macx.watch.signals")
 
     static func printAlert(_ a: WatchAlert) {
         let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)

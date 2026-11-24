@@ -130,6 +130,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - `macx watch --log FILE`. The watch log now has millisecond timestamps and records each freeze.
 
 ### Fixed
+- **`macx watch` ignored SIGTERM and SIGHUP.** Its handler ran on the main queue, which never got a turn because the main thread is blocked reading eslogger. It now has its own queue.
 - **Stopping the installed `macx` stops all of it.** The installed binary re-launches itself to own its permissions. The parent used to ignore SIGTERM and SIGHUP without passing them on, so `kill` on it left the child running. That's how three root `macx watch --suspend` processes from evaluation runs kept going for hours. It now forwards SIGINT, SIGTERM and SIGHUP, and the runtime harness also stops its watchers by their log folder.
 - **`macx daemon restart` failed with launchd error 5**, because `bootout` returns before the job is gone. It now waits for the unload and retries the load. `macx daemon status` marks a stale "watching" message when launchd says the job isn't loaded.
 - **Full Disk Access for macx itself works** (macOS 27.0.1). tccd's log showed the cause: `Failed to match existing code requirement`. The Full Disk Access entry still held the ad-hoc signature from when it was first added, and switching it off and on never updates that. Removing the entry and adding the signed app again fixed it. `macx privacy` and the watch's refusal message now explain this.
