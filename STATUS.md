@@ -13,6 +13,7 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **D. Configuration profiles** in `macx persist` (2026-11-23): yours without root, computer-wide ones with `sudo`; rules by payload type. Not yet checked against a real installed profile (CI runners can't install one: the `profiles` tool no longer installs).
 - [x] **E. `sfltool` stall understood** (2026-11-23): without root it asks for an admin password (`system.privilege.admin`) and waits on the dialog; as root it answers at once. It now runs only as root. Reading the BTM file directly is no better: its folder needs Full Disk Access.
 - [ ] **F. CI green** on the final commit, and both evaluations re-run on it.
+  - [ ] The daemon stops on SIGTERM: after `sudo macx daemon restart`, `daemon.log` shows "Stopped watching." and launchd's log has no "Sending SIGKILL". (The 19:33 restart force-killed a build from before the fix, so that one doesn't count.)
 
 - [x] **Full Disk Access for macx itself: solved** (2026-11-23). The Full Disk Access entry kept the code requirement from when it was first added (ad-hoc), and switching it off and on never refreshed it. tccd logged `Failed to match existing code requirement`. Fix: `sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx`, then add the signed app again.
   - [x] Survives rebuilds: after three reinstalls, `sudo macx daemon restart` still reports *watching* (2026-11-23 19:31).
