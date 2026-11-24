@@ -180,10 +180,11 @@ struct Daemon: ParsableCommand {
             }
             guard let updated = DaemonSettings.plist(plist, downloads: on) else { throw UserError("Couldn't change \(path.path).") }
             let out = try PropertyListSerialization.data(fromPropertyList: updated, format: .xml, options: 0)
-            unload()
+            // Written before the watch is stopped: if the write fails, the running watch is left as it was.
             try out.write(to: path, options: .atomic)
             chown(path.path, 0, 0)
             chmod(path.path, 0o644)
+            unload()
             try load()
             print("Downloads watch: \(setting.rawValue). The background watch restarted with it.")
             Thread.sleep(forTimeInterval: 4)
