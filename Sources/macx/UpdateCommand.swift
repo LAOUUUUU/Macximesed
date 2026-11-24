@@ -122,6 +122,23 @@ struct Update: ParsableCommand {
         if geteuid() == 0 {
             throw UserError("Not updating while running as root (it would leave a root-owned file). Run `macx update` without sudo.")
         }
+        // Installed from the .pkg or .dmg (signed with the release certificate): swap in CI's whole signed app.
+        let app = UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe))
+        let signer = RealAppSigner()
+        let method = UpdateMethod.choose(
+            app: app, authority: app.flatMap(signer.authority(of:)), hasAppAsset: channel.latest.app != nil)
+        if method == .wholeApp, let app, let asset = channel.latest.app {
+            guard FileManager.default.isWritableFile(atPath: app.deletingLastPathComponent().path) else {
+                throw UserError(
+                    "Can't write to \(app.deletingLastPathComponent().path). Install the new .pkg from the release page instead.")
+            }
+            guard let url = URL(string: asset.url), url.scheme == "https" else { throw UpdateError.download("not an https link") }
+            if !quiet { FileHandle.standardError.write(Data("Downloading Macximesed \(channel.latest.version)…\n".utf8)) }
+            let data = try UpdateClient.get(url, timeout: 60)
+            try UpdateInstaller().installApp(
+                data, sha256: asset.sha256, version: channel.latest.version, over: app, installed: SemVer(macxVersion)!)
+            return
+        }
         guard FileManager.default.isWritableFile(atPath: (exe as NSString).deletingLastPathComponent) else {
             throw UserError("Can't write to \((exe as NSString).deletingLastPathComponent). Reinstall with scripts/install.sh.")
         }

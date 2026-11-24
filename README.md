@@ -26,6 +26,9 @@ It does not replace XProtect: keep that on. Without Apple's restricted Endpoint 
 - Xcode 16 or later (Swift 6).
 
 ## Install
+**From a release:** download `Macximesed-X.Y.Z.pkg` from the [releases page](https://github.com/LAOUUUUU/Macximesed/releases) and open it. It puts the app in your `~/Applications` and `macx` in `~/.local/bin`, then opens the first-run setup (Full Disk Access and the background watch). There's also a `.dmg` to drag the app into Applications yourself. Macximesed isn't notarized by Apple, so macOS blocks the first open: click **Done**, then **Open Anyway** in System Settings > Privacy & Security (see *Install a release*).
+
+**From source:**
 ```bash
 scripts/install.sh
 ```
@@ -286,11 +289,26 @@ The signed channel file it came with is saved next to it (`hashfeed-channel.json
 The feed is built at release time from [`data/hashes/curated.tsv`](data/hashes/curated.tsv) plus, when the `MALWAREBAZAAR_KEY` secret is set, abuse.ch MalwareBazaar's recent macOS samples. Only hashes are stored; no samples. To set the key, get a free Auth-Key at [auth.abuse.ch](https://auth.abuse.ch) and run `scripts/release/set-malwarebazaar-key.sh`: it asks for the key without showing it, checks it with one lookup, and saves it in the `release` environment through `gh`.
 
 ## Install a release
-Each [release](https://github.com/LAOUUUUU/Macximesed/releases) has a universal `macx` (Apple silicon and Intel) with a SHA-256 file. The binary isn't signed yet, so after checking the hash:
+Each [release](https://github.com/LAOUUUUU/Macximesed/releases) has, all universal (Apple silicon and Intel) and each with a SHA-256 file:
+
+| File | What it is |
+|---|---|
+| `Macximesed-X.Y.Z.pkg` | The installer. Puts `Macximesed.app` in **your** `~/Applications` and links `~/.local/bin/macx`, both owned by you, so updates install without an administrator password. Then it opens first-run setup. It asks for your password because Installer always does; it installs nothing outside your home folder (the payload passes through `/Library/Application Support/Macximesed/staging` and is moved out). It doesn't install the background watch: that only works once Full Disk Access is on, so setup does it. |
+| `Macximesed-X.Y.Z.dmg` | The app, to drag into Applications. Add the command yourself if you want it: `ln -s /Applications/Macximesed.app/Contents/MacOS/macx ~/.local/bin/macx`. |
+| `macx-vX.Y.Z-macos-universal.tar.gz` | The bare command-line tool. |
+| `Macximesed-X.Y.Z-app.tar.gz` | The signed app on its own. The updater uses it; you don't need it. |
+
+**Signing.** The app in the .pkg and .dmg is signed on GitHub with Macximesed's own certificate, *Macximesed Release Signing*. It isn't Apple's ($99 a year), so macOS blocks the first open with *"Apple could not verify..."*. Click **Done**, open System Settings > Privacy & Security, click **Open Anyway** next to the message, and open it again. Right-click > Open no longer gets past this on current macOS. Because the certificate never changes, macOS keeps the app's Full Disk Access across updates.
+
+**Updates for .pkg and .dmg installs** download the whole signed app instead of just the binary (your Mac doesn't have the release certificate, so it can't re-sign). The app archive's SHA-256 is in the signed update channel, and before swapping it in, macx checks the signature (`codesign --verify --strict --deep`) and requires exactly the same designated requirement as the installed app, so an app signed by anyone else is refused. It takes only `Macximesed.app` with plain files and folders, swaps it in one step and keeps the old one as `Macximesed.app.previous` in Application Support. An app built with `scripts/install.sh` keeps updating the binary and re-signing with your own certificate.
+
+The bare tool isn't signed. After checking the hash:
 
 ```bash
 tar -xzf macx-*-macos-universal.tar.gz && xattr -d com.apple.quarantine macx && ./macx --help
 ```
+
+**Releasing** (maintainers): the certificate is made once with `scripts/release/make-release-cert.sh` and lives only in the `release` environment (plus a copy in the maintainer's password manager). The release job signs with it in a temporary keychain, deleted at the end, and `scripts/release/make-installers.sh` makes the .pkg, .dmg and app archive. `MACX_RELEASE_SIGNING_INTEGRATION=1 swift test --filter RealWholeAppUpdate` checks the whole-app update with real signatures and throwaway certificates.
 
 ## Contributing
 Pull requests go to `dev`. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers setup, the test-first workflow, and the rules the code keeps (no guessing, nothing deleted without an undo, no privacy popups). Report security problems privately as described in [SECURITY.md](SECURITY.md). Everyone is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).

@@ -13,11 +13,14 @@ jobs:
   release:
     name: Build and publish
     runs-on: macos-26
-    timeout-minutes: 30
+    # The release certificate is a secret of this environment, so the build waits for Lao's approval.
+    environment: release
+    timeout-minutes: 40
     permissions:
       contents: write
     outputs:
       sha256: ${{ steps.build.outputs.sha256 }}
+      app_sha256: ${{ steps.installers.outputs.app_sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check the tag matches macx --version
@@ -43,6 +46,42 @@ jobs:
           shasum -a 256 "$NAME" > "$NAME.sha256"
           echo "ASSET=$NAME" >> "$GITHUB_ENV"
           echo "sha256=$(shasum -a 256 "$NAME" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Sign the app and make the .pkg and .dmg
+        id: installers
+        env:
+          P12: ${{ secrets.MACX_RELEASE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACX_RELEASE_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$P12" ] || [ -z "$P12_PASSWORD" ]; then
+            echo "::error::MACX_RELEASE_P12 isn't set in the release environment (scripts/release/make-release-cert.sh)."
+            exit 1
+          fi
+          VER="${GITHUB_REF_NAME#v}"
+          KC="$RUNNER_TEMP/release.keychain-db"
+          KCPW=$(openssl rand -hex 16)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          printf %s "$P12" | base64 -D > "$RUNNER_TEMP/release.p12"
+          security import "$RUNNER_TEMP/release.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign >/dev/null
+          rm -f "$RUNNER_TEMP/release.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" >/dev/null
+          scripts/make-app.sh dist/macx "$RUNNER_TEMP/Macximesed.app" "$VER" "Macximesed Release Signing" "$KC"
+          codesign -dvv "$RUNNER_TEMP/Macximesed.app" 2>&1 | grep -E '^(Identifier|Authority)='
+          codesign -d -r- "$RUNNER_TEMP/Macximesed.app" 2>&1 | grep designated
+          scripts/release/make-installers.sh "$RUNNER_TEMP/Macximesed.app" "$VER" installers
+          # No AppleDouble files: the updater refuses an app archive with anything but the app in it.
+          if pkgutil --payload-files "installers/Macximesed-$VER.pkg" | grep -q '/\._'; then
+            echo "::error::the .pkg has ._ files in it"; exit 1
+          fi
+          if tar -tzf "installers/Macximesed-$VER-app.tar.gz" | grep -q '/\._\|^\._'; then
+            echo "::error::the app archive has ._ files in it"; exit 1
+          fi
+          echo "app_sha256=$(cut -d' ' -f1 "installers/Macximesed-$VER-app.tar.gz.sha256")" >> "$GITHUB_OUTPUT"
+      - name: Forget the release certificate
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/release.keychain-db" 2>/dev/null || true
       - name: Release notes from CHANGELOG.md
         run: |
           set -euo pipefail
@@ -82,7 +121,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" \
+          gh release create "$GITHUB_REF_NAME" installers/*.pkg installers/*.pkg.sha256 installers/*.dmg installers/*.dmg.sha256 \
+            installers/*-app.tar.gz installers/*-app.tar.gz.sha256 "$ASSET" "$ASSET.sha256" \
             --title "Macximesed $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
 
   channel:
@@ -96,4 +136,5 @@ jobs:
     with:
       version: ${{ github.ref_name }}
       sha256: ${{ needs.release.outputs.sha256 }}
+      app_sha256: ${{ needs.release.outputs.app_sha256 }}
     secrets: inherit

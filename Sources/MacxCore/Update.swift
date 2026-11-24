@@ -46,6 +46,14 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
         public var url: String
         public var sha256: String
         public var notes: String?
+        /// The whole app, signed on CI with the release certificate (`Macximesed-X.Y.Z-app.tar.gz`). Installs from
+        /// the .pkg or .dmg update with it; older clients ignore it.
+        public var app: Asset?
+    }
+
+    public struct Asset: Codable, Sendable, Equatable {
+        public var url: String
+        public var sha256: String
     }
 
     public struct Floor: Codable, Sendable, Equatable {
@@ -84,7 +92,7 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
 
 public enum UpdateError: Error, Equatable, CustomStringConvertible {
     case badSignature, badChannel, hashMismatch, notAProgram, versionMismatch, notNewer
-    case needsUser, signingIdentityMissing, identityChanged
+    case needsUser, signingIdentityMissing, identityChanged, appSignatureInvalid
     case download(String)
 
     public var description: String {
@@ -99,6 +107,7 @@ public enum UpdateError: Error, Equatable, CustomStringConvertible {
         case .signingIdentityMissing:
             "the identity Macximesed.app is signed with isn't available, so the update was held back (installing it would cost the app its Full Disk Access)"
         case .identityChanged: "after the update macOS would have seen a different app, so the previous version was put back"
+        case .appSignatureInvalid: "the downloaded app's signature didn't check out, so it wasn't installed"
         case .download(let m): "the download failed: \(m)"
         }
     }
@@ -311,6 +320,63 @@ public struct UpdateInstaller: Sendable {
         }
     }
 
+    /// The update for an app signed with the release certificate (from the .pkg or .dmg): the user doesn't have
+    /// that certificate, so the binary can't be re-signed here. CI's signed app is swapped in whole instead, and
+    /// only if macOS would see the same app (same designated requirement), so Full Disk Access carries over and
+    /// an app signed by anyone else never gets in.
+    public func installApp(_ archive: Data, sha256 expected: String, version: String, over app: URL, installed: SemVer) throws {
+        guard !isRoot else { throw UpdateError.needsUser }
+        guard sha256(archive) == expected.lowercased() else { throw UpdateError.hashMismatch }
+        guard let v = SemVer(version), v > installed else { throw UpdateError.notNewer }
+        let requirementBefore = signer.designatedRequirement(of: app)
+        guard Self.isStable(requirementBefore) else { throw UpdateError.identityChanged }
+
+        let fm = FileManager.default
+        let work = fm.temporaryDirectory.appendingPathComponent("macx-update-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: work, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? fm.removeItem(at: work) }
+        let tgz = work.appendingPathComponent("update.tar.gz")
+        try archive.write(to: tgz)
+
+        // Only Macximesed.app at the top, no absolute paths, no "..".
+        let listing = (try? ProcessRunner().run("/usr/bin/tar", ["-tzf", tgz.path])) ?? ""
+        let names = listing.split(separator: "\n").map { $0.hasPrefix("./") ? String($0.dropFirst(2)) : String($0) }.filter { !$0.isEmpty }
+        let name = app.lastPathComponent
+        guard !names.isEmpty,
+            names.allSatisfy({ ($0 == name || $0 == name + "/" || $0.hasPrefix(name + "/")) && !$0.split(separator: "/").contains("..") })
+        else { throw UpdateError.notAProgram }
+        let out = work.appendingPathComponent("out", isDirectory: true)
+        try fm.createDirectory(at: out, withIntermediateDirectories: false)
+        _ = try? ProcessRunner().run("/usr/bin/tar", ["-xzf", tgz.path, "-C", out.path])
+        let new = out.appendingPathComponent(name)
+        // Plain files and folders only: a link could point anywhere.
+        guard let walk = fm.enumerator(at: new, includingPropertiesForKeys: nil) else { throw UpdateError.notAProgram }
+        for case let item as URL in walk {
+            let type = (try? fm.attributesOfItem(atPath: item.path))?[.type] as? FileAttributeType
+            guard type == .typeRegular || type == .typeDirectory else { throw UpdateError.notAProgram }
+        }
+        let exe = new.appendingPathComponent("Contents/MacOS/macx")
+        guard (try? fm.attributesOfItem(atPath: exe.path))?[.type] as? FileAttributeType == .typeRegular,
+            let head = try? FileHandle(forReadingFrom: exe).read(upToCount: 4096), !MachO.architectures(of: head).isEmpty
+        else { throw UpdateError.notAProgram }
+        guard signer.verifies(new) else { throw UpdateError.appSignatureInvalid }
+        guard signer.designatedRequirement(of: new) == requirementBefore else { throw UpdateError.identityChanged }
+        guard let reported = versionOf(exe), SemVer(reported) == v else { throw UpdateError.versionMismatch }
+
+        // Copy next to the app (same volume), then swap the two in one step: on any failure the old app stays.
+        let staged = app.deletingLastPathComponent().appendingPathComponent(".\(name).new-\(UUID().uuidString)")
+        try fm.copyItem(at: new, to: staged)
+        guard renamex_np(staged.path, app.path, UInt32(RENAME_SWAP)) == 0 else {
+            try? fm.removeItem(at: staged)
+            throw UpdateError.download("couldn't replace \(app.path)")
+        }
+        // `staged` now holds the old app: keep it as the previous version.
+        try? fm.createDirectory(at: previousFolder, withIntermediateDirectories: true)
+        let previous = previousFolder.appendingPathComponent("\(name).previous")
+        try? fm.removeItem(at: previous)
+        if (try? fm.moveItem(at: staged, to: previous)) == nil { try? fm.removeItem(at: staged) }
+    }
+
     /// `…/Macximesed.app` when the binary is the app's main executable (`Contents/MacOS/...`).
     public static func enclosingApp(of exe: URL) -> URL? {
         let macos = exe.deletingLastPathComponent()
@@ -471,6 +537,27 @@ public protocol AppSigner: Sendable {
     func designatedRequirement(of app: URL) -> String?
     func preferredIdentity() -> SigningIdentity?
     func sign(_ app: URL, identity: SigningIdentity?, bundleID: String, entitlements: URL) throws
+    /// `codesign --verify --strict --deep`.
+    func verifies(_ app: URL) -> Bool
+    /// The leaf certificate's name (`codesign -dvv`, first `Authority=`), nil when ad-hoc.
+    func authority(of app: URL) -> String?
+}
+
+extension AppSigner {
+    public func verifies(_ app: URL) -> Bool { true }
+    public func authority(of app: URL) -> String? { nil }
+}
+
+/// How to update: release-signed installs (.pkg, .dmg) get CI's whole signed app; installs signed on this Mac
+/// (`install.sh`, with the user's own certificate) get the binary and are re-signed here.
+public enum UpdateMethod: Sendable, Equatable {
+    case binary, wholeApp
+
+    public static let releaseAuthority = "Macximesed Release Signing"
+
+    public static func choose(app: URL?, authority: String?, hasAppAsset: Bool) -> UpdateMethod {
+        app != nil && hasAppAsset && authority == releaseAuthority ? .wholeApp : .binary
+    }
 }
 
 public struct RealAppSigner: AppSigner {
@@ -483,6 +570,16 @@ public struct RealAppSigner: AppSigner {
     }
 
     public func preferredIdentity() -> SigningIdentity? { SigningIdentity.preferred() }
+
+    public func verifies(_ app: URL) -> Bool {
+        ProcessRunner.capture("/usr/bin/codesign", ["--verify", "--strict", "--deep", app.path])?.status == 0
+    }
+
+    public func authority(of app: URL) -> String? {
+        guard let out = ProcessRunner.capture("/usr/bin/codesign", ["-dvv", app.path]) else { return nil }
+        return (out.stdout + out.stderr).split(separator: "\n").first { $0.hasPrefix("Authority=") }
+            .map { String($0.dropFirst("Authority=".count)) }
+    }
 
     public func sign(_ app: URL, identity: SigningIdentity?, bundleID: String, entitlements: URL) throws {
         let args = SigningIdentity.resealArguments(

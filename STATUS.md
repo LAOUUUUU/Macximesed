@@ -41,6 +41,7 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [ ] Re-check the steps in README and `macx privacy` against the new prompt.
 
 ## Next
+- [x] **.pkg + .dmg downloads** (2026-11-24, [research/installers/RESEARCH.md](research/installers/RESEARCH.md)): built on dev. Left: Lao runs `scripts/release/make-release-cert.sh` once (and saves the .p12 in Bitwarden); after the next release, try the .pkg on a Mac (Open Anyway, install, setup, then an update through the app archive).
 - [x] **7. Boost + throttle view + Medium tier** (2026-11-24): `macx top`, `macx boost` (with `measure`), `macx tune`. Spotlight pause and Low Power Mode are left out: they need root, and Boost writes your own settings, so it runs without sudo. The research found pausing Spotlight saves little.
 - [x] **8. Games** (2026-11-24): `macx games` list, add, forget and play, with Boost, the Metal HUD, heat and load timelines, and how best to run each game. Game Mode can't be forced (no public switch), so macx reports it and reminds you to play full screen.
 - [ ] **10. Risky tier**: triple confirmation, undo script.

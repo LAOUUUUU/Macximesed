@@ -10,6 +10,7 @@ on:
     inputs:
       version: { type: string, required: true }
       sha256: { type: string, required: true }
+      app_sha256: { type: string, required: false, default: "" }
   workflow_dispatch:
     inputs:
       minimum_safe:
@@ -45,6 +46,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           SHA256: ${{ inputs.sha256 }}
+          APP_SHA256: ${{ inputs.app_sha256 }}
           MINIMUM_SAFE: ${{ inputs.minimum_safe }}
           REASON: ${{ inputs.reason }}
           ADVISORY: ${{ inputs.advisory }}
@@ -62,6 +64,10 @@ jobs:
             args+=(--version "${VERSION#v}" --sha256 "$SHA256"
                    --url "https://github.com/$REPO/releases/download/$VERSION/macx-$VERSION-macos-universal.tar.gz"
                    --notes "https://github.com/$REPO/releases/tag/$VERSION")
+            if [ -n "${APP_SHA256:-}" ]; then
+              args+=(--app-sha256 "$APP_SHA256"
+                     --app-url "https://github.com/$REPO/releases/download/$VERSION/Macximesed-${VERSION#v}-app.tar.gz")
+            fi
           fi
           if [ -n "${MINIMUM_SAFE:-}" ]; then args+=(--minimum-safe "$MINIMUM_SAFE" --reason "$REASON"); fi
           if [ -n "${ADVISORY:-}" ]; then args+=(--advisory "$ADVISORY"); fi

@@ -1,0 +1,50 @@
+#!/bin/sh
+# Runs as root after Installer has put Macximesed.app in the staging folder. Moves it into the signed-in
+# user's ~/Applications and links ~/.local/bin/macx, both owned by that user: the same layout as
+# scripts/install.sh, so updates install as the user without root. Then opens the app for first-run setup
+# (Full Disk Access and the background watch are set up there; a package can't grant Full Disk Access).
+#
+# For tests: MACX_PKG_STAGING, MACX_PKG_USER, MACX_PKG_HOME override the folders and user,
+# MACX_PKG_NO_CHOWN=1 skips changing owners, MACX_PKG_NO_OPEN=1 skips opening the app.
+set -eu
+
+STAGING="${MACX_PKG_STAGING:-/Library/Application Support/Macximesed/staging}"
+USER_NAME="${MACX_PKG_USER:-$(stat -f%Su /dev/console)}"
+case "$USER_NAME" in
+    "" | root | loginwindow | _mbsetupuser)
+        echo "Macximesed: nobody is signed in at the screen, so there's no user to install for." >&2
+        exit 1
+        ;;
+esac
+HOME_DIR="${MACX_PKG_HOME:-$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory | sed 's/^NFSHomeDirectory: //')}"
+[ -d "$HOME_DIR" ] || { echo "Macximesed: $USER_NAME's home folder ($HOME_DIR) isn't there." >&2; exit 1; }
+[ -d "$STAGING/Macximesed.app" ] || { echo "Macximesed: the app wasn't unpacked to $STAGING." >&2; exit 1; }
+
+owned() {
+    [ "${MACX_PKG_NO_CHOWN:-0}" = 1 ] || chown -R -h "$USER_NAME:$(id -gn "$USER_NAME")" "$@"
+}
+
+APPS="$HOME_DIR/Applications"
+BIN="$HOME_DIR/.local/bin"
+APP="$APPS/Macximesed.app"
+for d in "$APPS" "$HOME_DIR/.local" "$BIN"; do
+    if [ ! -d "$d" ]; then mkdir "$d" && owned "$d"; fi
+done
+
+# Next to the old app first, then replace it, so a failure leaves the old one.
+NEW="$APPS/.Macximesed.app.new"
+rm -rf "$NEW"
+mv "$STAGING/Macximesed.app" "$NEW"
+owned "$NEW"
+rm -rf "$APP"
+mv "$NEW" "$APP"
+rmdir "$STAGING" 2>/dev/null || true
+
+ln -sfn "$APP/Contents/MacOS/macx" "$BIN/macx"
+owned "$BIN/macx"
+
+if [ "${MACX_PKG_NO_OPEN:-0}" != 1 ]; then
+    UID_NUM=$(id -u "$USER_NAME")
+    launchctl asuser "$UID_NUM" sudo -u "$USER_NAME" /usr/bin/open "$APP" || true
+fi
+echo "Macximesed: installed $APP for $USER_NAME, command $BIN/macx"

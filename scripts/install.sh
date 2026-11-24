@@ -18,29 +18,6 @@ VERSION=$(grep -Eo 'macxVersion = "[^"]+"' "$ROOT/Sources/MacxCore/Update.swift"
 # Build the new bundle next to the old one, then swap, so a running copy keeps working.
 mkdir -p "$APP_DIR" "$BIN_DIR"
 NEW="$APP_DIR/.Macximesed.app.new"
-rm -rf "$NEW"
-mkdir -p "$NEW/Contents/MacOS"
-cp "$BIN" "$NEW/Contents/MacOS/macx"
-cat > "$NEW/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key><string>dev.macximesed.macx</string>
-  <key>CFBundleName</key><string>Macximesed</string>
-  <key>CFBundleExecutable</key><string>macx</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>$VERSION</string>
-  <key>LSMinimumSystemVersion</key><string>15.0</string>
-  <key>LSUIElement</key><true/>
-  <key>NSHumanReadableCopyright</key><string>MIT licence</string>
-  <!-- Set only when opened from Finder, the Dock, open or a login item: then macx starts the Mac app.
-       A shell run, the daemon and scripts never get it, so they stay the command-line tool. -->
-  <key>LSEnvironment</key><dict><key>MACX_APP</key><string>1</string></dict>
-</dict>
-</plist>
-PLIST
 # Sign with an Apple Development identity when there is one, else the local self-signed "Macximesed Local
 # Signing" identity (both are stable, so Full Disk Access sticks across updates); otherwise ad-hoc. MACX_SIGN_IDENTITY overrides ("-" forces ad-hoc).
 IDS="$(security find-identity -p codesigning 2>/dev/null)"
@@ -49,9 +26,8 @@ LOCAL=$(printf '%s\n' "$IDS" | sed -nE 's/^ *[0-9]+\) ([0-9A-F]{40}) "Macximesed
 SIGN="${MACX_SIGN_IDENTITY:-${DEV:-$LOCAL}}"
 SIGN="${SIGN:--}"
 if [ "$SIGN" = "-" ]; then SIGNED_AS="ad-hoc (Full Disk Access won't stick on macOS 27; see README)"; elif [ "$SIGN" = "$LOCAL" ]; then SIGNED_AS="local self-signed identity (Macximesed Local Signing)"; else SIGNED_AS="identity $SIGN"; fi
-# The entitlements let `macx chamber` use the Virtualization framework (no paid Apple account needed).
-codesign --force --sign "$SIGN" --identifier dev.macximesed.macx --entitlements "$(dirname "$0")/macx.entitlements" "$NEW"
-codesign --verify --strict "$NEW"
+# Same bundle as the release builds (Info.plist, Virtualization entitlement for `macx chamber`).
+"$ROOT/scripts/make-app.sh" "$BIN" "$NEW" "$VERSION" "$SIGN"
 rm -rf "$APP"
 mv "$NEW" "$APP"
 

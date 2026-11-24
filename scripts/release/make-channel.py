@@ -10,6 +10,8 @@ import argparse, datetime, hashlib, json, sys
 p = argparse.ArgumentParser()
 p.add_argument("--previous", help="previous channel JSON (may be missing)")
 p.add_argument("--version"), p.add_argument("--url"), p.add_argument("--sha256"), p.add_argument("--notes")
+p.add_argument("--app-url", help="the whole signed app (Macximesed-X.Y.Z-app.tar.gz), for .pkg and .dmg installs")
+p.add_argument("--app-sha256")
 p.add_argument("--minimum-safe"), p.add_argument("--reason"), p.add_argument("--advisory")
 p.add_argument("--clear-floor", action="store_true")
 p.add_argument("--hash-feed", help="feed file to record (its SHA-256 goes into the signed channel)")
@@ -35,6 +37,12 @@ if a.version:
     latest = {"version": a.version, "url": a.url, "sha256": a.sha256.lower()}
     if a.notes:
         latest["notes"] = a.notes
+    if a.app_url or a.app_sha256:
+        if not (a.app_url and a.app_sha256):
+            sys.exit("--app-url and --app-sha256 go together")
+        if not a.app_url.startswith("https://"):
+            sys.exit("the app URL must be https")
+        latest["app"] = {"url": a.app_url, "sha256": a.app_sha256.lower()}
 elif "latest" in prev:
     latest = prev["latest"]
 else:
