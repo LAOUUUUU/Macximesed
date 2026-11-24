@@ -133,3 +133,32 @@ Lao: "25.6 make it like 4 gigs bro like thats to huge". A macOS guest can't be t
 | unzboot | https://github.com/wavevector/unzboot | Distro kernels may be EFI-zboot wrapped |
 | Apple forums: 64K kernel | https://developer.apple.com/forums/thread/780165 | 64K-page kernels fail under VZLinuxBootLoader |
 | Lima PR 2562 | https://github.com/lima-vm/lima/pull/2562 | VZLinuxBootLoader gives the guest no EFI |
+
+## Intel (x86_64), checked 2026-11-23
+Intel Macs stop at macOS 26, so the chamber has to work there too: the `macx` binary is already universal.
+
+**Kernel format:**
+- Apple's docs and the SDK header (`VZLinuxBootLoader.h`, Xcode on this Mac) say only "the URL of Linux kernel" and that it must be used with `VZGenericPlatformConfiguration`. No format is documented for either architecture.
+- Reverse-engineering notes on the framework (kel.bz, 2020) show its x86 loader checking the Linux/x86 boot protocol header: 0xAA55 at 0x1FE and "HdrS" at 0x202, with protocol 2.04 or later. That's a **bzImage**, booted through the standard x86 boot protocol. An ELF `vmlinux` has no such header, so macx refuses it rather than guess.
+- **Alpine's x86_64 `vmlinuz-virt` is a bzImage** (checked on the pinned file, `linux-virt-6.18.65-r0`): 12.7 MB, "MZ" (EFI stub) at 0, 0xAA55, "HdrS", boot protocol 2.15, LOADED_HIGH set. So on Intel the kernel needs no unwrapping; `ChamberKernel.prepare` checks the header and passes it through.
+- Unlike arm64, there's no EFI-zboot on x86: x86 kernels carry their own decompressor inside the bzImage.
+
+**Intel-specific limits:**
+- `VZLinuxBootLoader` is macOS 11+, `VZGenericPlatformConfiguration` macOS 12+ ("generic Intel or ARM virtual machine"), so both are there on macOS 15 and 26 Intel. The guest is x86_64 only: Rosetta for Linux is Apple silicon only.
+- Nested virtualization is "only available on some hardware and software configurations" (SDK header, `isNestedVirtualizationSupported`, macOS 15+). The chamber doesn't need it.
+- **Not tested: an actual boot on an Intel Mac.** A project with the same plan (Ferrodock PR 165, Oct 2026) also calls it untested and "the riskiest part"; its fallback is an uncompressed `vmlinux`, which our reading of the loader says won't work.
+
+**CI:** GitHub's hosted macOS runners are themselves VMs. Apple-silicon runners can't start VMs at all (runner-images 9254, 9460: "an architectural issue"). Users report hypervisor support on the Intel runners, but nothing from GitHub confirms Virtualization.framework can boot a guest there, so **the macos-26-intel job can build and run the unit tests, not boot the chamber**. A boot test needs a real Intel Mac.
+
+**Downloads:** the x86_64 set is 15 files, 52.0 MB (`data/chamber/manifest-x86_64.json`), same Alpine 3.24.4 and package versions as aarch64; the minirootfs is 3.7 MB and linux-virt 44.6 MB.
+
+| Source | URL | Key takeaway |
+|---|---|---|
+| Apple: VZLinuxBootLoader | https://developer.apple.com/documentation/virtualization/vzlinuxbootloader | No kernel format given; needs VZGenericPlatformConfiguration |
+| Apple: VZGenericPlatformConfiguration | https://developer.apple.com/documentation/virtualization/vzgenericplatformconfiguration | Generic Intel or ARM VM; nested virtualization only on some configurations |
+| Notes on Virtualization.Framework (kel.bz) | https://kel.bz/post/virtualization-framework-reversing/ | x86 loader checks 0xAA55, "HdrS", protocol 2.04+ (bzImage) |
+| Linux x86 boot protocol | https://docs.kernel.org/arch/x86/boot.html | Header fields: 0x1FE, 0x202, 0x206 version, 0x211 loadflags |
+| Ferrodock PR 165 | https://github.com/manimovassagh/Ferrodock/pull/165 | Same bzImage plan, also untested on Intel |
+| runner-images 9254 | https://github.com/actions/runner-images/issues/9254 | No nested virtualization on arm64 runners |
+| runner-images 9460 | https://github.com/actions/runner-images/issues/9460 | Hypervisor reported on Intel runners only |
+| Alpine v3.24 x86_64 APKINDEX | https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/APKINDEX.tar.gz | Package versions and sizes |

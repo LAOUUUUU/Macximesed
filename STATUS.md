@@ -28,7 +28,7 @@ Run a suspicious file in a throwaway macOS VM with no network, judge it on the r
 - [x] Boot test (2026-11-24): verified Alpine downloads, zboot kernel unwrapped, booted with no disk or network, ran a pretend stealer in 1.6 s, judged *DON'T OPEN THIS* from the real trace.
 - [ ] `macx chamber setup`: download and verify in Swift (signature + hashes, pinned manifest), unwrap the kernel, store about 60 MB. Needs the virtualization entitlement added to the app's signing (scripts/install.sh).
 - [ ] `macx chamber run FILE`: build the initramfs with CPIOArchive (stand-ins, bait files, agent, sample), boot, collect the trace, judge, quarantine.
-- [ ] Intel Macs: x86_64 manifest and kernel format.
+- [x] Intel Macs, data side: x86_64 manifest pinned (52 MB), kernel check `ChamberKernel` (bzImage on Intel, EFI-zboot unwrapped on Apple silicon). Booting on a real Intel Mac is untested; CI can't boot VMs.
 - [ ] Hints from `macx check` and `guard inspect` when the verdict is *partly unknown*.
 
 ## Check on macOS 27.3 (expected early December 2026)
