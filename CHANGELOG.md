@@ -5,6 +5,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Added
+- **Updates can't cost Full Disk Access:** they never install as root, are held back if the signing identity is missing, and roll back if the app's designated requirement changed after re-signing (checked with the real codesign on a copy of the installed app). The background watch restarts itself on the new binary after an update (exit 75; launchd relaunches it), so no sudo restart is needed.
 - **`macx top`** (step 7): live throttle view with thermal state and pressure, a heat and load strip, and the busiest processes by real CPU time (libproc `proc_pid_rusage`).
 - **`macx boost`** (step 7): on, off, status, measure. Background priority for your busiest other apps (`setpriority PRIO_DARWIN_BG`, the call `taskpolicy -b` makes), App Nap off for the focus app, Reduce Transparency and Reduce Motion, caffeinate. A crash-safe ledger saves each change before it's made. Apple's and other users' processes are never touched. `measure` compares a CPU benchmark with and without Boost; on the first real run it found no difference (−1.8%, within noise), because nothing was competing hard.
 - **`macx tune`** (step 7, the Medium tier): reversible settings and switching off third-party launch agents, each with its own ledger.

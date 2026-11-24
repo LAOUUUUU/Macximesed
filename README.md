@@ -90,7 +90,12 @@ How it stays safe:
 - **Downloads are checked.** A download must match the signed SHA-256, be a Mach-O called `macx`, and report the signed version. It must also be newer than what's installed.
 - **Swaps are safe.** The new binary is swapped in atomically, and the old one is kept as `macx.previous`.
 
-Updates keep the app's signature (the updater re-signs with the same identity), so Full Disk Access carries over.
+Updates keep the app's signature, so Full Disk Access carries over. The updater re-signs with the same identity and the Virtualization entitlement, and three guards make sure an update can never cost the app its permissions:
+- **It never installs as root.** Under `sudo` your signing identity (in your login keychain) isn't reachable; a security update waits for your next `macx` run without sudo.
+- **The identity has to be there first.** If the app is signed with a stable identity and that identity can't be found, the update is held back and macx says why.
+- **It checks afterwards.** macOS ties Full Disk Access to the app's code requirement. If that changed after re-signing, the previous version goes back automatically.
+
+The background watch notices when its binary was updated and restarts on the new version by itself (within 30 s, no sudo).
 
 ## Build from source
 ```bash

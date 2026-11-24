@@ -84,6 +84,7 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
 
 public enum UpdateError: Error, Equatable, CustomStringConvertible {
     case badSignature, badChannel, hashMismatch, notAProgram, versionMismatch, notNewer
+    case needsUser, signingIdentityMissing, identityChanged
     case download(String)
 
     public var description: String {
@@ -94,6 +95,10 @@ public enum UpdateError: Error, Equatable, CustomStringConvertible {
         case .notAProgram: "the download wasn't a macx program"
         case .versionMismatch: "the downloaded macx reports a different version than the signed file says"
         case .notNewer: "the download isn't newer than what's installed"
+        case .needsUser: "updates install as you, not as root (run `macx update` without sudo)"
+        case .signingIdentityMissing:
+            "the identity Macximesed.app is signed with isn't available, so the update was held back (installing it would cost the app its Full Disk Access)"
+        case .identityChanged: "after the update macOS would have seen a different app, so the previous version was put back"
         case .download(let m): "the download failed: \(m)"
         }
     }
@@ -191,8 +196,29 @@ public struct UpdateDecision: Sendable, Equatable {
 public struct UpdateInstaller: Sendable {
     /// What version a binary reports (`macx --version`). Injected so tests don't need a real macx.
     var versionOf: @Sendable (URL) -> String?
+    var signer: AppSigner
+    var isRoot: Bool
+    /// Where the previous binary of an app bundle is kept (it can't sit inside the bundle).
+    var previousFolder: URL
 
-    public init(versionOf: @escaping @Sendable (URL) -> String? = UpdateInstaller.reportedVersion) { self.versionOf = versionOf }
+    public init(
+        versionOf: @escaping @Sendable (URL) -> String? = UpdateInstaller.reportedVersion, signer: AppSigner = RealAppSigner(),
+        isRoot: Bool = geteuid() == 0,
+        previousFolder: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+            "Library/Application Support/Macximesed")
+    ) {
+        self.versionOf = versionOf
+        self.signer = signer
+        self.isRoot = isRoot
+        self.previousFolder = previousFolder
+    }
+
+    /// Signed with a real identity (its requirement names a certificate), so Full Disk Access survives re-signing
+    /// with the same identity. An ad-hoc requirement is a cdhash: it changes with every build anyway.
+    public static func isStable(_ requirement: String?) -> Bool {
+        guard let r = requirement else { return false }
+        return r.contains("certificate leaf") || r.contains("anchor apple")
+    }
 
     public static func reportedVersion(_ binary: URL) -> String? {
         let p = Process()
@@ -213,8 +239,16 @@ public struct UpdateInstaller: Sendable {
     }
 
     public func install(_ tarball: Data, sha256 expected: String, version: String, over target: URL, installed: SemVer) throws {
+        // As root, the user's signing identity (in their login keychain) isn't reachable and files would end up
+        // root-owned: the update would cost the app its Full Disk Access. It waits for the user.
+        guard !isRoot else { throw UpdateError.needsUser }
         guard sha256(tarball) == expected.lowercased() else { throw UpdateError.hashMismatch }
         guard let v = SemVer(version), v > installed else { throw UpdateError.notNewer }
+        // Inside the app: check the identity is here *before* touching anything.
+        let bundleBefore = Self.enclosingApp(of: target)
+        let requirementBefore = bundleBefore.flatMap(signer.designatedRequirement(of:))
+        let identity = signer.preferredIdentity()
+        if Self.isStable(requirementBefore), identity == nil { throw UpdateError.signingIdentityMissing }
 
         let fm = FileManager.default
         let work = fm.temporaryDirectory.appendingPathComponent("macx-update-\(UUID().uuidString)", isDirectory: true)
@@ -247,8 +281,7 @@ public struct UpdateInstaller: Sendable {
         let bundle = Self.enclosingApp(of: target)
         if fm.fileExists(atPath: target.path) {
             // Inside an app the previous binary can't sit next to the new one (it would break the bundle's seal).
-            let previousDir =
-                bundle == nil ? dir : fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Macximesed")
+            let previousDir = bundle == nil ? dir : previousFolder
             try? fm.createDirectory(at: previousDir, withIntermediateDirectories: true)
             let previous = previousDir.appendingPathComponent("macx.previous")
             try? fm.removeItem(at: previous)
@@ -258,7 +291,17 @@ public struct UpdateInstaller: Sendable {
             try? fm.removeItem(at: staged)
             throw UpdateError.download("couldn't replace \(target.path)")
         }
-        if let bundle { try Self.reseal(bundle, version: version) }
+        guard let bundle else { return }
+        try Self.reseal(bundle, version: version, identity: identity, signer: signer)
+        // macOS ties Full Disk Access to this requirement. If it moved, put the previous version back.
+        if Self.isStable(requirementBefore), signer.designatedRequirement(of: bundle) != requirementBefore {
+            let previous = previousFolder.appendingPathComponent("macx.previous")
+            let back = dir.appendingPathComponent(".macx.back-\(UUID().uuidString)")
+            if (try? fm.copyItem(at: previous, to: back)) != nil, rename(back.path, target.path) == 0 {
+                try? Self.reseal(bundle, version: installed.description, identity: identity, signer: signer)
+            }
+            throw UpdateError.identityChanged
+        }
     }
 
     /// `…/Macximesed.app` when the binary is the app's main executable (`Contents/MacOS/...`).
@@ -283,7 +326,7 @@ public struct UpdateInstaller: Sendable {
 
     /// After swapping the executable, update the bundle's version and sign the bundle again (ad-hoc), so
     /// its signature covers the new binary and Info.plist.
-    static func reseal(_ app: URL, version: String) throws {
+    static func reseal(_ app: URL, version: String, identity: SigningIdentity?, signer: AppSigner) throws {
         let infoURL = app.appendingPathComponent("Contents/Info.plist")
         if let data = try? Data(contentsOf: infoURL),
             var info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
@@ -294,17 +337,14 @@ public struct UpdateInstaller: Sendable {
         let id =
             (try? PropertyListSerialization.propertyList(from: Data(contentsOf: infoURL), format: nil) as? [String: Any])?[
                 "CFBundleIdentifier"] as? String ?? "dev.macximesed.macx"
-        // Same identity install.sh used, so the app keeps its Full Disk Access after the update.
-        let sign = SigningIdentity.codesignArgument(SigningIdentity.preferred())
-        // Keep the entitlements too, or an update would take the chamber's Virtualization permission away.
+        // Same identity install.sh used, so the app keeps its Full Disk Access after the update. Keep the entitlements
+        // too, or an update would take the chamber's Virtualization permission away.
         let entitlements = FileManager.default.temporaryDirectory.appendingPathComponent("macx-\(UUID().uuidString).entitlements")
         try Data(SigningIdentity.entitlementsPlist.utf8).write(to: entitlements)
         defer { try? FileManager.default.removeItem(at: entitlements) }
-        let args = SigningIdentity.resealArguments(sign: sign, id: id, app: app, entitlements: entitlements)
-        guard ProcessRunner.capture("/usr/bin/codesign", args)?.status == 0 else {
-            throw UpdateError.download("updated, but couldn't re-sign \(app.path)")
-        }
+        try signer.sign(app, identity: identity, bundleID: id, entitlements: entitlements)
     }
+
 }
 
 // MARK: - Fetching
@@ -409,4 +449,56 @@ public struct SigningIdentity: Sendable, Equatable {
 
     /// What to pass to `codesign --sign`.
     public static func codesignArgument(_ identity: SigningIdentity?) -> String { identity?.hash ?? "-" }
+}
+
+/// codesign, behind a seam so tests don't sign anything.
+public protocol AppSigner: Sendable {
+    /// `codesign -d -r-`: the requirement macOS ties Full Disk Access to.
+    func designatedRequirement(of app: URL) -> String?
+    func preferredIdentity() -> SigningIdentity?
+    func sign(_ app: URL, identity: SigningIdentity?, bundleID: String, entitlements: URL) throws
+}
+
+public struct RealAppSigner: AppSigner {
+    public init() {}
+
+    public func designatedRequirement(of app: URL) -> String? {
+        guard let out = ProcessRunner.capture("/usr/bin/codesign", ["-d", "-r-", app.path]) else { return nil }
+        let text = out.stdout + out.stderr
+        return text.split(separator: "\n").first { $0.hasPrefix("designated => ") }.map { String($0.dropFirst("designated => ".count)) }
+    }
+
+    public func preferredIdentity() -> SigningIdentity? { SigningIdentity.preferred() }
+
+    public func sign(_ app: URL, identity: SigningIdentity?, bundleID: String, entitlements: URL) throws {
+        let args = SigningIdentity.resealArguments(
+            sign: SigningIdentity.codesignArgument(identity), id: bundleID, app: app, entitlements: entitlements)
+        guard ProcessRunner.capture("/usr/bin/codesign", args)?.status == 0 else {
+            throw UpdateError.download("updated, but couldn't re-sign \(app.path)")
+        }
+    }
+}
+
+/// The identity of a file on disk (inode, size, change time). The updater swaps the binary by renaming a new file
+/// over it, so a long-running macx (the background watch) can tell it's been updated and restart.
+public struct BinaryStamp: Sendable, Equatable {
+    var inode: UInt64
+    var size: Int64
+    var mtime: Int
+
+    public let path: String
+
+    public init?(of url: URL) {
+        var st = stat()
+        guard stat(url.path, &st) == 0 else { return nil }
+        inode = st.st_ino
+        size = st.st_size
+        mtime = st.st_mtimespec.tv_sec
+        path = url.path
+    }
+
+    public func changed() -> Bool {
+        guard let now = BinaryStamp(of: URL(fileURLWithPath: path)) else { return true }
+        return now.inode != inode || now.size != size || now.mtime != mtime
+    }
 }

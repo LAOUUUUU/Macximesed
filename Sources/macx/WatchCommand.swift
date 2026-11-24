@@ -100,6 +100,23 @@ struct Watch: ParsableCommand {
 
         let screenUser = background ? WatchUser.resolve() : nil
         let screen = ScreenNotifier(user: screenUser, honoursPause: background)
+        // After an update swaps the binary, restart on the new version: exit non-zero and launchd starts it again
+        // (KeepAlive SuccessfulExit = false). No sudo needed, and the watch is never left on old code.
+        if background, let exe = Responsibility.executablePath.map({ URL(fileURLWithPath: $0).resolvingSymlinksInPath() }),
+            let stamp = BinaryStamp(of: exe)
+        {
+            let timer = DispatchSource.makeTimerSource(queue: Self.signalQueue)
+            timer.schedule(deadline: .now() + 30, repeating: 30)
+            timer.setEventHandler {
+                guard stamp.changed() else { return }
+                print("macx was updated; restarting on the new version.")
+                try? DaemonStatus(state: .starting, message: "Restarting on the updated macx.").write()
+                kill(child, SIGTERM)
+                Darwin.exit(75)
+            }
+            timer.resume()
+            Self.keepTimer = timer
+        }
         let notify: @Sendable (WatchAlert) -> Void = { screen.send($0) }
         if background { try? DaemonStatus(state: .starting, message: "Starting eslogger.").write() }
         print("Watching (\(WatchRules.events.joined(separator: ", "))). Showing \(minSeverity) and above. Ctrl-C stops.")
@@ -194,6 +211,7 @@ struct Watch: ParsableCommand {
     }
 
     nonisolated(unsafe) static var keep: [DispatchSourceSignal] = []
+    nonisolated(unsafe) static var keepTimer: DispatchSourceTimer?
     static let signalQueue = DispatchQueue(label: "macx.watch.signals")
 
     static func printAlert(_ a: WatchAlert) {
