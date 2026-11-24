@@ -37,6 +37,8 @@ public struct ESEvent: Sendable, Equatable {
     public var itemURL: String?
     public var executablePath: String?
     public var instigator: ESProcessInfo?
+    /// When it happened (eslogger's `time`), if the line had one.
+    public var time: Date?
 
     public static func parse(_ line: String) -> ESEvent? {
         guard let data = line.data(using: .utf8), let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -44,6 +46,7 @@ public struct ESEvent: Sendable, Equatable {
         else { return nil }
         let body = rawBody as? [String: Any] ?? [:]
         var e = ESEvent(kind: kind, process: ESProcessInfo.parse(root["process"]))
+        e.time = (root["time"] as? String).flatMap(Self.parseTime)
 
         func path(_ any: Any?) -> String? { (any as? [String: Any])?["path"] as? String }
         func destination(_ d: [String: Any]) -> String? {
@@ -67,6 +70,8 @@ public struct ESEvent: Sendable, Equatable {
         case "deleteextattr", "setextattr":
             e.filePath = path(body["target"])
             e.extattr = body["extattr"] as? String
+        case "open":
+            e.filePath = path(body["file"])
         case "btm_launch_item_add":
             e.instigator = ESProcessInfo.parse(body["instigator"])
             e.itemURL = (body["item"] as? [String: Any])?["item_url"] as? String
@@ -75,6 +80,14 @@ public struct ESEvent: Sendable, Equatable {
             break
         }
         return e
+    }
+
+    /// eslogger writes nanoseconds ("2026-11-24T10:00:01.250000000Z"), which ISO8601DateFormatter can't read.
+    static func parseTime(_ s: String) -> Date? {
+        let parts = s.dropLast(s.hasSuffix("Z") ? 1 : 0).split(separator: ".", maxSplits: 1)
+        guard let base = parts.first, let whole = ISO8601DateFormatter().date(from: String(base) + "Z") else { return nil }
+        let fraction = parts.count > 1 ? Double("0." + parts[1].prefix(9)) ?? 0 : 0
+        return whole.addingTimeInterval(fraction)
     }
 }
 

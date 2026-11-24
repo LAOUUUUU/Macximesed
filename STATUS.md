@@ -18,6 +18,13 @@ Lao, 2026-11-23: "we release when the anti virus is fully built".
 - [x] **Full Disk Access for macx itself: solved** (2026-11-23). The Full Disk Access entry kept the code requirement from when it was first added (ad-hoc), and switching it off and on never refreshed it. tccd logged `Failed to match existing code requirement`. Fix: `sudo tccutil reset SystemPolicyAllFiles dev.macximesed.macx`, then add the signed app again.
   - [x] Survives rebuilds: after three reinstalls, `sudo macx daemon restart` still reports *watching* (2026-11-23 19:31).
 
+## Detonation chamber (approved 2026-11-24; [spec](specs/detonation-chamber.md), [research](research/detonation-chamber/RESEARCH.md))
+Run a suspicious file in a throwaway macOS VM with no network, judge it on the real Mac, quarantine it if bad.
+- [x] VM-check rule (`vm-check`) in guard, check, persist and watch: catches AMOS's own check.
+- [x] Spike: the self-signed app can use Apple's Virtualization framework (with the `com.apple.security.virtualization` entitlement). The macOS image is 27.2.1, 25.6 GB.
+- [x] Host side: untrusted-log reader, chamber rules (keychain, browser and wallet reads, VM check then quit), verdict, sample pinning, quarantine into an incident case and the undo store.
+- [ ] VM side: `macx chamber setup [--at DIR]` and `macx chamber run FILE`. **Blocked on disk space:** Lao's Mac has 31 GB free; the image plus a guest needs about 50 GB (estimate). Needs space freed or an external disk, and Lao's OK before the 25.6 GB download.
+
 ## Check on macOS 27.3 (expected early December 2026)
 Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.com/news?id=oqng0zjk), 2026-11-16): users are guided to grant only specific folders, there's a new grant prompt and a menu-bar list of apps with access, and grants made before the update stay in effect. Endpoint Security and eslogger aren't mentioned, and the new entitlements are only for backup and assistive-technology apps.
 - [ ] After updating: the background watch still says *watching* (the existing grant should carry over).
