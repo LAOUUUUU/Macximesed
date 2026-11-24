@@ -223,7 +223,7 @@ Three features:
   1. logger and `--verbose`;
   2. report builder, redaction, crash summaries, *Copy* / *Save*;
   3. encryption and the Worker (after Lao sets up the Worker, channel and key);
-  4. beta client (version, verifier roles, per-channel state, Settings switch);
+  4. beta client (version, verifier roles, per-channel state, Settings switch); done 2026-11-24, switch stays off until a beta key is built in;
   5. beta workflows (after Lao makes the beta key and the `beta` environment).
 - [ ] Lao's setup, when we get there:
   - Cloudflare Worker + secret;

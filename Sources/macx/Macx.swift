@@ -23,12 +23,12 @@ enum Entry {
                 return
             }
             startLog(.app, logSettings)
-            Log.info("app", "Macximesed \(macxVersion) started")
+            Log.info("app", "Macximesed \(BuildVersion.current) started")
             MainActor.assumeIsolated { MacxApp.run() }
         }
         Responsibility.becomeOwnResponsibleProcessIfNeeded()
         startLog(LogRole.of(arguments: args), logSettings)
-        Log.debug("start", "macx \(macxVersion), command: \(LogRole.commandName(args)), uid \(geteuid())")
+        Log.debug("start", "macx \(BuildVersion.current), command: \(LogRole.commandName(args)), uid \(geteuid())")
         UpdateCheck.runIfDue(arguments: args)
         // A game session whose game quit while macx wasn't watching (crash, closed terminal) leaves Boost on.
         if geteuid() != 0, GameSessionGuard.recoverIfNeeded() {
@@ -54,7 +54,7 @@ struct Macx: ParsableCommand {
             Add -v (or -vv for even more) to any command to see what it's doing. The details also go to \
             ~/Library/Logs/Macximesed/cli.log. MACX_LOG=debug does the same without printing them.
             """,
-        version: macxVersion,
+        version: BuildVersion.current.description,
         subcommands: [
             Scan.self, Clean.self, Apps.self, Check.self, Persist.self, Guard.self, Watch.self, Daemon.self, Alerts.self, Net.self,
             Chamber.self, Top.self, BoostCommand.self, TuneCommand.self, GamesCommand.self, ESPassthrough.self,

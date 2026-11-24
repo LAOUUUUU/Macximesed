@@ -5,7 +5,8 @@ import Foundation
 
 public let macxVersion = "0.3.0"
 
-/// Semantic version: MAJOR.MINOR.PATCH with an optional -pre.release part (sorted before the release).
+/// Semantic version: MAJOR.MINOR.PATCH with an optional -pre.release part (sorted before the release). A `+build`
+/// part is ignored, as SemVer says: it never changes the order.
 public struct SemVer: Comparable, Sendable, CustomStringConvertible {
     public var major: Int, minor: Int, patch: Int
     public var pre: [String]
@@ -13,6 +14,7 @@ public struct SemVer: Comparable, Sendable, CustomStringConvertible {
     public init?(_ text: String) {
         var t = text.trimmingCharacters(in: .whitespaces)
         if t.hasPrefix("v") { t.removeFirst() }
+        if let plus = t.firstIndex(of: "+") { t = String(t[..<plus]) }
         let parts = t.split(separator: "-", maxSplits: 1).map(String.init)
         let nums = parts.first?.split(separator: ".").map { Int($0) } ?? []
         guard nums.count == 3, let a = nums[0], let b = nums[1], let c = nums[2] else { return nil }
@@ -70,6 +72,8 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
     public var latest: Release
     public var minimumSafe: Floor?
     public var hashFeed: Feed?
+    /// Absent in stable files. A file that says anything else (a beta file) is never read as the stable channel.
+    public var channel: String?
 
     public init(schema: Int, sequence: Int, published: Date, expires: Date, latest: Release, minimumSafe: Floor?, hashFeed: Feed? = nil) {
         self.schema = schema
@@ -84,7 +88,7 @@ public struct UpdateChannel: Codable, Sendable, Equatable {
 
 public enum UpdateError: Error, Equatable, CustomStringConvertible {
     case badSignature, badChannel, hashMismatch, notAProgram, versionMismatch, notNewer
-    case needsUser, signingIdentityMissing, identityChanged
+    case needsUser, signingIdentityMissing, identityChanged, betaNotOpen
     case download(String)
 
     public var description: String {
@@ -99,6 +103,7 @@ public enum UpdateError: Error, Equatable, CustomStringConvertible {
         case .signingIdentityMissing:
             "the identity Macximesed.app is signed with isn't available, so the update was held back (installing it would cost the app its Full Disk Access)"
         case .identityChanged: "after the update macOS would have seen a different app, so the previous version was put back"
+        case .betaNotOpen: "the beta channel isn't open yet (its signing key hasn't been set up), so you stay on stable"
         case .download(let m): "the download failed: \(m)"
         }
     }
@@ -108,6 +113,9 @@ public enum UpdateError: Error, Equatable, CustomStringConvertible {
 /// `release` environment (and Lao's offline backup). Listing two keys here is how a key is rotated.
 public enum UpdateKeys {
     public static let trusted: [Data] = ["yhabe5LDBMXnyr53BMKFv2RThR7fnng6MvI3ZmJQJgs="].compactMap { Data(base64Encoded: $0) }
+    /// Keys for the beta file only. Its private key signs dev builds automatically in the `beta` environment, so it is
+    /// never trusted for stable files (a test checks the lists don't overlap). Empty until that key exists.
+    public static let beta: [Data] = [String]().compactMap { Data(base64Encoded: $0) }
 }
 
 public struct ChannelVerifier: Sendable {
@@ -115,14 +123,19 @@ public struct ChannelVerifier: Sendable {
     public init(publicKeys: [Data] = UpdateKeys.trusted) { self.publicKeys = publicKeys }
 
     public func verify(json: Data, signature: Data) throws -> UpdateChannel {
-        let ok = publicKeys.contains { key in
-            (try? Curve25519.Signing.PublicKey(rawRepresentation: key))?.isValidSignature(signature, for: json) ?? false
-        }
-        guard ok else { throw UpdateError.badSignature }
+        guard Self.signed(json, signature, by: publicKeys) else { throw UpdateError.badSignature }
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
-        guard let c = try? dec.decode(UpdateChannel.self, from: json), c.schema == 1 else { throw UpdateError.badChannel }
+        guard let c = try? dec.decode(UpdateChannel.self, from: json), c.schema == 1, c.channel == nil || c.channel == "stable" else {
+            throw UpdateError.badChannel
+        }
         return c
+    }
+
+    static func signed(_ json: Data, _ signature: Data, by keys: [Data]) -> Bool {
+        keys.contains { key in
+            (try? Curve25519.Signing.PublicKey(rawRepresentation: key))?.isValidSignature(signature, for: json) ?? false
+        }
     }
 }
 
@@ -130,14 +143,37 @@ public struct ChannelVerifier: Sendable {
 
 public struct UpdateState: Codable, Sendable, Equatable {
     public var lastCheck: Date?
+    /// The highest stable sequence seen.
     public var lastSequence: Int
     /// Turns off the "new version" notices. The security-floor check can't be turned off.
     public var noticesOff: Bool
+    /// Which builds this Mac takes. The stable file (floor, hash feed) is read on both.
+    public var channel: ReleaseChannel
+    /// The highest beta sequence seen: kept apart from the stable one, since the two files count separately.
+    public var betaSequence: Int
 
     public init(lastCheck: Date? = nil, lastSequence: Int = 0, noticesOff: Bool = false) {
         self.lastCheck = lastCheck
         self.lastSequence = lastSequence
         self.noticesOff = noticesOff
+        channel = .stable
+        betaSequence = 0
+    }
+
+    // State files written before the beta channel have no channel or beta sequence: they read as stable.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lastCheck = try c.decodeIfPresent(Date.self, forKey: .lastCheck)
+        lastSequence = try c.decodeIfPresent(Int.self, forKey: .lastSequence) ?? 0
+        noticesOff = try c.decodeIfPresent(Bool.self, forKey: .noticesOff) ?? false
+        channel = (try? c.decodeIfPresent(ReleaseChannel.self, forKey: .channel)) ?? .stable
+        betaSequence = try c.decodeIfPresent(Int.self, forKey: .betaSequence) ?? 0
+    }
+
+    /// Beta needs a beta key to check its file against; without one there's nothing it could install.
+    public mutating func switchChannel(to new: ReleaseChannel, betaKeys: [Data] = UpdateKeys.beta) throws {
+        if new == .beta, betaKeys.isEmpty { throw UpdateError.betaNotOpen }
+        channel = new
     }
 
     public func isCheckDue(now: Date) -> Bool { lastCheck.map { now.timeIntervalSince($0) >= 24 * 3600 } ?? true }
@@ -160,6 +196,15 @@ public struct UpdateState: Codable, Sendable, Equatable {
     }
 }
 
+/// The build an update would install, from whichever signed file named it.
+public struct UpdateTarget: Sendable, Equatable {
+    public var version: BuildVersion
+    public var url: String
+    public var sha256: String
+    /// From the beta file. A beta target is only ever offered, never forced.
+    public var beta: Bool
+}
+
 public struct UpdateDecision: Sendable, Equatable {
     public enum Action: Sendable, Equatable {
         case none
@@ -169,24 +214,64 @@ public struct UpdateDecision: Sendable, Equatable {
 
     public var action: Action
     public var warnings: [String]
+    public var target: UpdateTarget? = nil
 
+    /// Stable only, for a release build.
     public static func decide(_ c: UpdateChannel, installed: SemVer, state: UpdateState, now: Date) -> UpdateDecision {
+        var s = state
+        s.channel = .stable
+        return decide(stable: c, beta: nil, installed: .release(installed), state: s, now: now)
+    }
+
+    /// The stable file always counts (its security floor applies on beta too); the beta file only on beta Macs.
+    /// A newer stable wins over a dev build on an older base; otherwise a beta Mac gets the newest dev build.
+    public static func decide(stable c: UpdateChannel?, beta b: BetaChannel?, installed: BuildVersion, state: UpdateState, now: Date)
+        -> UpdateDecision
+    {
         var warnings: [String] = []
-        if c.sequence < state.lastSequence {
-            warnings.append("The update file is older than one macx has already seen, so it was ignored (a rollback attempt?).")
-            return UpdateDecision(action: .none, warnings: warnings)
+        var stableTarget: UpdateTarget?
+        var floorReason: String?
+        if let c {
+            if c.sequence < state.lastSequence {
+                warnings.append("The update file is older than one macx has already seen, so it was ignored (a rollback attempt?).")
+            } else {
+                let stale = now > c.expires
+                if stale {
+                    warnings.append(
+                        "The update file is out of date (it expired \(ISO8601DateFormatter().string(from: c.expires))), so it can't force an update."
+                    )
+                }
+                if let latest = SemVer(c.latest.version), BuildVersion.release(latest).replaces(installed) {
+                    stableTarget = UpdateTarget(version: .release(latest), url: c.latest.url, sha256: c.latest.sha256, beta: false)
+                    if !stale, let floor = c.minimumSafe, let f = SemVer(floor.version), installed.base < f { floorReason = floor.reason }
+                }
+            }
         }
-        let stale = now > c.expires
-        if stale {
-            warnings.append(
-                "The update file is out of date (it expired \(ISO8601DateFormatter().string(from: c.expires))), so it can't force an update."
-            )
+        if let stableTarget, let floorReason {
+            return UpdateDecision(
+                action: .force(stableTarget.version.description, reason: floorReason), warnings: warnings, target: stableTarget)
         }
-        guard let latest = SemVer(c.latest.version), latest > installed else { return UpdateDecision(action: .none, warnings: warnings) }
-        if !stale, let floor = c.minimumSafe, let f = SemVer(floor.version), installed < f {
-            return UpdateDecision(action: .force(c.latest.version, reason: floor.reason), warnings: warnings)
+
+        var betaTarget: UpdateTarget?
+        if state.channel == .beta, let b {
+            if b.sequence < state.betaSequence {
+                warnings.append("The beta file is older than one macx has already seen, so it was ignored (a rollback attempt?).")
+            } else if now > b.expires {
+                warnings.append(
+                    "The beta file is out of date (it expired \(ISO8601DateFormatter().string(from: b.expires))), so no beta build is offered."
+                )
+            } else if let v = b.version, v.replaces(installed) {
+                betaTarget = UpdateTarget(version: v, url: b.build.url, sha256: b.build.sha256, beta: true)
+            }
         }
-        return UpdateDecision(action: .notify(c.latest.version), warnings: warnings)
+
+        let pick: UpdateTarget? =
+            switch (stableTarget, betaTarget) {
+            case (let s?, let d?): s.version.base > d.version.base ? s : d
+            case (let s, let d): s ?? d
+            }
+        guard let pick else { return UpdateDecision(action: .none, warnings: warnings) }
+        return UpdateDecision(action: .notify(pick.version.description), warnings: warnings, target: pick)
     }
 }
 
@@ -239,11 +324,18 @@ public struct UpdateInstaller: Sendable {
     }
 
     public func install(_ tarball: Data, sha256 expected: String, version: String, over target: URL, installed: SemVer) throws {
+        guard let v = SemVer(version) else { throw UpdateError.notNewer }
+        try install(tarball, sha256: expected, expecting: .release(v), over: target, installed: .release(installed))
+    }
+
+    public func install(_ tarball: Data, sha256 expected: String, expecting v: BuildVersion, over target: URL, installed: BuildVersion)
+        throws
+    {
         // As root, the user's signing identity (in their login keychain) isn't reachable and files would end up
         // root-owned: the update would cost the app its Full Disk Access. It waits for the user.
         guard !isRoot else { throw UpdateError.needsUser }
         guard sha256(tarball) == expected.lowercased() else { throw UpdateError.hashMismatch }
-        guard let v = SemVer(version), v > installed else { throw UpdateError.notNewer }
+        guard v.replaces(installed) else { throw UpdateError.notNewer }
         // Inside the app: check the identity is here *before* touching anything.
         let bundleBefore = Self.enclosingApp(of: target)
         let requirementBefore = bundleBefore.flatMap(signer.designatedRequirement(of:))
@@ -271,7 +363,7 @@ public struct UpdateInstaller: Sendable {
             let head = try? FileHandle(forReadingFrom: binary).read(upToCount: 4096), !MachO.architectures(of: head).isEmpty
         else { throw UpdateError.notAProgram }
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
-        guard let reported = versionOf(binary), SemVer(reported) == v else { throw UpdateError.versionMismatch }
+        guard let reported = versionOf(binary), v.matches(reported: reported) else { throw UpdateError.versionMismatch }
 
         // Copy next to the target, then rename over it: the swap is atomic, and on any failure the old binary stays.
         let dir = target.deletingLastPathComponent()
@@ -292,13 +384,13 @@ public struct UpdateInstaller: Sendable {
             throw UpdateError.download("couldn't replace \(target.path)")
         }
         guard let bundle else { return }
-        try Self.reseal(bundle, version: version, identity: identity, signer: signer)
+        try Self.reseal(bundle, version: v, identity: identity, signer: signer)
         // macOS ties Full Disk Access to this requirement. If it moved, put the previous version back.
         if Self.isStable(requirementBefore), signer.designatedRequirement(of: bundle) != requirementBefore {
             let previous = previousFolder.appendingPathComponent("macx.previous")
             let back = dir.appendingPathComponent(".macx.back-\(UUID().uuidString)")
             if (try? fm.copyItem(at: previous, to: back)) != nil, rename(back.path, target.path) == 0 {
-                try? Self.reseal(bundle, version: installed.description, identity: identity, signer: signer)
+                try? Self.reseal(bundle, version: installed, identity: identity, signer: signer)
             }
             throw UpdateError.identityChanged
         }
@@ -315,9 +407,14 @@ public struct UpdateInstaller: Sendable {
     /// The new Info.plist: the new version, and the switch that opens the Mac app from Finder (`LSEnvironment
     /// MACX_APP=1`), which bundles installed before the app existed don't have.
     static func updatedInfo(_ info: [String: Any], version: String) -> [String: Any] {
+        updatedInfo(info, version: SemVer(version).map { BuildVersion.release($0) } ?? .release(SemVer(macxVersion)!))
+    }
+
+    /// A dev build keeps its base as the short version (Finder expects numbers) and its commit as the build.
+    static func updatedInfo(_ info: [String: Any], version: BuildVersion) -> [String: Any] {
         var info = info
-        info["CFBundleShortVersionString"] = version
-        info["CFBundleVersion"] = version
+        info["CFBundleShortVersionString"] = version.base.description
+        info["CFBundleVersion"] = version.description
         var env = info["LSEnvironment"] as? [String: String] ?? [:]
         env["MACX_APP"] = "1"
         info["LSEnvironment"] = env
@@ -326,7 +423,7 @@ public struct UpdateInstaller: Sendable {
 
     /// After swapping the executable, update the bundle's version and sign the bundle again (ad-hoc), so
     /// its signature covers the new binary and Info.plist.
-    static func reseal(_ app: URL, version: String, identity: SigningIdentity?, signer: AppSigner) throws {
+    static func reseal(_ app: URL, version: BuildVersion, identity: SigningIdentity?, signer: AppSigner) throws {
         let infoURL = app.appendingPathComponent("Contents/Info.plist")
         if let data = try? Data(contentsOf: infoURL),
             var info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
@@ -351,11 +448,19 @@ public struct UpdateInstaller: Sendable {
 
 public enum UpdateClient {
     public static let channelURL = URL(string: "https://laouuuuu.github.io/Macximesed/channel/v1.json")!
+    /// The beta file sits on the rolling `dev` prerelease, never on the Pages site the stable channel lives on.
+    public static let betaURL = URL(string: "https://github.com/LAOUUUUU/Macximesed/releases/download/dev/beta-v1.json")!
 
     /// Fetches the channel file and its signature, and verifies it. Short timeout: this runs before commands.
     public static func fetchChannel(timeout: TimeInterval = 5, verifier: ChannelVerifier = ChannelVerifier()) throws -> UpdateChannel {
         let json = try get(channelURL, timeout: timeout)
         let sig = try get(channelURL.appendingPathExtension("sig"), timeout: timeout)
+        return try verifier.verify(json: json, signature: sig)
+    }
+
+    public static func fetchBeta(timeout: TimeInterval = 5, verifier: BetaVerifier = BetaVerifier()) throws -> BetaChannel {
+        let json = try get(betaURL, timeout: timeout)
+        let sig = try get(betaURL.appendingPathExtension("sig"), timeout: timeout)
         return try verifier.verify(json: json, signature: sig)
     }
 
@@ -366,7 +471,7 @@ public enum UpdateClient {
         config.httpCookieAcceptPolicy = .never
         let session = URLSession(configuration: config)
         var req = URLRequest(url: url)
-        req.setValue("macx/\(macxVersion)", forHTTPHeaderField: "User-Agent")
+        req.setValue("macx/\(BuildVersion.current)", forHTTPHeaderField: "User-Agent")
         nonisolated(unsafe) var result: Result<Data, Error> = .failure(UpdateError.download("no answer"))
         let done = DispatchSemaphore(value: 0)
         session.dataTask(with: req) { data, response, error in

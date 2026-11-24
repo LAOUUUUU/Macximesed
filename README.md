@@ -109,6 +109,13 @@ Updates keep the app's signature, so Full Disk Access carries over. The updater 
 
 The background watch notices when its binary was updated and restarts on the new version by itself (within 30 s, no sudo).
 
+#### Beta builds (not open yet)
+`macx update --channel beta` (or Settings > Updates > *Get beta builds*) switches to a build of every change to `dev`, named by its commit: `macx --version` says `dev-1a2b3c4`. It stays switched off until the beta signing key exists.
+- **Its own key and file.** The beta file (`beta-v1.json` on the rolling `dev` prerelease) is signed with a separate key that macx never accepts for the stable channel, and the stable key's files are never read as beta. A beta file can't carry the security floor or the malware feed. It has its own sequence and expires after 30 days.
+- **Signed automatically.** Every change that passes the tests is published without a person checking it, so pick beta only if you want the newest changes first.
+- **Security updates still apply.** Beta Macs read the stable channel too: a newer release replaces a dev build, and the security floor can force one. A beta file can only ever offer an update, never force it.
+- **Leaving beta** (`--channel stable`) keeps the dev build until the next release replaces it.
+
 ### Logs
 Add `-v` (or `-vv` for even more) to any command to see what it's doing, for example `macx -v update --check`. macx writes its own plain-text logs, one per part, each capped at 1 MB with two older files kept:
 
@@ -187,7 +194,7 @@ swift build -c release
 | `sudo macx daemon install [--suspend] [--no-downloads] [--log-level debug]` / `status` / `restart` / `pause [--for 1h]` / `resume` / `downloads [on\|off]` / `log [LEVEL]` / `uninstall` | **Background watch**: `macx watch` as a launchd daemon from startup, with notifications for high and critical alerts. `downloads on\|off` turns the Downloads watch on or off and restarts the watch. `log debug` turns the watch's own log up (see *Logs*). `status`, and `downloads` or `log` without a value, need no sudo. See *Background watch*. | **Yes** (not `status` or showing `downloads`) |
 | `macx alerts [-n 20] [--min-severity low] [--follow]` | Shows saved alerts from the live and background watch. | No |
 | `macx privacy [--open]` | Shows whether macx has Full Disk Access, who owns its permissions, and which folders it skips without access. `--open` opens the Settings pane. | No |
-| `macx update [--check] [--notices on\|off]` | Updates from the signed channel, or just checks. | No |
+| `macx update [--check] [--notices on\|off] [--channel stable\|beta]` | Updates from the signed channel, or just checks; `--channel` picks releases or beta builds. | No |
 | `macx report [-m TEXT] [--save FILE] [--copy] [--file-names] [--program-names]` | **Bug report:** builds a report from macx's logs, crashes and alerts with personal details taken out, shows all of it, then saves, copies or (when set up) sends it encrypted, only after you say yes. `--ask-after-crash on\|off`. See *Bug and crash reports*. | No |
 | `macx undo [list]` | Lists undo batches. | No |
 | `macx undo restore ID` | Puts a batch back. Anything that already exists again at the original place is kept in the undo folder instead of being overwritten. | No |

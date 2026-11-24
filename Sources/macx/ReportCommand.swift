@@ -39,7 +39,8 @@ enum ReportCollector {
             ? "development build"
             : (UpdateInstaller.enclosingApp(of: URL(fileURLWithPath: exe)) != nil ? "Macximesed.app" : "command-line tool")
         var out: [(String, String)] = [
-            ("macx", macxVersion), ("macOS", ProcessInfo.processInfo.operatingSystemVersionString), ("Chip", machine()),
+            ("macx", BuildVersion.current.description), ("Update channel", UpdateState.load().channel.rawValue),
+            ("macOS", ProcessInfo.processInfo.operatingSystemVersionString), ("Chip", machine()),
             ("Installed as", installed), ("Full Disk Access", PrivacyPolicy.probeFullDiskAccess() ? "on" : "off"),
         ]
         if let settings = DaemonSettings.read() {

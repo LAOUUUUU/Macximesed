@@ -40,6 +40,13 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [ ] On a fresh grant: does a folders-only grant let eslogger start? If not, can `macx privacy` tell full from scoped access without reading a guarded folder (which would set off a popup)?
 - [ ] Re-check the steps in README and `macx privacy` against the new prompt.
 
+## Logs, reports and beta builds ([research](research/diagnostics-beta/RESEARCH.md))
+- [x] 1. Verbose logs: `-v`/`-vv`, per-part log files, `sudo macx daemon log debug|info`.
+- [x] 2. Bug and crash reports: `macx report`, redaction, crash summaries, Copy / Save, Settings > Problems.
+- [x] 3. Encrypted sending and the relay (`scripts/report-relay`). Off until Lao sets up the Worker, the Discord channel and the report key.
+- [x] 4. Beta client (2026-11-24): `dev-<commit>` versions, separate beta key list and verifier, per-channel sequence, `macx update --channel`, Settings switch. Closed until a beta public key is built in.
+- [ ] 5. Beta workflows (`beta-build.yml`, `beta-publish.yml`): after Lao makes the beta key, the `beta` environment (deployment branches: main) and a ruleset on `dev`; check that immutable releases are off.
+
 ## Next
 - [x] **7. Boost + throttle view + Medium tier** (2026-11-24): `macx top`, `macx boost` (with `measure`), `macx tune`. Spotlight pause and Low Power Mode are left out: they need root, and Boost writes your own settings, so it runs without sudo. The research found pausing Spotlight saves little.
 - [x] **8. Games** (2026-11-24): `macx games` list, add, forget and play, with Boost, the Metal HUD, heat and load timelines, and how best to run each game. Game Mode can't be forced (no public switch), so macx reports it and reminds you to play full screen.

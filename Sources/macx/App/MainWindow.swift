@@ -81,7 +81,7 @@ struct Sidebar: View {
             Spacer()
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.state.headline).font(Fonts.sans(11))
-                Text("Version \(macxVersion)").font(Fonts.sans(11))
+                Text("Version \(BuildVersion.current.description)").font(Fonts.sans(11))
             }
             .foregroundStyle(Ink.grey)
             .padding(.horizontal, 18).padding(.bottom, 16)
@@ -402,21 +402,30 @@ struct SettingsView: View {
                     }
                     Hairline()
                     section("Updates") {
-                        HStack(spacing: 4) {
-                            Text(updateSentence).font(Fonts.sans(14))
-                                .foregroundStyle(isUrgent ? Ink.signal : Ink.text)
-                            InfoButton(text: updateInfo)
-                            Spacer()
-                            switch report?.status {
-                            case .available(let v), .urgent(let v, _):
-                                Button(busy == .installing ? "Installing…" : "Install \(v)") { runUpdate(install: true) }
-                                    .buttonStyle(PlainButtonStyle()).disabled(busy != nil)
-                            case .installed:
-                                Button("Restart the app") { relaunch() }.buttonStyle(PlainButtonStyle())
-                            default:
-                                Button(busy == .checking ? "Checking…" : "Check now") { runUpdate(install: false) }
-                                    .buttonStyle(PlainButtonStyle()).disabled(busy != nil)
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 4) {
+                                Text(updateSentence).font(Fonts.sans(14))
+                                    .foregroundStyle(isUrgent ? Ink.signal : Ink.text)
+                                InfoButton(text: updateInfo)
+                                Spacer()
+                                switch report?.status {
+                                case .available(let v), .urgent(let v, _):
+                                    Button(busy == .installing ? "Installing…" : "Install \(v)") { runUpdate(install: true) }
+                                        .buttonStyle(PlainButtonStyle()).disabled(busy != nil)
+                                case .installed:
+                                    Button("Restart the app") { relaunch() }.buttonStyle(PlainButtonStyle())
+                                default:
+                                    Button(busy == .checking ? "Checking…" : "Check now") { runUpdate(install: false) }
+                                        .buttonStyle(PlainButtonStyle()).disabled(busy != nil)
+                                }
                             }
+                            HStack(spacing: 4) {
+                                Text("Get beta builds").font(Fonts.sans(14))
+                                InfoButton(text: betaInfo, detail: "macx update --channel beta|stable")
+                                Spacer()
+                                TwoState(label: "Beta builds", isOn: update.channel == .beta) { on in setChannel(on ? .beta : .stable) }
+                            }
+                            .disabled(UpdateKeys.beta.isEmpty && update.channel == .stable)
                         }
                     }
                     Hairline()
@@ -500,10 +509,10 @@ struct SettingsView: View {
 
     var updateSentence: String {
         switch report?.status {
-        case nil: "Version \(macxVersion)."
-        case .upToDate: "Version \(macxVersion), up to date."
-        case .available(let v): "Version \(v) is out. You have \(macxVersion)."
-        case .urgent(let v, _): "Version \(macxVersion) has a security problem. Install \(v)."
+        case nil: "Version \(BuildVersion.current)."
+        case .upToDate: "Version \(BuildVersion.current), up to date."
+        case .available(let v): "Version \(v) is out. You have \(BuildVersion.current)."
+        case .urgent(let v, _): "Version \(BuildVersion.current) has a security problem. Install \(v)."
         case .installed(let v): "Updated to \(v). Restart the app to use it."
         case .failed(let why): why
         }
@@ -521,6 +530,26 @@ struct SettingsView: View {
             "Every update is checked against the Ed25519 key built into the app before it installs. "
                 + "The old version is kept, Full Disk Access stays on, and the background watch restarts on the new version by itself.")
         return parts.joined(separator: " ")
+    }
+
+    var betaInfo: String {
+        if UpdateKeys.beta.isEmpty && update.channel == .stable {
+            return "Not open yet: beta builds need their own signing key, which hasn't been set up."
+        }
+        return "A build of every change, named by its commit, signed with its own key and published without a person checking each one. "
+            + "Security updates from the stable channel still apply. Switching back keeps the beta build until the next release replaces it."
+    }
+
+    func setChannel(_ new: ReleaseChannel) {
+        var s = UpdateState.load()
+        do {
+            try s.switchChannel(to: new)
+            try s.save()
+        } catch {
+            model.adminError = "Couldn't switch the update channel: \(error)"
+        }
+        update = UpdateState.load()
+        report = nil
     }
 
     /// Runs the app's own `macx update` (one code path with the CLI); with `install` it downloads and installs.
