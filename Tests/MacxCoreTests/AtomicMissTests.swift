@@ -65,6 +65,11 @@ struct AtomicMissTests {
             /tmp/art.sh
             """
         #expect(ids(shell(cmd)).contains("base64-to-shell"))
+        // What sh -c really receives from Invoke-AtomicRedTeam: lines not ending in ";" are joined with "; ".
+        let joined =
+            #"if [ "$(uname)" = 'FreeBSD' ]; then cmd="b64decode -r"; else cmd="base64 -d"; fi;"# + "\n"
+            + "cat /tmp/encoded.dat | $cmd > /tmp/art.sh; chmod +x /tmp/art.sh; /tmp/art.sh"
+        #expect(ids(shell(joined)).contains("base64-to-shell"))
         #expect(ids(shell("base64 --decode payload.b64 > /tmp/x.sh; sh /tmp/x.sh")).contains("base64-to-shell"))
         // Decoding to a file that's never run stays quiet.
         #expect(loud(shell("base64 -d in.b64 > /tmp/out.bin; ls -l /tmp/out.bin")).isEmpty)
