@@ -1,6 +1,6 @@
 # Plan: Macximesed game launchers for Minecraft and Roblox
 
-**Status: to be researched.** Lao (2026-11-25): "make plans to make game launchers for minecraft and roblox, just put as to be research and don't do research". Nothing here has been checked yet; every point below is a question for the research step, which needs Lao's go first.
+**Status: researched 2026-11-25, see [RESEARCH.md](RESEARCH.md) (waiting for Lao's OK).** Original list below. Lao (2026-11-25): "make plans to make game launchers for minecraft and roblox, just put as to be research and don't do research". Nothing here has been checked yet; every point below is a question for the research step, which needs Lao's go first.
 
 ## Minecraft launcher
 The idea: launch a Prism/Modrinth instance (or our own) with the Mac tuned for it, instead of only checking it (`macx games minecraft`).

@@ -62,7 +62,7 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [x] 5. Beta workflows (2026-11-25): beta-build.yml, beta-publish.yml, make-beta-key.sh, dev ruleset. Opens once Lao runs make-beta-key.sh and the release puts beta-publish.yml on main.
 
 ## Next
-- [ ] **Performance round 3** ([brief](research/performance-v3/RESEARCH.md), 2026-11-25, waiting for Lao's OK): "Why it's slow" (BUILT 2026-11-25, with Quit for background apps, battery, memory and disk notes), Quit button in the Memory view, power awareness, disk-space warning, Minecraft check, Roblox advice, display refresh rate, pause backups while playing (all BUILT 2026-11-25); game launchers for Minecraft/Roblox = to be researched (research/game-launchers/PLAN.md), and a **virtual display experiment** (private CGVirtualDisplay; ships only if the Metal HUD shows an FPS gain).
+- [ ] **Performance round 3** ([brief](research/performance-v3/RESEARCH.md), 2026-11-25, waiting for Lao's OK): "Why it's slow" (BUILT 2026-11-25, with Quit for background apps, battery, memory and disk notes), Quit button in the Memory view, power awareness, disk-space warning, Minecraft check, Roblox advice, display refresh rate, pause backups while playing (all BUILT 2026-11-25); game launchers for Minecraft/Roblox researched 2026-11-25 (research/game-launchers/RESEARCH.md), waiting for Lao's OK, and a **virtual display experiment** (private CGVirtualDisplay; ships only if the Metal HUD shows an FPS gain).
 - [x] **Performance tab** in the app (2026-11-25): live heat and busiest processes, Boost, tweaks, games with Play.
 - [x] **Performance round 2** (2026-11-25, [brief](research/performance-v2/RESEARCH.md)): raw mouse, game network (AWDL), Do Not Disturb shortcuts, SOCD per game. Not yet tried by Lao on the real Mac: SOCD (needs Input Monitoring + Accessibility granted to the app), raw mouse with the HyperX, AWDL off during a game (needs the reinstalled daemon); before/after jitter comparison.
 - [x] **Independent testing with Atomic Red Team** (2026-11-25, [results](research/evaluation/art-results.md)): 30 of 33 caught on macOS 26 and 15, 0 false alarms. Runs weekly and on harness changes. Open: the privacy-grant alert can't be triggered on demand on the runner.
@@ -106,3 +106,5 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 - Does `csrutil authenticated-root disable` need FileVault off on Apple Silicon? Check on the machine before step 12.
 - `open` events are left out of the live watch because they're too noisy. Keychain and browser-data reads are only caught through what the reading program does next.
 - `sfltool dumpbtm` is undocumented. The parser keeps unknown keys and types and skips what it can't read; re-check on each macOS release.
+
+**Next release is 0.5.0, not 0.4.1** (Lao, 2026-11-25: too much for a x.x.1). The unreleased "Release 0.4.1" bump on main/dev must become 0.5.0 when Lao says release.
