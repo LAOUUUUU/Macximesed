@@ -11,6 +11,8 @@ struct PerformanceView: View {
     @State private var pressure = ThermalPressure.current()
     @State private var memory = MemoryState.current()
     @State private var allUses: [CPUUse] = []
+    @State private var insights: [SlowdownAdvisor.Insight] = []
+    @State private var quitting: SlowdownAdvisor.Insight?
     @State private var byMemory = false
     @State private var boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
     @State private var applied = Set(Tune.applied())
@@ -67,6 +69,7 @@ struct PerformanceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if let note { Text(note).font(Fonts.sans(13)).foregroundStyle(Ink.grey).padding(.top, 18).transition(.opacity) }
+                    if !insights.isEmpty { whySlow.transition(.opacity) }
                     live.reveal(0)
                     tune.reveal(1)
                     whilePlaying.reveal(2)
@@ -115,6 +118,44 @@ struct PerformanceView: View {
                 .background(alignment: .bottom) { Hairline() }
                 .reveal(i, rise: 3)
             }
+        }
+    }
+
+    // MARK: Why it's slow
+
+    var whySlow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header(
+                "Why it's slow",
+                info:
+                    "Plain-words reasons from what's busy right now. Apple's own processes are recognised by their exact place in /System, and macx never stops them; it says what helps instead."
+            )
+            ForEach(insights) { i in
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(i.title).font(Fonts.sans(13.5))
+                        Text(i.advice).font(Fonts.sans(12)).foregroundStyle(Ink.grey).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    if i.appPath != nil {
+                        Button("Quit…") { quitting = i }.buttonStyle(PlainButtonStyle(kind: .secondary))
+                    }
+                }
+                .padding(.vertical, 9)
+                .background(alignment: .bottom) { Hairline() }
+            }
+        }
+        .confirmationDialog(
+            "Quit \(quitting.flatMap { $0.appPath }.map { (($0 as NSString).lastPathComponent as NSString).deletingPathExtension } ?? "")?",
+            isPresented: Binding(get: { quitting != nil }, set: { if !$0 { quitting = nil } })
+        ) {
+            Button("Quit") {
+                if let path = quitting?.appPath, !FrontApp.quit(appAt: path) { note = "It had already quit." }
+                quitting = nil
+            }
+            Button("Cancel", role: .cancel) { quitting = nil }
+        } message: {
+            Text("An ordinary quit, so it can ask you to save first.")
         }
     }
 
@@ -325,6 +366,11 @@ struct PerformanceView: View {
             pressure = ThermalPressure.current()
             memory = MemoryState.current()
             allUses = found
+            let disk = DiskUsage.startupVolume()
+            let next = SlowdownAdvisor.explain(
+                uses: found, front: FrontApp.shared.lastPath, memory: memory, onBattery: PowerSource.onBattery,
+                diskFreeFraction: disk.map { 1 - $0.usedFraction })
+            if next.map(\.id) != insights.map(\.id) { Motion.animate { insights = next } } else { insights = next }
             boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
         }
     }

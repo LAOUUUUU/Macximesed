@@ -147,6 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         }
         model.windowOpen = false
         NSApp.setActivationPolicy(.accessory)
+        // Back to the menu bar: drop the window and every page in it (their memory and their timers), and hand the
+        // memory back to macOS. Opening it again builds a fresh one at the saved size and place.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window?.isVisible != true else { return }
+            self.window?.contentView = nil
+            self.window = nil
+            malloc_zone_pressure_relief(nil, 0)
+        }
     }
 
     static func makeMainMenu() -> NSMenu {

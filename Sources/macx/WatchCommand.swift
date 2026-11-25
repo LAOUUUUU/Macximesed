@@ -124,7 +124,12 @@ struct Watch: ParsableCommand {
         {
             let timer = DispatchSource.makeTimerSource(queue: Self.signalQueue)
             timer.schedule(deadline: .now() + 30, repeating: 30)
+            var ticks = 0
             timer.setEventHandler {
+                // Every 5 minutes, give memory freed after a burst of events back to macOS, so the watch stays small
+                // while nothing is happening.
+                ticks += 1
+                if ticks % 10 == 0 { malloc_zone_pressure_relief(nil, 0) }
                 guard stamp.changed() else { return }
                 Log.info("watch", "binary changed after an update; restarting")
                 print("macx was updated; restarting on the new version.")
@@ -220,7 +225,7 @@ struct Watch: ParsableCommand {
         var seen = 0
         // Until eslogger exits. Each chunk gets its own autorelease pool (see LineReader).
         LineReader.forEachLine(out.fileHandleForReading) { line in
-            guard let e = ESEvent.parse(line) else { return }
+            guard ESEvent.worthDecoding(line), let e = ESEvent.parse(line) else { return }
             seen += 1
             if seen == 1 {
                 Log.info("watch", "first event from eslogger: watching")

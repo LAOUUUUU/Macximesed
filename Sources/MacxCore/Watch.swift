@@ -45,6 +45,21 @@ public struct ESEvent: Sendable, Equatable {
     /// events read by `WatchRules.evaluateMore`. Numbers and bools are kept as text; byte arrays as hex.
     public var fields: [String: String] = [:]
 
+    /// A cheap text check before decoding: most of eslogger's stream on a busy Mac is file creates in caches and
+    /// temp folders, which no rule reads. Those are skipped without JSON parsing; every other event is kept. A create
+    /// or rename matters only in a folder named LaunchAgents/LaunchDaemons, Application Support (both WatchRules) or
+    /// Downloads (DownloadWatch); no slashes in the needles, because eslogger writes them as `\/`.
+    public static func worthDecoding(_ line: String) -> Bool {
+        var line = line
+        return line.withUTF8 { bytes in
+            func has(_ needle: StaticString) -> Bool {
+                memmem(bytes.baseAddress, bytes.count, needle.utf8Start, needle.utf8CodeUnitCount) != nil
+            }
+            guard has(#""event":{"create""#) || has(#""event":{"rename""#) else { return true }
+            return has("LaunchAgents") || has("LaunchDaemons") || has("Application Support") || has("Downloads")
+        }
+    }
+
     public static func parse(_ line: String) -> ESEvent? {
         guard let data = line.data(using: .utf8), let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let events = root["event"] as? [String: Any], let (kind, rawBody) = events.first

@@ -4,6 +4,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Added
+- **Why it's slow** on the Performance tab: plain-words reasons from what's busy right now (Photos analysing your library, Spotlight indexing, a busy web page, video playing somewhere, window drawing), with what actually helps. Apple's processes are matched by their exact path in /System and never stopped. Apps using 15%+ CPU while you're in another app get a **Quit…** button (an ordinary quit, after asking). Also notes tight memory, running on battery and a disk over 90% full.
+
+### Changed
+- **The background watch does far less work on a busy Mac:** file creates and renames outside launch-item folders, Application Support and Downloads (most of eslogger's stream) are skipped with a 1.5 µs byte search instead of a 283 µs JSON decode. Every 5 minutes it hands freed memory back to macOS.
+- **Closing the app window frees it:** the pages, their memory and their timers are dropped when you close the window, and rebuilt when you open it again.
+
 ### Fixed
 - **Snappier pages:** switching pages is a short cross-fade instead of a slide (which made SwiftUI re-measure the whole page every frame), only the first dozen rows of a long list ease in, and the Performance tab updates its numbers every 2 s without animating the whole list. Page switches measure 0-75 ms in a debug build. `MACX_APP_SNAPSHOT` also writes each page's time to `timings.txt`.
 - **The app could crash on start when it wasn't running from inside Macximesed.app** (e.g. `macx app` from a development build): asking for the notification centre aborts the process there. Notifications are skipped in that case now. Crash report from 2026-11-24.
