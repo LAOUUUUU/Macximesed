@@ -14,6 +14,9 @@ struct PerformanceView: View {
     @State private var games: [GameEntry]?
     @State private var busy: String?
     @State private var note: String?
+    @State private var hooks = GameHooks.load()
+    @State private var jitter: String?
+    @State private var socdPermitted = SOCDController.permitted
 
     /// Serious or critical: macOS is slowing the chip down to cool it.
     var hot: Bool { level == .serious || level == .critical }
@@ -58,7 +61,8 @@ struct PerformanceView: View {
                     if let note { Text(note).font(Fonts.sans(13)).foregroundStyle(Ink.grey).padding(.top, 18).transition(.opacity) }
                     live.reveal(0)
                     tune.reveal(1)
-                    gamesSection.reveal(2)
+                    whilePlaying.reveal(2)
+                    gamesSection.reveal(3)
                 }
                 .padding(.horizontal, 48).padding(.bottom, 32)
             }
@@ -135,6 +139,17 @@ struct PerformanceView: View {
                             Text(g.advice).font(Fonts.sans(12)).foregroundStyle(Ink.grey).lineLimit(2)
                         }
                         Spacer()
+                        if let id = g.bundleID {
+                            HStack(spacing: 6) {
+                                Text("SOCD").font(Fonts.mono(11)).foregroundStyle(Ink.grey)
+                                TwoState(label: "SOCD for \(g.name)", isOn: hooks.socdApps.contains(id)) { on in
+                                    save { h in
+                                        h.socdApps.removeAll { $0 == id }
+                                        if on { h.socdApps.append(id) }
+                                    }
+                                }
+                            }
+                        }
                         Button("Play") { play(g) }.buttonStyle(PlainButtonStyle()).disabled(busy != nil)
                     }
                     .padding(.vertical, 10)
@@ -143,6 +158,110 @@ struct PerformanceView: View {
                 }
             } else {
                 HairlineProgress().padding(.vertical, 14)
+            }
+        }
+    }
+
+    // MARK: While playing
+
+    var whilePlaying: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header(
+                "While playing", info: "For games started with Play (here or macx games play). Everything is put back when the game quits.")
+            row(
+                "No mouse acceleration",
+                "Your mouse moves the same distance however fast you move it. The trackpad is left as it is.",
+                on: hooks.rawMouse
+            ) { on in save { $0.rawMouse = on } }
+            row(
+                "Game network",
+                "Turns off AirDrop's radio (AWDL), which stalls Wi-Fi for about 90 ms every second or two. AirDrop and AirPlay are off until the game quits. Needs the background watch.",
+                on: hooks.gameNetwork
+            ) { on in save { $0.gameNetwork = on } }
+            HStack(spacing: 10) {
+                Button(busy == "jitter" ? "Measuring…" : "Measure Wi-Fi lag") { measureJitter() }.buttonStyle(PlainButtonStyle())
+                    .disabled(busy != nil)
+                if let jitter { Text(jitter).font(Fonts.mono(11.5)).foregroundStyle(Ink.grey).transition(.opacity) }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 10)
+            .background(alignment: .bottom) { Hairline() }
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Do Not Disturb").font(Fonts.sans(13.5))
+                    Text("Shortcuts to run when a game starts and ends (make them in the Shortcuts app with Set Focus).")
+                        .font(Fonts.sans(12)).foregroundStyle(Ink.grey)
+                }
+                Spacer()
+                TextField("Start shortcut", text: binding(\.focusStart)).textFieldStyle(.roundedBorder).frame(width: 150)
+                TextField("End shortcut", text: binding(\.focusEnd)).textFieldStyle(.roundedBorder).frame(width: 150)
+            }
+            .padding(.vertical, 10)
+            .background(alignment: .bottom) { Hairline() }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text("SOCD (snap tap)").font(Fonts.sans(13.5))
+                    InfoButton(
+                        text:
+                            "Of A and D (or W and S) held together, the game only sees the one pressed last. Switch it on per game below. CS2 kicks players for it on official servers and ESL bans it, so only use it where it's allowed. Macximesed sees your key presses only while that game is in front, and keeps nothing."
+                    )
+                }
+                if socdPermitted {
+                    Text("Allowed. It's active only while a game you switched it on for is in front.").font(Fonts.sans(12)).foregroundStyle(
+                        Ink.grey)
+                } else {
+                    HStack(spacing: 10) {
+                        Text("Needs Input Monitoring and Accessibility for Macximesed.").font(Fonts.sans(12)).foregroundStyle(Ink.grey)
+                        Button("Allow…") {
+                            SOCDController.requestPermissions()
+                            Task {
+                                try? await Task.sleep(for: .seconds(3))
+                                socdPermitted = SOCDController.permitted
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+            .padding(.vertical, 10)
+            .background(alignment: .bottom) { Hairline() }
+        }
+    }
+
+    func row(_ title: String, _ why: String, on: Bool, set: @escaping (Bool) -> Void) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(Fonts.sans(13.5))
+                Text(why).font(Fonts.sans(12)).foregroundStyle(Ink.grey).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            TwoState(label: title, isOn: on, set: set)
+        }
+        .padding(.vertical, 9)
+        .background(alignment: .bottom) { Hairline() }
+    }
+
+    func save(_ change: (inout GameHooks) -> Void) {
+        change(&hooks)
+        try? hooks.save()
+        SOCDController.shared.update()
+    }
+
+    func binding(_ key: WritableKeyPath<GameHooks, String?>) -> Binding<String> {
+        Binding(get: { hooks[keyPath: key] ?? "" }, set: { v in save { $0[keyPath: key] = v.isEmpty ? nil : v } })
+    }
+
+    func measureJitter() {
+        busy = "jitter"
+        let job = model.begin("Measuring Wi-Fi lag", "30 pings to your router")
+        Task.detached {
+            let j = Jitter.measure()
+            await MainActor.run {
+                busy = nil
+                let text = j.map { String(format: "average %.0f ms, worst %.0f ms, %.0f%% lost", $0.average, $0.worst, $0.lossPercent) }
+                Motion.animate { jitter = text ?? "Couldn't reach your router." }
+                model.end(job, "Wi-Fi lag: " + (text ?? "couldn't measure"))
             }
         }
     }

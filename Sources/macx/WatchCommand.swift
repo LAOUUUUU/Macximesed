@@ -103,6 +103,11 @@ struct Watch: ParsableCommand {
             let src = DispatchSource.makeSignalSource(signal: sig, queue: Self.signalQueue)
             src.setEventHandler {
                 kill(child, SIGTERM)
+                // Never leave AirDrop's radio off behind us.
+                let marker = DaemonPlan.logDir.appendingPathComponent("awdl-down")
+                if FileManager.default.fileExists(atPath: marker.path), GameNetwork.apply(.bringUp) {
+                    try? FileManager.default.removeItem(at: marker)
+                }
                 print("\nStopped watching.")
                 Darwin.exit(0)
             }
@@ -129,6 +134,27 @@ struct Watch: ParsableCommand {
             }
             timer.resume()
             Self.keepTimer = timer
+
+            // Game network: AWDL off while a game started with Play runs, if the user switched it on.
+            let marker = DaemonPlan.logDir.appendingPathComponent("awdl-down")
+            let net = DispatchSource.makeTimerSource(queue: Self.signalQueue)
+            net.schedule(deadline: .now() + 5, repeating: 5)
+            net.setEventHandler {
+                let hooks = GameHooks.load(from: GameHooks.file(home: user.home))
+                let alive = GameSessionGuard.load(from: GameSessionGuard.file(home: user.home)).map { kill($0.pid, 0) == 0 } ?? false
+                let tookDown = FileManager.default.fileExists(atPath: marker.path)
+                let step = GameNetwork.decide(enabled: hooks.gameNetwork, gameAlive: alive, weTookItDown: tookDown)
+                guard step != .nothing, GameNetwork.apply(step) else { return }
+                if step == .takeDown {
+                    FileManager.default.createFile(atPath: marker.path, contents: Data(), attributes: [.posixPermissions: 0o600])
+                    Log.info("watch", "game network: AWDL off while a game runs")
+                } else {
+                    try? FileManager.default.removeItem(at: marker)
+                    Log.info("watch", "game network: AWDL back on")
+                }
+            }
+            net.resume()
+            Self.keepNetTimer = net
         }
         let notify: @Sendable (WatchAlert) -> Void = { screen.send($0) }
         let downloadsDir = user.home.appendingPathComponent("Downloads").path
@@ -257,6 +283,7 @@ struct Watch: ParsableCommand {
 
     nonisolated(unsafe) static var keep: [DispatchSourceSignal] = []
     nonisolated(unsafe) static var keepTimer: DispatchSourceTimer?
+    nonisolated(unsafe) static var keepNetTimer: DispatchSourceTimer?
     static let signalQueue = DispatchQueue(label: "macx.watch.signals")
 
     static func printAlert(_ a: WatchAlert) {

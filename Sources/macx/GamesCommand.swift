@@ -10,7 +10,7 @@ struct GamesCommand: ParsableCommand {
         discussion: """
             Finds games by their App Store category or Game Mode support, known games and launchers (Roblox, Steam, Minecraft launchers, GeForce NOW and others), Steam's library, Windows games in CrossOver bottles, and games you add. `macx games play NAME` turns Boost on, starts the game, records heat and load while you play, and turns Boost off when the game quits. Game Mode can't be switched on by another program: macOS does it when a supported game goes full screen.
             """,
-        subcommands: [List.self, Play.self, Add.self, Forget.self],
+        subcommands: [List.self, Play.self, Add.self, Forget.self, JitterCheck.self],
         defaultSubcommand: List.self
     )
 
@@ -78,6 +78,24 @@ struct GamesCommand: ParsableCommand {
         }
     }
 
+    struct JitterCheck: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "jitter",
+            abstract: "Measure Wi-Fi lag spikes to your router (about 6 s), e.g. with Game network on and off.")
+
+        func run() throws {
+            print("Pinging your router 30 times...")
+            guard let j = Jitter.measure() else { throw UserError("Couldn't find or reach your router.") }
+            print(
+                String(
+                    format: "Average %.1f ms, worst %.1f ms, spread %.1f ms, %.0f%% lost.", j.average, j.worst, j.spread,
+                    j.lossPercent))
+            if j.worst > 60 {
+                print("Spikes like that in games are often AirDrop's radio (AWDL). Game network turns it off while you play.")
+            }
+        }
+    }
+
     struct Play: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Start a game with Boost and record heat while you play.")
         @Argument(help: "Game name (from `macx games`).") var name: String
@@ -96,6 +114,20 @@ struct GamesCommand: ParsableCommand {
                 throw UserError("Boost is already on. Turn it off first: macx boost off")
             }
             print("\(game.name): \(game.advice)")
+            let hooks = GameHooks.load()
+            if FocusShortcut.run(hooks.focusStart) { print("Ran your shortcut \"\(hooks.focusStart ?? "")\".") }
+            if hooks.rawMouse {
+                do {
+                    try RawMouse.turnOff()
+                    print("Pointer acceleration off for your mouse (the trackpad is left as it is).")
+                } catch { print("Couldn't turn pointer acceleration off: \(error)") }
+            }
+            if hooks.gameNetwork {
+                print(
+                    FileManager.default.fileExists(atPath: DaemonPlan.plistPath.path)
+                        ? "Game network: the background watch turns AirDrop's radio (AWDL) off while you play."
+                        : "Game network needs the background watch (sudo macx daemon install).")
+            }
 
             var boosted = false
             if !noBoost {
@@ -107,6 +139,8 @@ struct GamesCommand: ParsableCommand {
                 )
             }
             func endBoost() {
+                if RawMouse.restore() { print("Pointer acceleration put back.") }
+                FocusShortcut.run(hooks.focusEnd)
                 guard boosted, let l = TweakLedger.load(at: Boost.defaultLedger) else { return }
                 let r = l.restore(system: RealSystem())
                 print(

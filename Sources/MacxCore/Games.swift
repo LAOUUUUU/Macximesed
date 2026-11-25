@@ -230,8 +230,11 @@ public struct GameSession: Sendable {
 
 /// If macx stops while a game runs, the next macx run sees the game is gone and turns Boost off.
 public enum GameSessionGuard {
-    public static var file: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Macximesed/game-session.json")
+    public static var file: URL { file(home: FileManager.default.homeDirectoryForCurrentUser) }
+
+    /// The background watch (root) reads the signed-in user's file.
+    public static func file(home: URL) -> URL {
+        home.appendingPathComponent("Library/Application Support/Macximesed/game-session.json")
     }
 
     public struct Record: Codable, Sendable {
@@ -247,12 +250,15 @@ public enum GameSessionGuard {
 
     public static func write(_ r: Record) { try? JSONEncoder().encode(r).write(to: file, options: .atomic) }
     public static func clear() { try? FileManager.default.removeItem(at: file) }
-    public static func load() -> Record? { (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Record.self, from: $0) } }
+    public static func load(from f: URL = file) -> Record? {
+        (try? Data(contentsOf: f)).flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
+    }
 
     /// Called at macx start-up: a game session whose game has quit leaves Boost on; undo it.
     public static func recoverIfNeeded(system: SystemControl = RealSystem()) -> Bool {
         guard let r = load(), needsRestore(gamePID: r.pid, isAlive: { kill($0, 0) == 0 }) else { return false }
         if let ledger = TweakLedger.load(at: Boost.defaultLedger), ledger.purpose == "game" { _ = ledger.restore(system: system) }
+        RawMouse.restore()
         clear()
         return true
     }

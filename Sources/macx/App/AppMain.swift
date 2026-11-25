@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             return
         }
         watchForUpdates()
+        SOCDController.shared.start()
         if env["MACX_APP_SETUP"] == "1" || FirstRun.shouldShowSetup(finished: UserDefaults.standard.string(forKey: FirstRun.defaultsKey)) {
             showSetup()
         } else if env["MACX_APP_HIDDEN"] != "1" {

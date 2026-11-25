@@ -57,7 +57,7 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 
 ## Next
 - [x] **Performance tab** in the app (2026-11-25): live heat and busiest processes, Boost, tweaks, games with Play.
-- [ ] **Performance round 2** ([brief](research/performance-v2/RESEARCH.md), waiting for Lao's OK): raw mouse and AWDL game network in Boost for games (measured), SOCD per game (opt-in, off by default, anti-cheat warning), Focus shortcuts hook.
+- [x] **Performance round 2** (2026-11-25, [brief](research/performance-v2/RESEARCH.md)): raw mouse, game network (AWDL), Do Not Disturb shortcuts, SOCD per game. Not yet tried by Lao on the real Mac: SOCD (needs Input Monitoring + Accessibility granted to the app), raw mouse with the HyperX, AWDL off during a game (needs the reinstalled daemon); before/after jitter comparison.
 - [x] **Independent testing with Atomic Red Team** (2026-11-25, [results](research/evaluation/art-results.md)): 30 of 33 caught on macOS 26 and 15, 0 false alarms. Runs weekly and on harness changes. Open: the privacy-grant alert can't be triggered on demand on the runner.
 - [x] **.pkg + .dmg downloads** (2026-11-24, [research/installers/RESEARCH.md](research/installers/RESEARCH.md)): built on dev. Left: Lao runs `scripts/release/make-release-cert.sh` once (and saves the .p12 in Bitwarden); after the next release, try the .pkg on a Mac (Open Anyway, install, setup, then an update through the app archive).
 - [x] **7. Boost + throttle view + Medium tier** (2026-11-24): `macx top`, `macx boost` (with `measure`), `macx tune`. Spotlight pause and Low Power Mode are left out: they need root, and Boost writes your own settings, so it runs without sudo. The research found pausing Spotlight saves little.
