@@ -44,6 +44,24 @@ Candidates, each with a stored before-value and an undo, measured before it's li
 #### Disk space
 - Swap needs free space, and a nearly full disk makes a memory-tight Mac much slower. **Recommendation:** warn in the header under 10% free, with a link to Clean.
 
+### Small boosts (Lao, 2026-11-25: "even if it's a small boost, a boost is a boost")
+Each one is reversible, measured on Lao's Mac where it can be, and shown with what it costs:
+- **Background hogs:** an app using CPU while it isn't the front app (Roblox at 30% while Lao wasn't playing, 2026-11-25) gets a line: "Roblox is using 30% in the background. Quit it?", with Quit asking first.
+- **Heavy browser tab:** `com.apple.WebKit.WebContent` or a Chrome renderer at the top says "a web page is busy", which tab-heavy browsing usually is.
+- **Video decoding in the background** (`VTDecoderXPCService`) at the top: a video still playing somewhere, or a moving wallpaper.
+- **Moving (Aerial) wallpapers** keep the GPU decoding video. Detect a dynamic wallpaper and offer a still one (the user's own choice in Settings; macx only explains and opens the pane).
+- **Desktop widgets** refresh in the background; list them and say so (report only).
+- **Brightness:** on a fanless Air a lower screen brightness means a little less heat (report only).
+- **Charging heat:** charging while gaming adds heat; mention Optimized Battery Charging (report only).
+- **Third-party launch agents** that start at login (already in `macx tune agents`): link them from the Performance tab, with the biggest first.
+
+### Extreme (step 12, off by default)
+With SIP off, Apple's own daemons can be turned off system-wide. On macOS 27, turning off Photos analysis per user was refused while SIP is on: *"Operation not permitted while System Integrity Protection is engaged"* (tested on Lao's Mac 2026-11-25, then put back). Extreme is the only way to the biggest background savings, and it costs a lot:
+- You turn SIP off yourself in Recovery (`csrutil disable`). macx never does it, and walks you through it and back.
+- With SIP off the antivirus half is weaker (malware can do the same), so every `macx` command shows a banner while it's off.
+- Best on a freshly installed Mac, not a daily driver.
+- What it does: system-domain `launchctl disable` of the curated list (Photos and media analysis, Siri and knowledge, intelligence agents, widgets, Game Center), each with its undo, behind the three confirmations, and `macx extreme restore` puts everything back before SIP goes back on.
+
 ## Plan
 1. "Why it's slow" (known Apple culprits, exact paths, advice only).
 2. Quit button in the Memory view (asks first, ordinary quit, non-Apple apps only).
@@ -52,6 +70,9 @@ Candidates, each with a stored before-value and an undo, measured before it's li
 5. Minecraft check (Java architecture, memory, Sodium/Lithium/FerriteCore), Roblox advice, display refresh rate in Games.
 6. *Pause backups while playing* (stop a running backup; automatic backups off via the background watch, checked).
 7. Virtual display **experiment**: prototype, measure FPS with the Metal HUD in one game, ship only if it helps.
+8. Small boosts: background hogs with Quit, busy web page and video-decode explanations, moving-wallpaper and widget notes, brightness and charging notes, login agents link.
+9. Risky tier (research/risky-tier/RESEARCH.md): Spotlight indexing off, hibernation and Power Nap off, snapshot purge. Per-user Apple agent disables are out (refused with SIP on, tested).
+10. Extreme (step 12): only after everything above, on Lao's explicit go, ideally on a fresh Mac.
 
 ## Not doing
 - Stopping, renicing or disabling Apple's own daemons (Risky tier, step 10).

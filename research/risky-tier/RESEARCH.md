@@ -31,6 +31,9 @@ Each one stores the value it replaced in the undo store, before it's changed. An
 
 The app gets a **Risky** section on the Performance tab, in signal red, folded away by default, with the same three steps as sheets.
 
+## Tested on Lao's Mac (2026-11-25, macOS 27.0.1, SIP on)
+`launchctl disable gui/501/com.apple.photoanalysisd` was accepted, but `launchctl bootout` was refused: *"Operation not permitted while System Integrity Protection is engaged"* (error 150), and photoanalysisd kept running for the whole minute. The flag was removed again and it's running normally. **So per-user disables of Apple agents are out of the Risky tier**: they may only take effect at the next login, if at all. The Risky tier keeps Spotlight indexing, hibernation, Power Nap and snapshots. The agent disables move to Extreme (SIP off).
+
 ## Before building
 - **Verify per-user disables on macOS 27** with one item on Lao's Mac: disable `photoanalysisd`, check it doesn't run after the next login, then `launchctl enable` it again. That needs Lao's OK, since it changes his Mac.
 - **Measure** idle CPU and heat before and after on Lao's Mac (with `macx top`) for the analysis items, so the page can show a real number instead of a promise.
