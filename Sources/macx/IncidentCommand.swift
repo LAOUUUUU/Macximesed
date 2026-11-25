@@ -127,6 +127,8 @@ enum IncidentCapture {
                 trigger: trigger, pid: a.pid, processTable: ProcessTree.snapshot(), files: files, frozen: frozen, timeline: timeline)
         else { return nil }
         handOver(c.folder, uid: uid, gid: gid)
+        // Cases/ and the Macximesed folder above it may have just been made by root, too.
+        HomeOwnership.handOverParents(of: c.folder, home: home, uid: uid, gid: gid)
         return c
     }
 }

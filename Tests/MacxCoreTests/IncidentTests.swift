@@ -113,3 +113,30 @@ struct IncidentContainTests {
         #expect(cmds.contains("sudo launchctl bootout system/com.x.daemon"))
     }
 }
+
+@Suite("Folders the root watch creates in your home belong to you")
+struct HandOverParentsTests {
+    @Test func everyRootOwnedFolderBetweenHomeAndTheNewOneIsHandedOver() {
+        let home = URL(fileURLWithPath: "/Users/v")
+        let made = home.appendingPathComponent("Library/Application Support/Macximesed/Cases/2026-x")
+        // Library and Application Support already belong to the user; Macximesed and Cases were just made by root.
+        let owners: [String: uid_t] = [
+            "/Users/v/Library": 501, "/Users/v/Library/Application Support": 501,
+            "/Users/v/Library/Application Support/Macximesed": 0, "/Users/v/Library/Application Support/Macximesed/Cases": 0,
+            "/Users/v/Library/Application Support/Macximesed/Cases/2026-x": 0,
+        ]
+        let paths = HomeOwnership.rootOwnedFolders(upTo: made, home: home) { owners[$0] }
+        #expect(
+            paths == [
+                "/Users/v/Library/Application Support/Macximesed", "/Users/v/Library/Application Support/Macximesed/Cases",
+                "/Users/v/Library/Application Support/Macximesed/Cases/2026-x",
+            ])
+    }
+
+    @Test func nothingOutsideTheHomeFolderOrTheHomeItself() {
+        let home = URL(fileURLWithPath: "/Users/v")
+        #expect(HomeOwnership.rootOwnedFolders(upTo: URL(fileURLWithPath: "/Library/X"), home: home) { _ in 0 }.isEmpty)
+        #expect(HomeOwnership.rootOwnedFolders(upTo: home, home: home) { _ in 0 }.isEmpty)
+        #expect(HomeOwnership.rootOwnedFolders(upTo: URL(fileURLWithPath: "/Users/vv/a"), home: home) { _ in 0 }.isEmpty)
+    }
+}

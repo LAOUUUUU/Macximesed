@@ -73,6 +73,7 @@ public enum DownloadWatch {
         if let owner {
             for dir in [support(home).appendingPathComponent("Cases"), support(home).appendingPathComponent("Undo")] {
                 chownTree(dir, owner)
+                HomeOwnership.handOverParents(of: dir, home: home, uid: owner.uid, gid: owner.gid)
             }
         }
         return Quarantined(caseID: incident.id, batchID: batch.id)
