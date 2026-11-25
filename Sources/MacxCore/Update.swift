@@ -124,7 +124,7 @@ public enum UpdateKeys {
     public static let trusted: [Data] = ["yhabe5LDBMXnyr53BMKFv2RThR7fnng6MvI3ZmJQJgs="].compactMap { Data(base64Encoded: $0) }
     /// Keys for the beta file only. Its private key signs dev builds automatically in the `beta` environment, so it is
     /// never trusted for stable files (a test checks the lists don't overlap). Empty until that key exists.
-    public static let beta: [Data] = [String]().compactMap { Data(base64Encoded: $0) }
+    public static let beta: [Data] = ["XaJLgtPPlhTYNgmwnZk8bwhJGV0QPwXMdkG7V5adkyE="].compactMap { Data(base64Encoded: $0) }
 }
 
 public struct ChannelVerifier: Sendable {
