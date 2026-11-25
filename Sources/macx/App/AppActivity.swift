@@ -53,6 +53,24 @@ extension AppModel {
         set { defaults.set(try? JSONEncoder().encode(newValue), forKey: Self.scheduleKey) }
     }
 
+    /// Runs the app's own `macx` with these arguments, off the main thread: (exit code, output).
+    nonisolated static func runMacx(_ args: [String]) async -> (Int32, String) {
+        let exe = await AppModel.executable
+        return await Task.detached {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: exe)
+            p.arguments = args
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = pipe
+            p.standardInput = FileHandle.nullDevice
+            guard (try? p.run()) != nil else { return (1, "macx couldn't start") }
+            let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            p.waitUntilExit()
+            return (p.terminationStatus, out)
+        }.value
+    }
+
     /// Runs the app's own `macx update` (one code path with the CLI and Settings).
     nonisolated static func macxUpdate(install: Bool) async -> UpdateReport {
         let exe = await AppModel.executable

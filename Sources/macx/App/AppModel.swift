@@ -13,6 +13,7 @@ final class AppModel {
         case check = "Check a file"
         case clean = "Clean"
         case apps = "Apps"
+        case performance = "Performance"
         case settings = "Settings"
         var id: String { rawValue }
     }

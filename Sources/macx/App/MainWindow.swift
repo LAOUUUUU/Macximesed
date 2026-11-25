@@ -18,6 +18,7 @@ struct MainView: View {
                     case .check: CheckView(model: model)
                     case .clean: CleanView(model: model)
                     case .apps: AppsView(model: model)
+                    case .performance: PerformanceView(model: model)
                     case .settings: SettingsView(model: model)
                     }
                 }
@@ -65,7 +66,7 @@ struct Sidebar: View {
         case .startup: model.startupCount.map(String.init) ?? ""
         case .clean: model.cleanBytes.map(formatBytes) ?? ""
         case .apps: model.appCount.map(String.init) ?? ""
-        case .check, .settings: ""
+        case .check, .settings, .performance: ""
         }
     }
 
