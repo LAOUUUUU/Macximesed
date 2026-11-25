@@ -5,6 +5,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Added
+- **An app icon** in the app's own style: a serif M in ink on paper, underlined by a hairline that ends in the small square that marks the live watch. No gradients, glows or shadows. Drawn by `scripts/make-icon.swift` into `Resources/AppIcon.icns`, which every bundle carries (`install.sh`, the .pkg, the .dmg and the app archive).
 - **While playing** (research/performance-v2/RESEARCH.md), for games started with Play, set on the Performance tab, all off until switched on and all put back when the game quits:
   - *No mouse acceleration:* your external mice get macOS's linear-scaling switch (`kIOHIDUseLinearScalingMouseAccelerationKey`, live, no logout); the trackpad is left alone. What was there is saved first, so a crash can't leave it off.
   - *Game network:* the background watch (root) turns AWDL, AirDrop's radio, off while the game runs and back on afterwards (and when it stops). It only brings up what it took down. `macx games jitter` and *Measure Wi-Fi lag* show the spikes it's for (measured on Lao's Mac: average 13 ms, worst 91 ms).

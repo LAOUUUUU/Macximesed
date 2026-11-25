@@ -9,8 +9,9 @@ BIN="$1"; OUT="$2"; VERSION="$3"; SIGN="$4"; KEYCHAIN="${5:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 rm -rf "$OUT"
-mkdir -p "$OUT/Contents/MacOS"
+mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources"
 cp "$BIN" "$OUT/Contents/MacOS/macx"
+cp "$HERE/../Resources/AppIcon.icns" "$OUT/Contents/Resources/AppIcon.icns"
 chmod 755 "$OUT/Contents/MacOS/macx"
 cat > "$OUT/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,6 +21,7 @@ cat > "$OUT/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>dev.macximesed.macx</string>
   <key>CFBundleName</key><string>Macximesed</string>
   <key>CFBundleExecutable</key><string>macx</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
