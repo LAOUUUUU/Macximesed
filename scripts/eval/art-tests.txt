@@ -55,10 +55,10 @@ T1037.005 1 persist                              /Library/StartupItems file
 T1037.005 2 persist                              StartupItems script + launch daemon
 T1037.005 3 persist                              StartupItems script + launch agent
 T1053.003 1 persist                              crontab replaced
-T1053.003 2 persist                              scripts in /etc/cron.* folders
+T1053.003 2 ?                                    scripts in /etc/cron.* folders: does nothing on macOS (no /etc/cron.* folders: "No such file or directory", ART runs 4-5)
 T1546.004 1 persist                              command added to ~/.bash_profile
 T1546.004 2 persist                              command added to ~/.bashrc
-T1548.003 3 persist                              sudoers: unlimited sudo cache
+T1548.003 3 ?                                    sudoers: unlimited sudo cache: does nothing on macOS (GNU sed -i; macOS sed says "unterminated substitute pattern", run 4)
 T1548.003 5 persist                              sudoers: tty_tickets off
 T1548.003 1 -                                    sudo -l and reading sudoers
 T1564.002 1 account-created                      hidden user (UniqueID < 500)
