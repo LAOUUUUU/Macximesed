@@ -1,0 +1,50 @@
+name: Beta build
+
+# Every push to dev builds a beta (research/diagnostics-beta/RESEARCH.md). No secrets here: this workflow can be
+# changed by any push to dev, so it only tests, stamps the commit, builds and uploads. beta-publish.yml (always
+# main's copy) checks the result, signs it with the beta key and publishes it.
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build dev-${{ github.sha }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test
+        run: swift test
+      - name: Stamp the commit and build the universal binary
+        run: |
+          set -euo pipefail
+          sed -i '' "s|^public let macxBuildCommit: String? = nil$|public let macxBuildCommit: String? = \"$GITHUB_SHA\"|" Sources/MacxCore/BuildInfo.swift
+          grep -q "$GITHUB_SHA" Sources/MacxCore/BuildInfo.swift
+          swift build -c release --arch arm64 --arch x86_64
+          BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+          lipo -archs "$BIN/macx"
+          mkdir -p out
+          cp "$BIN/macx" out/
+          # The binary isn't run before it's signed, except to check it reports this commit.
+          V=$(MACX_NO_UPDATE_CHECK=1 out/macx --version)
+          echo "version: $V"
+          case "$V" in *"$GITHUB_SHA"* | *"${GITHUB_SHA:0:7}"*) ;; *) echo "::error::macx --version doesn't name this commit"; exit 1 ;; esac
+          BASE=$(grep -Eo 'macxVersion = "[^"]+"' Sources/MacxCore/Update.swift | cut -d'"' -f2)
+          NAME="macx-dev-${GITHUB_SHA}-macos-universal.tar.gz"
+          tar -C out -czf "out/$NAME" macx
+          shasum -a 256 "out/$NAME" | cut -d' ' -f1 > out/sha256
+          printf '%s\n%s\n%s\n' "$GITHUB_SHA" "$BASE" "$NAME" > out/build-info
+          rm out/macx
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: beta-build
+          path: out
+          retention-days: 7

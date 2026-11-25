@@ -1,0 +1,73 @@
+name: Beta publish
+
+# Signs and publishes a finished beta build. workflow_run always runs the copy of this file on main, so a push to
+# dev can't change the steps that hold the beta key. The beta environment deploys from main only and has no
+# reviewer (Lao's choice: passing dev builds are signed automatically). research/diagnostics-beta/RESEARCH.md.
+on:
+  workflow_run:
+    workflows: ["Beta build"]
+    types: [completed]
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Sign and publish
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    environment: beta
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      BUILT_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Fetch the build and check it
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$REPO" -n beta-build -D build
+          read -r COMMIT < <(sed -n 1p build/build-info)
+          BASE=$(sed -n 2p build/build-info)
+          NAME=$(sed -n 3p build/build-info)
+          [ "$COMMIT" = "$BUILT_SHA" ] || { echo "::error::the artifact is for $COMMIT, the run was for $BUILT_SHA"; exit 1; }
+          [[ "$NAME" =~ ^macx-dev-[0-9a-f]{40}-macos-universal\.tar\.gz$ ]] || { echo "::error::unexpected file name"; exit 1; }
+          # Re-hash: the build's own note isn't trusted.
+          SHA=$(sha256sum "build/$NAME" | cut -d' ' -f1)
+          [ "$SHA" = "$(cat build/sha256)" ] || { echo "::error::hash mismatch"; exit 1; }
+          # Only dev's tip is published: an older run finishing late never replaces a newer beta.
+          TIP=$(gh api "repos/$REPO/commits/dev" -q .sha)
+          [ "$TIP" = "$COMMIT" ] || { echo "dev moved on ($TIP); not publishing $COMMIT."; echo "SKIP=1" >> "$GITHUB_ENV"; exit 0; }
+          { echo "COMMIT=$COMMIT"; echo "BASE=$BASE"; echo "NAME=$NAME"; echo "SHA=$SHA"; } >> "$GITHUB_ENV"
+      - name: Build and sign beta-v1.json
+        if: env.SKIP != '1'
+        env:
+          MACX_BETA_SIGNING_KEY: ${{ secrets.MACX_BETA_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          gh release view dev --repo "$REPO" >/dev/null 2>&1 || \
+            gh release create dev --repo "$REPO" --prerelease --target dev --title "Beta (dev builds)" \
+              --notes "Signed builds of every passing push to dev. Opt in with: macx update --channel beta"
+          gh release download dev --repo "$REPO" -p beta-v1.json -O previous.json 2>/dev/null || echo '{}' > previous.json
+          python3 -I scripts/release/make-beta-channel.py --previous previous.json --commit "$COMMIT" --base "$BASE" \
+            --url "https://github.com/$REPO/releases/download/dev/$NAME" --sha256 "$SHA" \
+            --notes "https://github.com/$REPO/commit/$COMMIT" --out beta-v1.json
+          scripts/release/sign-channel.sh --beta beta-v1.json
+      - name: Upload, and keep the last 15 builds
+        if: env.SKIP != '1'
+        run: |
+          set -euo pipefail
+          gh release upload dev --repo "$REPO" --clobber "build/$NAME" beta-v1.json beta-v1.json.sig
+          gh release view dev --repo "$REPO" --json assets -q '.assets[] | select(.name | startswith("macx-dev-")) | [.createdAt, .name] | @tsv' \
+            | sort -r | tail -n +16 | cut -f2 | while read -r old; do gh release delete-asset dev "$old" --repo "$REPO" --yes; done
+          echo "Published $NAME as beta."

@@ -53,7 +53,7 @@ Apple's 27.3 changes Full Disk Access ([Apple's post](https://developer.apple.co
 - [x] 2. Bug and crash reports: `macx report`, redaction, crash summaries, Copy / Save, Settings > Problems.
 - [x] 3. Encrypted sending and the relay (`scripts/report-relay`). Off until Lao sets up the Worker, the Discord channel and the report key.
 - [x] 4. Beta client (2026-11-24): `dev-<commit>` versions, separate beta key list and verifier, per-channel sequence, `macx update --channel`, Settings switch. Closed until a beta public key is built in.
-- [ ] 5. Beta workflows (`beta-build.yml`, `beta-publish.yml`): after Lao makes the beta key, the `beta` environment (deployment branches: main) and a ruleset on `dev`; check that immutable releases are off.
+- [x] 5. Beta workflows (2026-11-25): beta-build.yml, beta-publish.yml, make-beta-key.sh, dev ruleset. Opens once Lao runs make-beta-key.sh and the release puts beta-publish.yml on main.
 
 ## Next
 - [x] **Performance tab** in the app (2026-11-25): live heat and busiest processes, Boost, tweaks, games with Play.
