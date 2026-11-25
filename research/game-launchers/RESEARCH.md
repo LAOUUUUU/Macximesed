@@ -21,6 +21,14 @@ Asked by Lao on 2026-11-25: research launchers "like AppleBlox, and Lunar Client
 - **Signing in is the blocker for our own launcher.** A new Azure app has to apply to Mojang for permission to use the Minecraft API; without it, `api.minecraftservices.com` answers 403 ([Minecraft Wiki](https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Microsoft_Authentication_Scheme), [minecraft-launcher-lib](https://minecraft-launcher-lib.readthedocs.io/en/latest/tutorial/microsoft_login.html)). People were still asking how in Feb 2026 ([Microsoft Q&A](https://learn.microsoft.com/en-us/answers/questions/5768276/how-to-get-xboxlive-signin-permission-for-azure-ap)); approval for small projects isn't guaranteed.
 - **The speed gain is in the mods, not the launcher:** Sodium/Lithium/FerriteCore (or Embeddium/Canary on Forge) are what Lunar-style clients and packs like Fabulously Optimized ship. `macx games minecraft` already finds what's missing.
 
+### The allowlist itself (read 2026-11-25, Roblox post of 2025-09-29)
+18 flags are allowed, none of them for frame rate ([Roblox DevForum](https://devforum.roblox.com/t/allowlist-for-local-client-configuration-via-fast-flags/3966569)):
+- Geometry: `DFIntCSGLevelOfDetailSwitchingDistance`, `…L12`, `…L23`, `…L34`
+- Rendering: `FFlagHandleAltEnterFullscreenManually`, `DFFlagTextureQualityOverrideEnabled`, `DFIntTextureQualityOverride`, `FIntDebugForceMSAASamples`, `DFFlagDisableDPIScale`, `FFlagDebugGraphicsPreferD3D11`, `FFlagDebugSkyGray`, `DFFlagDebugPauseVoxelizer`, `DFIntDebugFRMQualityLevelOverride`, `FIntFRMMaxGrassDistance`, `FIntFRMMinGrassDistance`, `FFlagDebugGraphicsPreferVulkan`, `FFlagDebugGraphicsPreferOpenGL`
+- UI: `FIntGrassMovementReducedMotionFactor`
+
+`DFIntTaskSchedulerTargetFps` is not on it, so it's ignored. **Within Roblox's rules there is no way past its frame cap**; the only way is patching the running client, which Roblox treats as a modified client (account termination). Lao asked for unlimited FPS on 2026-11-25; decided: macx won't patch Roblox's process. The performance flags that are allowed (texture quality, MSAA off, level-of-detail distances, grass, lighting quality, pausing the voxelizer) do cut GPU work, which is what raises FPS on an Air.
+
 ## Recommendation
 Build both into Macximesed's Games (Play), not as separate apps, and leave signing in to the launchers that already have permission:
 
