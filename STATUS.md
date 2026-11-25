@@ -4,6 +4,9 @@ The job list: what is being built now and what comes next. Finished work moves t
 
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
+## 0.4.0 (2026-11-25)
+Released with the .pkg and .dmg (signed with the release certificate) and whole-app updates for them, the app icon, motion everywhere, the status bar and update pop-up, the chamber on the Check page, the Performance tab with While playing (raw mouse, game network, Do Not Disturb shortcuts, SOCD), the 12 new watch events, the Atomic Red Team fixes (30 of 33 caught, 0 false alarms), the persist gaps, and the beta channel (beta key built in; publishing starts once this is on main).
+
 ## 0.3.0 (2026-11-24)
 Released with the Mac app and menu bar, first-run setup, the light detonation chamber, Boost/top/tune/games, the Downloads watch (automatic quarantine), Intel support (not yet run on Intel hardware) and the false-alarm fixes. Evaluations on 3cab554: static 17/17 attacks flagged, 0/11 installers dangerous; runtime 7/7 alerted in 33–186 ms, frozen 5–7 ms after the alert. The 370 MB in the runtime eval (and the daemon creeping from 24 MB to 114 MB) was an autorelease-pool leak in the watch loop, fixed on dev after 0.3.0.
 

@@ -3,7 +3,7 @@ import Foundation
 
 // MARK: - Version
 
-public let macxVersion = "0.3.0"
+public let macxVersion = "0.4.0"
 
 /// Semantic version: MAJOR.MINOR.PATCH with an optional -pre.release part (sorted before the release). A `+build`
 /// part is ignored, as SemVer says: it never changes the order.

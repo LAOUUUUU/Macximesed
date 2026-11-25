@@ -4,6 +4,8 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-25
+
 ### Added
 - **Beta channel, publishing side** (research/diagnostics-beta/RESEARCH.md step 5): `beta-build.yml` builds every push to `dev` with no secrets (tests, the commit stamped into `BuildInfo.swift`, a check that `macx --version` names it), and `beta-publish.yml`, always main's copy, re-hashes it, publishes only dev's tip, signs `beta-v1.json` with the beta key in the `beta` environment and uploads it to the rolling `dev` prerelease, keeping the last 15 builds. `scripts/release/make-beta-key.sh` makes the separate beta key, sets up the environment (main only, no reviewer) and writes its public half into `UpdateKeys.beta`. `sign-channel.sh --beta` signs with it and refuses a key that isn't the beta one. `dev` has a ruleset: no force-push, no deletion. Beta updates replace the binary, so they reach installs made with `scripts/install.sh`; .pkg and .dmg installs stay on stable releases.
 - **An app icon** in the app's own style: a serif M in ink on paper, underlined by a hairline that ends in the small square that marks the live watch. No gradients, glows or shadows. Drawn by `scripts/make-icon.swift` into `Resources/AppIcon.icns`, which every bundle carries (`install.sh`, the .pkg, the .dmg and the app archive).
