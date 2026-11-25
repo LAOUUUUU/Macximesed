@@ -14,6 +14,9 @@ public struct GameHooks: Codable, Sendable, Equatable {
     public var gameNetwork = false
     /// Apps (bundle IDs) where SOCD is on: of two opposite movement keys, the last one pressed wins.
     public var socdApps: [String] = []
+    /// Time Machine's automatic backups off while playing (root, via the background watch). Optional so settings
+    /// files written before it existed still decode; missing means off.
+    public var pauseBackups: Bool?
 
     public init() {}
 
@@ -185,6 +188,42 @@ public enum GameNetwork {
         case .takeDown: (try? runner.run("/sbin/ifconfig", ["awdl0", "down"])) != nil
         case .bringUp: (try? runner.run("/sbin/ifconfig", ["awdl0", "up"])) != nil
         case .nothing: true
+        }
+    }
+}
+
+/// Pause backups while playing: a running Time Machine backup is stopped and automatic backups are off while a game
+/// started with Play runs, then back on. Only backups that were on are paused, so it never turns on backups the user had
+/// off. Runs in the background watch (root). `disable` can fail silently without Full Disk Access, so it's checked.
+public enum BackupPause {
+    static let tmutil = "/usr/bin/tmutil"
+    static let prefs = "/Library/Preferences/com.apple.TimeMachine"
+
+    public static func decide(enabled: Bool, gameAlive: Bool, weTookItDown: Bool, autoBackupOn: Bool) -> GameNetwork.Step {
+        if enabled, gameAlive { return weTookItDown || !autoBackupOn ? .nothing : .takeDown }
+        return weTookItDown ? .bringUp : .nothing
+    }
+
+    public static func autoBackupOn(runner: CommandRunner = ProcessRunner(timeout: 10)) -> Bool {
+        ((try? runner.run("/usr/bin/defaults", ["read", prefs, "AutoBackup"])) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+    }
+
+    public static func configured(destinationInfo: String) -> Bool {
+        !destinationInfo.contains("No destinations") && destinationInfo.contains("ID")
+    }
+
+    public static func configured(runner: CommandRunner = ProcessRunner(timeout: 10)) -> Bool {
+        configured(destinationInfo: (try? runner.run(tmutil, ["destinationinfo"])) ?? "")
+    }
+
+    public static func apply(_ step: GameNetwork.Step, runner: CommandRunner = ProcessRunner(timeout: 20)) -> Bool {
+        switch step {
+        case .takeDown:
+            _ = try? runner.run(tmutil, ["stopbackup"])  // nothing running is fine
+            guard (try? runner.run(tmutil, ["disable"])) != nil else { return false }
+            return !autoBackupOn(runner: runner)
+        case .bringUp: return (try? runner.run(tmutil, ["enable"])) != nil
+        case .nothing: return true
         }
     }
 }

@@ -108,6 +108,11 @@ struct Watch: ParsableCommand {
                 if FileManager.default.fileExists(atPath: marker.path), GameNetwork.apply(.bringUp) {
                     try? FileManager.default.removeItem(at: marker)
                 }
+                // Nor Time Machine paused.
+                let paused = DaemonPlan.logDir.appendingPathComponent("backups-paused")
+                if FileManager.default.fileExists(atPath: paused.path), BackupPause.apply(.bringUp) {
+                    try? FileManager.default.removeItem(at: paused)
+                }
                 print("\nStopped watching.")
                 Darwin.exit(0)
             }
@@ -144,10 +149,30 @@ struct Watch: ParsableCommand {
             let marker = DaemonPlan.logDir.appendingPathComponent("awdl-down")
             let net = DispatchSource.makeTimerSource(queue: Self.signalQueue)
             net.schedule(deadline: .now() + 5, repeating: 5)
+            var backupTried = false  // one try per game, so a failure isn't retried (and logged) every 5 s
             net.setEventHandler {
                 let hooks = GameHooks.load(from: GameHooks.file(home: user.home))
                 let alive = GameSessionGuard.load(from: GameSessionGuard.file(home: user.home)).map { kill($0.pid, 0) == 0 } ?? false
                 let tookDown = FileManager.default.fileExists(atPath: marker.path)
+                // Pause backups while playing (only ones that were on; checked after, since it can fail silently).
+                let paused = DaemonPlan.logDir.appendingPathComponent("backups-paused")
+                let wePaused = FileManager.default.fileExists(atPath: paused.path)
+                if !alive { backupTried = false }
+                if hooks.pauseBackups == true || wePaused, !(backupTried && !wePaused) {
+                    let b = BackupPause.decide(
+                        enabled: hooks.pauseBackups == true, gameAlive: alive, weTookItDown: wePaused,
+                        autoBackupOn: alive && !wePaused ? BackupPause.autoBackupOn() : false)
+                    if b == .takeDown { backupTried = true }
+                    if b == .takeDown, BackupPause.apply(.takeDown) {
+                        FileManager.default.createFile(atPath: paused.path, contents: Data(), attributes: [.posixPermissions: 0o600])
+                        Log.info("watch", "backups paused while a game runs")
+                    } else if b == .bringUp, BackupPause.apply(.bringUp) {
+                        try? FileManager.default.removeItem(at: paused)
+                        Log.info("watch", "backups back on")
+                    } else if b != .nothing {
+                        Log.warning("watch", "couldn't \(b == .takeDown ? "pause" : "restart") Time Machine backups")
+                    }
+                }
                 let step = GameNetwork.decide(enabled: hooks.gameNetwork, gameAlive: alive, weTookItDown: tookDown)
                 guard step != .nothing, GameNetwork.apply(step) else { return }
                 if step == .takeDown {

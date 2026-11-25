@@ -7,6 +7,10 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ### Added
 - **Why it's slow** on the Performance tab: plain-words reasons from what's busy right now (Photos analysing your library, Spotlight indexing, a busy web page, video playing somewhere, window drawing), with what actually helps. Apple's processes are matched by their exact path in /System and never stopped. Apps using 15%+ CPU while you're in another app get a **Quit…** button (an ordinary quit, after asking). Also notes tight memory, running on battery and a disk over 90% full.
 
+- **Minecraft check** (`macx games minecraft`, and Game tips on the Performance tab): for each Prism Launcher and Modrinth App instance, whether Java is Apple-silicon native, whether its memory suits the pack (over half your RAM, or a big pack on too little), and which speed mods are missing for its loader. Reads only.
+- **Game tips:** your screen's refresh rate (games are capped there), and Roblox advice: use its own Maximum Frame Rate setting, no FPS unlockers.
+- **Pause backups while playing** (While playing, shown only when Time Machine has a backup disk): stops a running backup and pauses automatic ones until the game quits, only if they were on, checked afterwards. Done by the background watch, and put back if the watch stops.
+
 ### Changed
 - **The background watch does far less work on a busy Mac:** file creates and renames outside launch-item folders, Application Support and Downloads (most of eslogger's stream) are skipped with a 1.5 µs byte search instead of a 283 µs JSON decode. Every 5 minutes it hands freed memory back to macOS.
 - **Closing the app window frees it:** the pages, their memory and their timers are dropped when you close the window, and rebuilt when you open it again.

@@ -17,6 +17,8 @@ struct PerformanceView: View {
     @State private var boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
     @State private var applied = Set(Tune.applied())
     @State private var games: [GameEntry]?
+    @State private var minecraft: [(instance: MinecraftInstance, notes: [String])] = []
+    @State private var timeMachineSetUp = false
     @State private var busy: String?
     @State private var note: String?
     @State private var hooks = GameHooks.load()
@@ -74,6 +76,7 @@ struct PerformanceView: View {
                     tune.reveal(1)
                     whilePlaying.reveal(2)
                     gamesSection.reveal(3)
+                    gameTips.reveal(4)
                 }
                 .padding(.horizontal, 48).padding(.bottom, 32)
             }
@@ -240,6 +243,13 @@ struct PerformanceView: View {
                 "Turns off AirDrop's radio (AWDL), which stalls Wi-Fi for about 90 ms every second or two. AirDrop and AirPlay are off until the game quits. Needs the background watch.",
                 on: hooks.gameNetwork
             ) { on in save { $0.gameNetwork = on } }
+            if timeMachineSetUp {
+                row(
+                    "Pause backups",
+                    "Stops a running Time Machine backup and pauses automatic ones until the game quits (only if they were on). Needs the background watch.",
+                    on: hooks.pauseBackups == true
+                ) { on in save { $0.pauseBackups = on } }
+            }
             HStack(spacing: 10) {
                 Button(busy == "jitter" ? "Measuring…" : "Measure Wi-Fi lag") { measureJitter() }.buttonStyle(PlainButtonStyle())
                     .disabled(busy != nil)
@@ -403,12 +413,55 @@ struct PerformanceView: View {
         }
     }
 
+    // MARK: Game tips
+
+    var gameTips: some View {
+        let hz = NSScreen.main?.maximumFramesPerSecond ?? 60
+        return VStack(alignment: .leading, spacing: 0) {
+            header(
+                "Game tips",
+                info:
+                    "Advice only: macx reads your launchers' settings and mods folders and never changes them, and never touches a game's files or memory."
+            )
+            tip("Screen", GameAdvice.refreshNote(hz: hz))
+            if GameAdvice.robloxInstalled { tip("Roblox", GameAdvice.roblox(hz: hz)) }
+            ForEach(Array(minecraft.enumerated()), id: \.offset) { _, m in
+                tip(
+                    "Minecraft: \(m.instance.name)",
+                    m.notes.isEmpty
+                        ? "\(m.instance.launcher), \(m.instance.mods.count) mods. Set up well." : m.notes.joined(separator: "\n"))
+            }
+        }
+    }
+
+    func tip(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(Fonts.sans(13.5)).lineLimit(1)
+            Text(text).font(Fonts.sans(12)).foregroundStyle(Ink.grey).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .background(alignment: .bottom) { Hairline() }
+    }
+
     func loadGames() {
         let job = model.begin("Finding games", "App Store category, Steam, CrossOver bottles, launchers")
         Task.detached(priority: .userInitiated) {
             let found = GameScanner.standard().scan()
+            let tm = BackupPause.configured()
+            let ram = MemoryState.current()?.physicalBytes ?? ProcessInfo.processInfo.physicalMemory
+            let mc = MinecraftCheck.all().map { i in
+                (
+                    instance: i,
+                    notes: MinecraftCheck.advice(i, physicalBytes: ram, javaArchs: i.javaPath.map(MinecraftCheck.archs(of:)) ?? [])
+                )
+            }
             await MainActor.run {
-                Motion.animate(Motion.settle) { games = found }
+                Motion.animate(Motion.settle) {
+                    games = found
+                    minecraft = mc
+                    timeMachineSetUp = tm
+                }
                 model.end(job, "\(found.count) games found")
             }
         }

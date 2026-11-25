@@ -10,7 +10,7 @@ struct GamesCommand: ParsableCommand {
         discussion: """
             Finds games by their App Store category or Game Mode support, known games and launchers (Roblox, Steam, Minecraft launchers, GeForce NOW and others), Steam's library, Windows games in CrossOver bottles, and games you add. `macx games play NAME` turns Boost on, starts the game, records heat and load while you play, and turns Boost off when the game quits. Game Mode can't be switched on by another program: macOS does it when a supported game goes full screen.
             """,
-        subcommands: [List.self, Play.self, Add.self, Forget.self, JitterCheck.self],
+        subcommands: [List.self, Play.self, Add.self, Forget.self, JitterCheck.self, Minecraft.self],
         defaultSubcommand: List.self
     )
 
@@ -75,6 +75,30 @@ struct GamesCommand: ParsableCommand {
             print(
                 keep.count == list.count
                     ? "Nothing matched \(name)." : "Forgot \(list.count - keep.count) game\(list.count - keep.count == 1 ? "" : "s").")
+        }
+    }
+
+    struct Minecraft: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Check your Prism Launcher and Modrinth App instances: native Java, memory, speed mods. Reads only.")
+
+        func run() throws {
+            let found = MinecraftCheck.all()
+            guard !found.isEmpty else {
+                print("No Prism Launcher or Modrinth App instances found.")
+                return
+            }
+            let ram = MemoryState.current()?.physicalBytes ?? ProcessInfo.processInfo.physicalMemory
+            for i in found {
+                let archs = i.javaPath.map(MinecraftCheck.archs(of:)) ?? []
+                var facts = ["\(i.mods.count) mods"]
+                if let mb = i.memoryMB { facts.append("\(mb) MB") }
+                if let a = archs.first { facts.append("Java \(a)") }
+                print("\(i.launcher): \(i.name)  (\(facts.joined(separator: ", ")))")
+                let notes = MinecraftCheck.advice(i, physicalBytes: ram, javaArchs: archs)
+                if notes.isEmpty { print("  Set up well.") }
+                for n in notes { print("  - \(n)") }
+            }
         }
     }
 
