@@ -67,7 +67,16 @@ jobs:
           security import "$RUNNER_TEMP/release.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign >/dev/null
           rm -f "$RUNNER_TEMP/release.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" >/dev/null
-          scripts/make-app.sh dist/macx "$RUNNER_TEMP/Macximesed.app" "$VER" "Macximesed Release Signing" "$KC"
+          # The temporary keychain in the search list too, and the identity by its fingerprint, not its name.
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID=$(security find-identity -p codesigning "$KC" | awk '/"Macximesed Release Signing"/ { print $2; exit }')
+          if [ -z "$ID" ]; then
+            echo "::error::the release certificate isn't a signing identity in the keychain"
+            security find-identity "$KC"; security find-certificate -a "$KC" | grep -E 'labl|alis' || true
+            exit 1
+          fi
+          echo "Signing with $ID"
+          scripts/make-app.sh dist/macx "$RUNNER_TEMP/Macximesed.app" "$VER" "$ID" "$KC"
           codesign -dvv "$RUNNER_TEMP/Macximesed.app" 2>&1 | grep -E '^(Identifier|Authority)='
           codesign -d -r- "$RUNNER_TEMP/Macximesed.app" 2>&1 | grep designated
           scripts/release/make-installers.sh "$RUNNER_TEMP/Macximesed.app" "$VER" installers
