@@ -60,19 +60,23 @@ for t in tests:
         hit = [r for r in wanted if r != "persist" and r in rules]
         if "persist" in wanted and persist_hit(t):
             hit.append("persist")
-        result = "caught" if hit else "missed"
+        # No predicted rule, but a high or critical alert all the same: caught, and the prediction was wrong.
+        other = [a for a in seen if RANK.get(a.get("severity"), 0) >= 3]
+        result = "caught" if hit else ("caught, other rule" if other else "missed")
     score[result] += 1
     shown = ", ".join(f'{a["rule"]} ({a["severity"]})' for a in sorted(seen, key=lambda a: -RANK.get(a.get("severity"), 0))[:4])
     rows.append((t["id"], t["as_"], want, result, shown or "none", notes.get(t["id"], t["id"])))
 
 print(f"## Atomic Red Team: {label}\n")
-scored = score["caught"] + score["missed"]
-print(f"**Caught {score['caught']} of {scored}** attacks that should be caught. "
+caught = score["caught"] + score["caught, other rule"]
+scored = caught + score["missed"]
+other_note = f" ({score['caught, other rule']} by a different rule than the one predicted)" if score["caught, other rule"] else ""
+print(f"**Caught {caught} of {scored}**{other_note} attacks that should be caught. "
       f"**{score['false alarm']} false alarm(s)** in {score['quiet'] + score['false alarm']} tests that should stay quiet "
       f"(including the ordinary-work run). {score['info']} informational.\n")
 print("| Test | As | Wanted | Result | What the watch said | What it does |")
 print("|---|---|---|---|---|---|")
-order = {"missed": 0, "false alarm": 1, "caught": 2, "quiet": 3, "info": 4}
+order = {"missed": 0, "false alarm": 1, "caught, other rule": 2, "caught": 3, "quiet": 4, "info": 5}
 for r in sorted(rows, key=lambda r: (order[r[3]], r[0])):
     print(f"| {r[0]} | {r[1]} | `{r[2]}` | **{r[3]}** | {r[4]} | {r[5]} |")
 
