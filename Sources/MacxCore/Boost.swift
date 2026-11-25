@@ -236,12 +236,20 @@ public struct CPUUse: Sendable, Equatable {
     public var uid: uid_t
     public var path: String
     public var cpuPercent: Double
+    /// Physical footprint, as Activity Monitor's Memory column.
+    public var memoryBytes: UInt64 = 0
 
-    public init(pid: Int32, uid: uid_t, path: String, cpuPercent: Double) {
+    /// Biggest memory users first.
+    public static func byMemory(_ uses: [CPUUse]) -> [CPUUse] {
+        uses.sorted { $0.memoryBytes != $1.memoryBytes ? $0.memoryBytes > $1.memoryBytes : $0.pid < $1.pid }
+    }
+
+    public init(pid: Int32, uid: uid_t, path: String, cpuPercent: Double, memoryBytes: UInt64 = 0) {
         self.pid = pid
         self.uid = uid
         self.path = path
         self.cpuPercent = cpuPercent
+        self.memoryBytes = memoryBytes
     }
 
     public var name: String {

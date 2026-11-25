@@ -8,6 +8,8 @@ public enum CPUSampler {
         public var cpuNanos: UInt64
         public var uid: uid_t
         public var path: String
+        /// Physical footprint: what Activity Monitor shows as Memory.
+        public var footprint: UInt64 = 0
     }
 
     public static func snapshot() -> [Int32: Reading] {
@@ -29,7 +31,7 @@ public enum CPUSampler {
             // ri_*_time is in Mach absolute-time units on Apple silicon; convert to nanoseconds.
             let ticks = usage.ri_user_time + usage.ri_system_time
             let nanos = ticks * UInt64(tb.numer) / UInt64(max(tb.denom, 1))
-            out[pid] = Reading(cpuNanos: nanos, uid: uid, path: ProcessTree.path(of: pid))
+            out[pid] = Reading(cpuNanos: nanos, uid: uid, path: ProcessTree.path(of: pid), footprint: usage.ri_phys_footprint)
         }
         return out
     }
@@ -40,7 +42,7 @@ public enum CPUSampler {
         return after.compactMap { pid, a -> CPUUse? in
             guard let b = before[pid], a.cpuNanos >= b.cpuNanos, a.path == b.path else { return nil }
             let pct = Double(a.cpuNanos - b.cpuNanos) / 1e9 / interval * 100
-            return CPUUse(pid: pid, uid: a.uid, path: a.path, cpuPercent: pct)
+            return CPUUse(pid: pid, uid: a.uid, path: a.path, cpuPercent: pct, memoryBytes: a.footprint)
         }
         .sorted { $0.cpuPercent != $1.cpuPercent ? $0.cpuPercent > $1.cpuPercent : $0.pid < $1.pid }
     }

@@ -134,3 +134,28 @@ struct GameNetworkTests {
         #expect(Jitter.gateway(fromRoute: "route: writing to routing socket: not in table") == nil)
     }
 }
+
+@Suite("Memory pressure and swap for the Performance tab")
+struct MemoryStateTests {
+    @Test func pressureLevelsReadLikeMacOSSays() {
+        #expect(MemoryState.Pressure(level: 1) == .normal)
+        #expect(MemoryState.Pressure(level: 2) == .warning)
+        #expect(MemoryState.Pressure(level: 4) == .critical)
+        #expect(MemoryState.Pressure(level: 0) == .normal)
+        #expect(MemoryState.Pressure.warning.label == "Memory is tight")
+    }
+
+    @Test func theRealMacAnswers() throws {
+        let m = try #require(MemoryState.current())
+        #expect(m.physicalBytes > 0)
+        #expect(m.swapUsedBytes <= m.swapTotalBytes || m.swapTotalBytes == 0)
+    }
+
+    @Test func busiestByMemoryUsesFootprint() {
+        let uses = [
+            CPUUse(pid: 1, uid: 501, path: "/a", cpuPercent: 50, memoryBytes: 100),
+            CPUUse(pid: 2, uid: 501, path: "/b", cpuPercent: 1, memoryBytes: 900),
+        ]
+        #expect(CPUUse.byMemory(uses).map(\.pid) == [2, 1])
+    }
+}

@@ -9,6 +9,9 @@ struct PerformanceView: View {
     @State private var uses: [CPUUse] = []
     @State private var level = ThermalLevel.current
     @State private var pressure = ThermalPressure.current()
+    @State private var memory = MemoryState.current()
+    @State private var allUses: [CPUUse] = []
+    @State private var byMemory = false
     @State private var boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
     @State private var applied = Set(Tune.applied())
     @State private var games: [GameEntry]?
@@ -36,6 +39,11 @@ struct PerformanceView: View {
         if let p = pressure { s += " Heat: \(p.label)." }
         if hot { s += " macOS is slowing the chip down to cool it: less load or a cooler spot helps." }
         if ProcessInfo.processInfo.isLowPowerModeEnabled { s += " Low Power Mode is on, which caps the CPU." }
+        if let m = memory {
+            s += " \(m.pressure.label)"
+            s += m.swapUsedBytes > 0 ? ", \(formatMemory(m.swapUsedBytes)) swapped to disk." : "."
+            if m.pressure != .normal { s += " Quitting the biggest memory users below will help more than Boost." }
+        }
         return s
     }
 
@@ -76,19 +84,32 @@ struct PerformanceView: View {
 
     var live: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header("Busiest right now", info: "Real CPU time over the last 2 seconds, not Activity Monitor's percentage. 100% is one core.")
-            if uses.isEmpty {
+            header(
+                "Busiest right now",
+                info:
+                    "CPU: real time on a core over the last 2 seconds (100% is one core), not Activity Monitor's percentage. Memory: each program's footprint, as Activity Monitor's Memory column."
+            )
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 6) {
+                    sortButton("CPU", on: !byMemory) { byMemory = false }
+                    Text("·").foregroundStyle(Ink.grey)
+                    sortButton("Memory", on: byMemory) { byMemory = true }
+                }
+                .font(Fonts.mono(11.5)).padding(.top, 30)
+            }
+            if uses.isEmpty && allUses.isEmpty {
                 HairlineProgress().padding(.vertical, 14)
             }
-            ForEach(Array(uses.prefix(8).enumerated()), id: \.element.pid) { i, u in
+            ForEach(Array((byMemory ? CPUUse.byMemory(allUses) : uses).prefix(8).enumerated()), id: \.element.pid) { i, u in
                 HStack(spacing: 20) {
                     Text((u.path as NSString).lastPathComponent).font(Fonts.sans(13.5)).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if getpriority(PRIO_DARWIN_PROCESS, id_t(u.pid)) == PRIO_DARWIN_BG {
                         Text("background").font(Fonts.mono(11)).foregroundStyle(Ink.grey)
                     }
-                    Text("\(Int(u.cpuPercent))%").font(Fonts.mono(12)).frame(width: 64, alignment: .trailing)
-                        .contentTransition(.numericText()).motion(value: Int(u.cpuPercent))
+                    Text(byMemory ? formatMemory(u.memoryBytes) : "\(Int(u.cpuPercent))%").font(Fonts.mono(12))
+                        .frame(width: 84, alignment: .trailing)
+                        .contentTransition(.numericText()).motion(value: byMemory ? Int(u.memoryBytes >> 20) : Int(u.cpuPercent))
                 }
                 .padding(.vertical, 8)
                 .background(alignment: .bottom) { Hairline() }
@@ -266,6 +287,16 @@ struct PerformanceView: View {
         }
     }
 
+    func sortButton(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            Motion.animate { action() }
+        } label: {
+            Text(title).foregroundStyle(on ? Ink.text : Ink.grey).underline(on)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
     func header(_ title: String, info: String) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
@@ -292,6 +323,8 @@ struct PerformanceView: View {
                 uses = found.filter { $0.cpuPercent >= 0.5 }
                 level = .current
                 pressure = ThermalPressure.current()
+                memory = MemoryState.current()
+                allUses = found
                 boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
             }
         }

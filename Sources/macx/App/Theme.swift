@@ -304,42 +304,119 @@ struct Reveal: ViewModifier {
 }
 
 /// The watch is live: a small filled square whose ink breathes slowly. No glow; still when Reduce motion is on.
+/// Drawn with Core Animation, which runs in the render server: a SwiftUI repeating animation re-ran the whole
+/// window's layout every frame (about 40% CPU while idle).
 struct LiveMark: View {
     var color: Color = Ink.text
     var size: CGFloat = 7
-    @State private var dim = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Rectangle().fill(color).frame(width: size, height: size)
-            .opacity(dim ? 0.35 : 1)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { dim = true }
-            }
+        LayerAnimation(kind: .pulse, color: NSColor(color), still: reduceMotion).frame(width: size, height: size)
             .accessibilityHidden(true)
     }
 }
 
-/// Work in progress as a hairline with a short ink segment travelling along it, instead of a spinner.
+/// Work in progress as a hairline with a short ink segment travelling along it, instead of a spinner (Core Animation too).
 struct HairlineProgress: View {
     var width: CGFloat = 180
-    @State private var phase: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            Rectangle().fill(Ink.line)
-            Rectangle().fill(Ink.text).frame(width: width * 0.28)
-                .offset(x: reduceMotion ? width * 0.36 : phase * width * 1.28 - width * 0.28)
+        LayerAnimation(kind: .travel, color: NSColor(Ink.text), track: NSColor(Ink.line), still: reduceMotion)
+            .frame(width: width, height: 1.5)
+            .accessibilityLabel("Working")
+    }
+}
+
+/// A layer-backed view whose animation lives in Core Animation, so SwiftUI does no work per frame.
+struct LayerAnimation: NSViewRepresentable {
+    enum Kind { case pulse, travel }
+    let kind: Kind
+    let color: NSColor
+    var track: NSColor? = nil
+    let still: Bool
+
+    func makeNSView(context: Context) -> AnimatedLayerView {
+        let v = AnimatedLayerView()
+        v.configure(kind: kind, color: color, track: track, still: still)
+        return v
+    }
+
+    func updateNSView(_ v: AnimatedLayerView, context: Context) { v.configure(kind: kind, color: color, track: track, still: still) }
+}
+
+final class AnimatedLayerView: NSView {
+    private var kind: LayerAnimation.Kind = .pulse
+    private var color: NSColor = .black
+    private var track: NSColor?
+    private var still = false
+    private let segment = CALayer()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.addSublayer(segment)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func configure(kind: LayerAnimation.Kind, color: NSColor, track: NSColor?, still: Bool) {
+        let changed = kind != self.kind || still != self.still
+        self.kind = kind
+        self.color = color
+        self.track = track
+        self.still = still
+        applyColors()
+        if changed { restart() }
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let b = bounds
+        segment.frame = kind == .pulse ? b : CGRect(x: 0, y: 0, width: b.width * 0.28, height: b.height)
+        CATransaction.commit()
+        restart()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
+    }
+
+    private func applyColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            segment.backgroundColor = color.cgColor
+            layer?.backgroundColor = kind == .travel ? track?.cgColor : nil
         }
-        .frame(width: width, height: 1.5)
-        .clipped()
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: false)) { phase = 1 }
+    }
+
+    private func restart() {
+        segment.removeAllAnimations()
+        guard !still, bounds.width > 0 else {
+            if kind == .travel { segment.position = CGPoint(x: bounds.midX, y: bounds.midY) }
+            return
         }
-        .accessibilityLabel("Working")
+        let a: CABasicAnimation
+        switch kind {
+        case .pulse:
+            a = CABasicAnimation(keyPath: "opacity")
+            a.fromValue = 1
+            a.toValue = 0.35
+            a.duration = 1.6
+            a.autoreverses = true
+        case .travel:
+            a = CABasicAnimation(keyPath: "position.x")
+            let w = segment.bounds.width
+            a.fromValue = -w / 2
+            a.toValue = bounds.width + w / 2
+            a.duration = 1.1
+        }
+        a.repeatCount = .infinity
+        a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        segment.add(a, forKey: "motion")
     }
 }
 
