@@ -173,7 +173,7 @@ struct InfoButton: View {
 
     var body: some View {
         Button {
-            Motion.animate(Motion.quick) { open.toggle() }
+            open.toggle()
         } label: {
             InfoGlyph().frame(width: 22, height: 22).contentShape(Rectangle())
         }
@@ -182,29 +182,20 @@ struct InfoButton: View {
         .help(text)
         .accessibilityLabel("More information")
         .accessibilityHint(text)
-        .overlay(alignment: .topLeading) {
-            if open {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(text).font(Fonts.sans(12)).foregroundStyle(Ink.text).fixedSize(horizontal: false, vertical: true)
-                    if let detail {
-                        Text(detail).font(Fonts.mono(11)).foregroundStyle(Ink.grey).textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+        // A real popover: its own window above the page, fully opaque, so nothing on the page can show through it
+        // or be drawn over it (the old in-page panel let later rows paint on top).
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(text).font(Fonts.sans(12)).foregroundStyle(Ink.text).fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail).font(Fonts.mono(11)).foregroundStyle(Ink.grey).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 10)
-                .frame(width: 300, alignment: .leading)
-                .background(Ink.raised)
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Ink.outline, lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .shadow(color: .black.opacity(0.14), radius: 9, y: 4)
-                .offset(x: -10, y: 28)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
-                .onTapGesture { Motion.animate(Motion.quick) { open = false } }
-                .onExitCommand { Motion.animate(Motion.quick) { open = false } }
-                .zIndex(10)
             }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .frame(width: 320, alignment: .leading)
+            .background(Ink.raised)
         }
-        .zIndex(open ? 10 : 0)
     }
 }
 

@@ -37,6 +37,15 @@ final class AppModel {
     var reportOpen = false
     var crashNote: String?
 
+    // The status bar and the update pop-up (AppActivity.swift).
+    var activities: [Activity] = []
+    var finished: Finished?
+    var updateAvailable: String?
+    var updateUrgent = false
+    var updatePrompt: String?
+    var updating = false
+    var windowOpen = false
+
     enum ChamberJob: Equatable {
         case unknown, notSetUp, settingUp, ready
         case failed(String)

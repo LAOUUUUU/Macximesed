@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     var window: NSWindow?
     var setupWindow: NSWindow?
     var status: StatusController?
+    var updateTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         status = StatusController(model: model, openWindow: { [weak self] section in self?.showWindow(section) })
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             Snapshots(delegate: self, folder: URL(fileURLWithPath: dir)).start()
             return
         }
+        watchForUpdates()
         if env["MACX_APP_SETUP"] == "1" || FirstRun.shouldShowSetup(finished: UserDefaults.standard.string(forKey: FirstRun.defaultsKey)) {
             showSetup()
         } else if env["MACX_APP_HIDDEN"] != "1" {
@@ -43,6 +45,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         if env["MACX_APP_PANEL"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.status?.showPanel() }
         }
+    }
+
+    /// Updates: ask the channel now and every 6 hours, and install a chosen update when the screen sleeps or the Mac wakes.
+    func watchForUpdates() {
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.handle(.screenSlept) }
+        }
+        center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.model.handle(.woke)
+                self?.model.checkForUpdate()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.model.checkForUpdate() }
+        let t = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.model.checkForUpdate() } }
+        RunLoop.main.add(t, forMode: .common)
+        updateTimer = t
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -73,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         // Show in the Dock and app switcher while the window is open.
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
+        model.windowOpen = true
         NSApp.activate()
     }
 
@@ -123,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             if window?.isVisible != true { showWindow(nil) }
             return
         }
+        model.windowOpen = false
         NSApp.setActivationPolicy(.accessory)
     }
 
@@ -453,6 +475,10 @@ final class Snapshots {
     func start() {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         delegate.showWindow(.protection)
+        if let v = ProcessInfo.processInfo.environment["MACX_APP_SNAPSHOT_UPDATE"] {
+            delegate.model.updateAvailable = v
+            delegate.model.updatePrompt = v
+        }
         var steps: [(String, () -> Void)] = []
         for appearance in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             steps.append(("", { NSApp.appearance = NSAppearance(named: appearance.1) }))
@@ -477,6 +503,12 @@ final class Snapshots {
         action()
         // Long enough for the data to load and every animation to settle.
         let slow = name.hasSuffix("check-a-file") && ProcessInfo.processInfo.environment["MACX_APP_SNAPSHOT_CHAMBER"] == "1"
+        if slow {
+            // One more while the chamber is still running, to see its stage in the status bar.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) {
+                if let view = self.delegate.window?.contentView { self.save(view, name + "-running") }
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + (name.isEmpty ? 0.5 : slow ? 9 : 2.5)) {
             if name.hasSuffix("menu-panel") {
                 let host = NSHostingView(rootView: MenuPanelView(model: self.delegate.model, open: { _ in }, close: {}))

@@ -50,7 +50,10 @@ public enum ChamberVM {
         public var stoppedByTimeLimit: Bool
     }
 
-    public static func run(kernel: URL, initramfs: Data, timeLimit: TimeInterval) throws -> Run {
+    /// `onReady` is called once, when the guest prints its ready line: booting is over and the sample starts.
+    public static func run(
+        kernel: URL, initramfs: Data, timeLimit: TimeInterval, onReady: (@Sendable () -> Void)? = nil
+    ) throws -> Run {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent("macx-chamber-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -79,7 +82,10 @@ public enum ChamberVM {
         }
 
         let collected = Collector()
-        pipe.fileHandleForReading.readabilityHandler = { collected.append($0.availableData) }
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            collected.append(handle.availableData)
+            if let onReady, collected.markReady() { onReady() }
+        }
         let queue = DispatchQueue(label: "macx.chamber.vm")
         let state = RunState()
         let started = Date()
@@ -109,6 +115,15 @@ public enum ChamberVM {
         let lock = NSLock()
         var data = Data()
         func append(_ d: Data) { lock.withLock { data.append(d.prefix(max(0, 30_000_000 - data.count))) } }
+        var readySeen = false
+        /// True once, the first time the ready line is in the console.
+        func markReady() -> Bool {
+            lock.withLock {
+                guard !readySeen, data.range(of: Data("==MACX-READY==".utf8)) != nil else { return false }
+                readySeen = true
+                return true
+            }
+        }
         var text: String { lock.withLock { String(decoding: data, as: UTF8.self) } }
     }
 

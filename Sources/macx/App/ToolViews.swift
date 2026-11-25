@@ -171,6 +171,7 @@ struct StartupView: View {
     func scan() {
         model.startupItems = nil
         let own = AppModel.executable
+        let job = model.begin("Scanning startup items", "launch agents, daemons, login items, extensions, shell files")
         Task.detached(priority: .userInitiated) {
             let found = PersistenceScanner.current()
             let home = FileManager.default.homeDirectoryForCurrentUser
@@ -184,6 +185,8 @@ struct StartupView: View {
                 model.startupHasBaseline = old != nil
                 model.startupAdded = addedKeys
                 model.startupCount = found.count
+                let flagged = Set(f.map(\.item.key)).count
+                model.end(job, "Startup items: \(found.count), \(flagged) to look at")
             }
         }
     }
@@ -219,6 +222,7 @@ struct StartupView: View {
 // MARK: Check a file
 
 struct CheckView: View {
+    @Bindable var model: AppModel
     @State private var report: FileReport?
     @State private var checking: String?
     @State private var problem: String?
@@ -470,13 +474,32 @@ struct CheckView: View {
         .transition(.opacity.combined(with: .offset(y: 8)))
     }
 
+    static func word(_ v: Verdict) -> String {
+        switch v {
+        case .ok: "looks fine"
+        case .partlyUnknown: "partly unknown"
+        case .caution: "be careful"
+        case .dangerous: "don't open it"
+        }
+    }
+
     func runChamber(_ url: URL) {
         Motion.animate {
             chamber = ChamberRun(running: true)
         }
+        let job = model.begin("Chamber", url.lastPathComponent)
+        let model = model
         Task.detached(priority: .userInitiated) {
-            let result = Result { try ChamberSession.run(url) }
+            let result = Result {
+                try ChamberSession.run(url) { stage in
+                    Task { @MainActor in model.step(job, "Chamber: \(stage.label)") }
+                }
+            }
             await MainActor.run {
+                switch result {
+                case .success(let o): model.end(job, "Chamber: \(url.lastPathComponent), \(o.report.verdict.label)")
+                case .failure: model.end(job, "Chamber: \(url.lastPathComponent) didn't run")
+                }
                 Motion.animate(Motion.settle) {
                     chamber.running = false
                     switch result {
@@ -530,10 +553,16 @@ struct CheckView: View {
             problem = nil
             chamber = ChamberRun()
         }
+        let job = model.begin("Checking a file", url.path)
         Task.detached(priority: .userInitiated) {
             let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: HashFeed.loadCached())
             let result = Result { try checker.check(url) }
             await MainActor.run {
+                if case .success(let r) = result {
+                    model.end(job, "Checked \(url.lastPathComponent): \(Self.word(r.verdict))")
+                } else {
+                    model.end(job, "Couldn't check \(url.lastPathComponent)")
+                }
                 Motion.animate(Motion.settle) {
                     checking = nil
                     switch result {
@@ -631,6 +660,7 @@ struct CleanView: View {
     func scan() {
         held = UndoStore().usage()
         let running = runningBundleIDs()
+        let job = model.begin("Measuring caches and logs", "~/Library/Caches, ~/Library/Logs")
         Task.detached(priority: .userInitiated) {
             let all = CleanupCatalog.safe(.current(runningBundleIDs: running)).filter { $0.bytes > 0 }
             let preset = Set(CleanupCatalog.select(all, only: [], includeInUse: false, includeUnknown: false).map(\.id))
@@ -638,6 +668,7 @@ struct CleanView: View {
                 model.cleanItems = all.sorted { $0.bytes > $1.bytes }
                 model.cleanChosen = preset
                 model.cleanBytes = all.filter { preset.contains($0.id) }.reduce(0) { $0 + $1.bytes }
+                model.end(job, "\(all.count) caches and logs measured")
             }
         }
     }
@@ -771,12 +802,14 @@ struct AppsView: View {
     }
 
     func scan() {
+        let job = model.begin("Finding every app", "asking Spotlight")
         Task.detached(priority: .userInitiated) {
             let found = AppScanner.discover(home: FileManager.default.homeDirectoryForCurrentUser)
             await MainActor.run {
                 model.apps = found.apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
                 model.appsSkipped = found.skippedGuarded
                 model.appCount = model.apps?.filter { !$0.isOnSystemVolume }.count
+                model.end(job, "\(found.apps.count) apps found")
             }
         }
     }

@@ -122,3 +122,12 @@ struct ChamberSessionTests {
         #expect(!ChamberSession.canRun(tmp.url.appendingPathComponent("missing.sh")))
     }
 }
+
+@Suite("Chamber stages for the status bar")
+struct ChamberStageTests {
+    @Test func everyStageSaysWhatsHappening() {
+        let stages: [ChamberSession.Stage] = [.preparing, .building, .booting, .running(limit: 60), .judging]
+        #expect(Set(stages.map(\.label)).count == stages.count)
+        #expect(ChamberSession.Stage.running(limit: 60).label.contains("60 s"))
+    }
+}

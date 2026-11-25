@@ -15,7 +15,7 @@ struct MainView: View {
                     switch model.section {
                     case .protection: ProtectionView(model: model)
                     case .startup: StartupView(model: model)
-                    case .check: CheckView()
+                    case .check: CheckView(model: model)
                     case .clean: CleanView(model: model)
                     case .apps: AppsView(model: model)
                     case .settings: SettingsView(model: model)
@@ -26,7 +26,12 @@ struct MainView: View {
             }
             .motion(Motion.page, value: model.section)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .bottomTrailing) {
+                if let v = model.updatePrompt { UpdatePrompt(model: model, version: v).padding(.trailing, 24).padding(.bottom, 48) }
+            }
+            .motion(Motion.settle, value: model.updatePrompt)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { StatusBar(model: model) }
         .background(Ink.paper)
         .foregroundStyle(Ink.text)
         .font(Fonts.sans(13))
@@ -97,15 +102,6 @@ struct Sidebar: View {
                 .keyboardShortcut(KeyEquivalent(Character("\(AppModel.Section.allCases.firstIndex(of: s)! + 1)")), modifiers: .command)
             }
             Spacer()
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    if model.state.glyph == .watching { LiveMark(size: 5) }
-                    Text(model.state.headline).font(Fonts.sans(11)).contentTransition(.opacity).motion(value: model.state.headline)
-                }
-                Text("Version \(BuildVersion.current.description)").font(Fonts.sans(11))
-            }
-            .foregroundStyle(Ink.grey)
-            .padding(.horizontal, 18).padding(.bottom, 16)
         }
         .frame(width: 212)
         .background(Ink.side)
@@ -594,39 +590,27 @@ struct SettingsView: View {
     /// Runs the app's own `macx update` (one code path with the CLI); with `install` it downloads and installs.
     func runUpdate(install: Bool) {
         busy = install ? .installing : .checking
-        let exe = AppModel.executable
-        Task.detached {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: exe)
-            p.arguments = install ? ["update"] : ["update", "--check"]
-            let pipe = Pipe()
-            p.standardOutput = pipe
-            p.standardError = pipe
-            p.standardInput = FileHandle.nullDevice
-            var out = ""
-            var code: Int32 = 1
-            if (try? p.run()) != nil {
-                out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                p.waitUntilExit()
-                code = p.terminationStatus
-            }
-            let result = UpdateReport.parse(out, exitCode: code)
-            await MainActor.run {
-                busy = nil
-                report = result
-                update = UpdateState.load()
+        let job = model.begin(install ? "Updating Macximesed" : "Checking for updates")
+        Task {
+            let result = await AppModel.macxUpdate(install: install)
+            busy = nil
+            report = result
+            update = UpdateState.load()
+            switch result.status {
+            case .available(let v), .urgent(let v, _):
+                model.updateAvailable = v
+                model.end(job, "Version \(v) is out")
+            case .installed(let v):
+                model.updateAvailable = nil
+                model.end(job, "Updated to \(v)")
+            case .upToDate: model.end(job, "Up to date")
+            case .failed: model.end(job, "The update check didn't work")
             }
         }
     }
 
     /// The new binary is already in the bundle; open the app again once this copy has quit.
-    func relaunch() {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundleURL.path]
-        try? p.run()
-        NSApp.terminate(nil)
-    }
+    func relaunch() { AppModel.relaunch() }
 }
 
 /// A soft fill under a row while the pointer is over it.
