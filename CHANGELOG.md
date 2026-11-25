@@ -4,7 +4,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-25
+
+### Added
+- **Memory on the Performance tab:** the header says whether memory is fine or tight (macOS's own pressure level) and how much is swapped to disk, and the busiest list switches between **CPU** and **Memory** (each program's footprint, as Activity Monitor's Memory column). When memory is tight, the page says quitting the biggest users helps more than Boost.
+
 ### Fixed
+- **The app used about 40% CPU doing nothing, and its memory kept growing.** The breathing live square and the moving progress hairline were SwiftUI animations that never stopped, and SwiftUI re-ran the whole window's layout every frame for them. They're drawn with Core Animation now, which runs in the system's render server. On Lao's Mac: idle CPU from about 43% to 0%, memory from 194 MB and growing to a steady 112 MB.
 - **Updating from 0.3.0 didn't bring the app icon** to apps installed with `scripts/install.sh`: those updates replace only the macx program inside the app. macx now carries the icon itself, and an update adds it (and names it in Info.plist) when the app doesn't have it yet. .pkg and .dmg installs already had it.
 
 ## [0.4.0] - 2026-11-25

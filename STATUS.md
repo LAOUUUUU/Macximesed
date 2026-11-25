@@ -4,6 +4,9 @@ The job list: what is being built now and what comes next. Finished work moves t
 
 Steps run from easiest to hardest, and each one needs only steps already built. The full plan is in [research/macximesed-v1/RESEARCH.md](research/macximesed-v1/RESEARCH.md).
 
+## 0.4.1 (2026-11-25)
+The app's idle CPU (about 43% to 0%), memory pressure and a CPU/Memory switch on the Performance tab, and the app icon for installs updated from 0.3.0.
+
 ## 0.4.0 (2026-11-25)
 Released with the .pkg and .dmg (signed with the release certificate) and whole-app updates for them, the app icon, motion everywhere, the status bar and update pop-up, the chamber on the Check page, the Performance tab with While playing (raw mouse, game network, Do Not Disturb shortcuts, SOCD), the 12 new watch events, the Atomic Red Team fixes (30 of 33 caught, 0 false alarms), the persist gaps, and the beta channel (beta key built in; publishing starts once this is on main).
 
