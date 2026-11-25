@@ -11,6 +11,8 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 - **Game tips:** your screen's refresh rate (games are capped there), and Roblox advice: use its own Maximum Frame Rate setting, no FPS unlockers.
 - **Pause backups while playing** (While playing, shown only when Time Machine has a backup disk): stops a running backup and pauses automatic ones until the game quits, only if they were on, checked afterwards. Done by the background watch, and put back if the watch stops.
 
+- **Risky tier** (`macx risky`, and a folded-away Risky section on the Performance tab): Spotlight indexing off, hibernation off, Power Nap off, and a purge of Time Machine's local snapshots. Three confirmations each; the old values are stored and an undo script is written; the purge is the one thing that can't be undone and says so. Turning off Apple's background agents isn't included: macOS 27 refuses it while SIP is on (tested).
+
 ### Changed
 - **The background watch does far less work on a busy Mac:** file creates and renames outside launch-item folders, Application Support and Downloads (most of eslogger's stream) are skipped with a 1.5 µs byte search instead of a 283 µs JSON decode. Every 5 minutes it hands freed memory back to macOS.
 - **Closing the app window frees it:** the pages, their memory and their timers are dropped when you close the window, and rebuilt when you open it again.

@@ -77,6 +77,7 @@ struct PerformanceView: View {
                     whilePlaying.reveal(2)
                     gamesSection.reveal(3)
                     gameTips.reveal(4)
+                    RiskySection(model: model).reveal(5)
                 }
                 .padding(.horizontal, 48).padding(.bottom, 32)
             }

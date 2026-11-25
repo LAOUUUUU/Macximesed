@@ -269,7 +269,7 @@ final class AppModel {
     func uninstall() { runAdmin(["daemon", "uninstall"], why: "remove the background watch") }
     func restart() { runAdmin(["daemon", "restart"], why: "restart the background watch") }
 
-    func runAdmin(_ arguments: [String], why: String) {
+    func runAdmin(_ arguments: [String], why: String, then: @escaping @MainActor () -> Void = {}) {
         busy = true
         adminError = nil
         let script = AdminCommand.appleScript(
@@ -283,6 +283,7 @@ final class AppModel {
                 // -128: the user pressed Cancel on the password prompt. Not an error.
                 if let error = result, !error.contains("-128") { self.adminError = error }
                 self.refresh()
+                then()
             }
         }
     }

@@ -60,7 +60,7 @@ struct Macx: ParsableCommand {
             Chamber.self, Top.self, BoostCommand.self, TuneCommand.self, GamesCommand.self, ESPassthrough.self,
             Incident.self, Privacy.self, Report.self, ReportKeygen.self, ReportOpen.self,
             Update.self,
-            Undo.self,
+            Undo.self, RiskyCommand.self,
         ]
     )
 }
