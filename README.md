@@ -91,7 +91,7 @@ Then `macx privacy --open`, **+**, and choose Macximesed again. To see why acces
 1. builds a fresh boot image with the script, stand-ins for Mac commands (`osascript`, `security`, `dscl`, `system_profiler`, `sw_vers`, `uname`, `curl`, `sudo` and more, answering like a Mac on macOS 27.0.1), and bait files (a keychain, Chrome and Firefox passwords, an Exodus wallet);
 2. boots it with Apple's Virtualization framework: one CPU, no disk, no network device, no shared folder;
 3. runs the script once under `strace` (60 seconds at most; a run usually takes under 2 s) and powers off. Nothing survives the run;
-4. judges the trace here with the live-watch rules plus chamber rules: keychain, browser and wallet reads, network attempts, VM checks (including across a pipe), and "checked for a VM, then quit".
+4. judges the trace here with the live-watch rules plus chamber rules: keychain, browser and wallet reads, network attempts, VM checks (including across a pipe), and "checked for a VM, then quit". In the app, check a script on the Check page and press **Run it in the chamber**.
 
 A clean result means *nothing was seen*, not *safe*: malware can wait, ask for a click, or notice it's in a VM. The password boxes answer with a canary password, so a stealer carries on and shows what it does with it. The chamber needs the Virtualization entitlement, which `scripts/install.sh` and the updater sign the app with (no paid Apple account needed). Development builds in `.build/` don't have it. `MACX_CHAMBER_MIRROR=DIR` reads the setup files from a local folder instead of downloading them.
 

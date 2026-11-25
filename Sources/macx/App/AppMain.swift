@@ -476,7 +476,8 @@ final class Snapshots {
         let (name, action) = steps[i]
         action()
         // Long enough for the data to load and every animation to settle.
-        DispatchQueue.main.asyncAfter(deadline: .now() + (name.isEmpty ? 0.5 : 2.5)) {
+        let slow = name.hasSuffix("check-a-file") && ProcessInfo.processInfo.environment["MACX_APP_SNAPSHOT_CHAMBER"] == "1"
+        DispatchQueue.main.asyncAfter(deadline: .now() + (name.isEmpty ? 0.5 : slow ? 9 : 2.5)) {
             if name.hasSuffix("menu-panel") {
                 let host = NSHostingView(rootView: MenuPanelView(model: self.delegate.model, open: { _ in }, close: {}))
                 host.frame = NSRect(origin: .zero, size: host.fittingSize)

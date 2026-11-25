@@ -223,10 +223,25 @@ struct CheckView: View {
     @State private var checking: String?
     @State private var problem: String?
     @State private var targeted = false
+    @State private var chamber = ChamberRun()
+
+    /// The chamber section's state for the file on screen.
+    struct ChamberRun {
+        var running = false
+        var outcome: ChamberSession.Outcome?
+        var problem: String?
+        var quarantined: String?
+    }
 
     var headline: String {
         if let checking { return "Checking \(checking)…" }
         guard let report else { return problem == nil ? "Check a file." : "Couldn't check it." }
+        // What it did in the chamber outranks what reading it suggested.
+        switch chamber.outcome?.report.verdict {
+        case .dangerous?: return "Don't open this."
+        case .caution? where report.verdict < .caution: return "Be careful."
+        default: break
+        }
         switch report.verdict {
         case .ok: return "Looks fine."
         case .partlyUnknown: return "Partly unknown."
@@ -239,15 +254,28 @@ struct CheckView: View {
         VStack(spacing: 0) {
             PageHeader(
                 label: "Check a file", headline: headline,
-                sentence: report.map { "\($0.path.lastPathComponent), \($0.kind.label)." } ?? problem
-                    ?? "An app, installer, disk image or script. It's read, never opened.",
-                headlineColor: (report?.verdict ?? .ok) >= .caution ? Ink.signal : Ink.text
+                sentence: report.map {
+                    "\($0.path.lastPathComponent), \($0.kind.label)."
+                        + (chamber.outcome.map {
+                            $0.report.verdict == .nothingSeen ? "" : " Caught in the chamber: reading it alone didn't show this."
+                        } ?? "")
+                } ?? problem ?? "An app, installer, disk image or script. It's read, never opened.",
+                headlineColor: (report?.verdict ?? .ok) >= .caution || (chamber.outcome.map { $0.report.verdict != .nothingSeen } ?? false)
+                    ? Ink.signal : Ink.text
             ) {
                 Button("Choose…") { choose() }.buttonStyle(PlainButtonStyle(kind: report == nil ? .primary : .secondary))
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     dropTarget.padding(.top, 28)
+                        .task {
+                            // Snapshot mode only: check this file (and run it in the chamber) without a click.
+                            let env = ProcessInfo.processInfo.environment
+                            guard env["MACX_APP_SNAPSHOT"] != nil, let path = env["MACX_APP_SNAPSHOT_CHECK"], report == nil else { return }
+                            check(URL(fileURLWithPath: path))
+                            try? await Task.sleep(for: .seconds(1.5))
+                            if env["MACX_APP_SNAPSHOT_CHAMBER"] == "1", let r = report { runChamber(r.path) }
+                        }
                     if checking != nil { HairlineProgress(width: 240).padding(.top, 18).transition(.opacity) }
                     if let report {
                         details(report).id(report.sha256 ?? report.path.path)
@@ -306,6 +334,9 @@ struct CheckView: View {
                     .zIndex(1)
                 }
             }
+            if r.kind == .script, r.verdict != .dangerous, ChamberSession.canRun(r.path) {
+                chamberSection(r)
+            }
             VStack(spacing: 0) {
                 HStack {
                     SectionLabel(text: "Facts")
@@ -331,6 +362,143 @@ struct CheckView: View {
                 }
             }
             .padding(.top, 12)
+        }
+    }
+
+    // MARK: Chamber
+
+    func chamberSection(_ r: FileReport) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 0) {
+                HStack {
+                    SectionLabel(text: "Chamber")
+                    InfoButton(
+                        text:
+                            "Runs the script once in a throwaway Linux VM with no network. Mac commands are stand-ins, password boxes get a fake password, and bait keychain and browser files sit where a stealer looks. Nothing reaches your real files.",
+                        detail: "macx chamber run FILE")
+                    Spacer()
+                }
+                .padding(.top, 28).padding(.bottom, 6)
+                Hairline(color: Ink.text)
+            }
+            Group {
+                if let outcome = chamber.outcome {
+                    chamberResult(outcome)
+                } else if chamber.running {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Running it in the chamber. Up to a minute, usually a few seconds.").font(Fonts.sans(14))
+                        HairlineProgress(width: 240)
+                    }
+                    .transition(.opacity)
+                } else if !ChamberSession.isSetUp() {
+                    HStack(spacing: 4) {
+                        Text("The chamber isn't set up yet.").font(Fonts.sans(14)).foregroundStyle(Ink.grey)
+                        InfoButton(text: "It downloads a small Linux system (about 60 MB) once. In Terminal:", detail: "macx chamber setup")
+                    }
+                } else {
+                    HStack(spacing: 16) {
+                        Text(
+                            ChamberHint.applies(isScript: true, verdict: r.verdict)
+                                ? "Reading it couldn't settle it. See what it actually does, safely."
+                                : "See what it actually does, safely."
+                        )
+                        .font(Fonts.sans(14))
+                        Spacer()
+                        Button("Run it in the chamber") { runChamber(r.path) }
+                            .buttonStyle(
+                                PlainButtonStyle(kind: ChamberHint.applies(isScript: true, verdict: r.verdict) ? .primary : .secondary))
+                    }
+                    .transition(.opacity)
+                }
+                if let p = chamber.problem {
+                    Text(p).font(Fonts.sans(13)).foregroundStyle(Ink.signal).padding(.top, 8).transition(.opacity)
+                }
+            }
+            .padding(.top, 14)
+        }
+        .motion(Motion.settle, value: chamber.running)
+    }
+
+    func chamberResult(_ o: ChamberSession.Outcome) -> some View {
+        let r = o.report
+        let bad = r.verdict == .dangerous
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(r.verdict.label).font(Fonts.serif(22)).foregroundStyle(r.verdict == .nothingSeen ? Ink.text : Ink.signal)
+                Text(String(format: "%.1f s", o.run.seconds) + (o.run.stoppedByTimeLimit ? ", stopped at the time limit" : ""))
+                    .font(Fonts.mono(11.5)).foregroundStyle(Ink.grey)
+                Spacer()
+                if bad, chamber.quarantined == nil {
+                    Button("Quarantine…") { quarantine(o) }.buttonStyle(PlainButtonStyle(kind: .danger))
+                }
+            }
+            .reveal()
+            VStack(spacing: 0) {
+                ForEach(Array(r.alerts.enumerated()), id: \.offset) { i, a in
+                    HStack(alignment: .firstTextBaseline, spacing: 20) {
+                        SeverityWord(severity: a.severity).frame(width: 96, alignment: .leading)
+                        HStack(spacing: 4) {
+                            Text(a.title).font(Fonts.sans(13.5))
+                            if let d = a.detail, !d.isEmpty { InfoButton(text: String(d.prefix(400))) }
+                        }
+                        Spacer()
+                        Text(a.rule).font(Fonts.mono(11)).foregroundStyle(Ink.grey)
+                    }
+                    .padding(.vertical, 9)
+                    .background(alignment: .bottom) { Hairline() }
+                    .reveal(i + 1)
+                    .zIndex(1)
+                }
+            }
+            Text(r.summary).font(Fonts.sans(13)).foregroundStyle(Ink.grey).fixedSize(horizontal: false, vertical: true)
+                .reveal(r.alerts.count + 1)
+            let printed = o.run.console.output.split(separator: "\n").prefix(6)
+            if !printed.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("What it printed").font(Fonts.sans(12)).foregroundStyle(Ink.grey)
+                    ForEach(Array(printed.enumerated()), id: \.offset) { _, line in
+                        Text(String(line.prefix(160))).font(Fonts.mono(11)).lineLimit(1)
+                    }
+                }
+                .textSelection(.enabled)
+                .reveal(r.alerts.count + 2)
+            }
+            if let q = chamber.quarantined {
+                Text(q).font(Fonts.sans(13)).transition(.opacity)
+            }
+        }
+        .transition(.opacity.combined(with: .offset(y: 8)))
+    }
+
+    func runChamber(_ url: URL) {
+        Motion.animate {
+            chamber = ChamberRun(running: true)
+        }
+        Task.detached(priority: .userInitiated) {
+            let result = Result { try ChamberSession.run(url) }
+            await MainActor.run {
+                Motion.animate(Motion.settle) {
+                    chamber.running = false
+                    switch result {
+                    case .success(let o): chamber.outcome = o
+                    case .failure(let e): chamber.problem = (e as? ChamberSession.Problem)?.description ?? "\(e)"
+                    }
+                }
+            }
+        }
+    }
+
+    func quarantine(_ o: ChamberSession.Outcome) {
+        guard
+            confirm(
+                "Quarantine \(o.sample.url.lastPathComponent)?",
+                "It moves into an incident case and the undo folder. Undo puts it back.", action: "Quarantine")
+        else { return }
+        do {
+            let (incident, batch) = try ChamberQuarantine().quarantine(o.sample, report: o.report)
+            Motion.animate { chamber.quarantined = "Quarantined. Case \(incident.id). Undo: macx undo restore \(batch.id)" }
+        } catch {
+            Motion.animate { chamber.problem = "Couldn't quarantine it: \(error)" }
         }
     }
 
@@ -360,6 +528,7 @@ struct CheckView: View {
         Motion.animate {
             checking = url.lastPathComponent
             problem = nil
+            chamber = ChamberRun()
         }
         Task.detached(priority: .userInitiated) {
             let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: HashFeed.loadCached())

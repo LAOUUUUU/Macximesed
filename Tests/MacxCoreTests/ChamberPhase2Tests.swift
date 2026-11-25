@@ -97,3 +97,28 @@ struct ChamberPackageTests {
         #expect(ChamberPhase2Error.notBuiltYet("--follow").description.contains("PHASE2.md"))
     }
 }
+
+@Suite("One chamber run for the command line and the app")
+struct ChamberSessionTests {
+    @Test func refusesUntilTheChamberIsSetUp() throws {
+        let tmp = try TempDir()
+        let script = tmp.url.appendingPathComponent("x.sh")
+        try Data("#!/bin/sh\necho hi\n".utf8).write(to: script)
+        #expect(throws: ChamberSession.Problem.notSetUp) {
+            try ChamberSession.run(script, store: ChamberStore(root: tmp.url.appendingPathComponent("none")), feed: nil)
+        }
+        #expect(ChamberSession.Problem.notSetUp.description.contains("macx chamber setup"))
+    }
+
+    @Test func takesShellScriptsButNotProgramsOrCompiledAppleScript() throws {
+        let tmp = try TempDir()
+        let sh = tmp.url.appendingPathComponent("a.sh")
+        try Data("#!/bin/bash\necho hi\n".utf8).write(to: sh)
+        #expect(ChamberSession.canRun(sh))
+        #expect(!ChamberSession.canRun(URL(fileURLWithPath: "/bin/ls")))
+        let scpt = tmp.url.appendingPathComponent("a.scpt")
+        try Data("FasdUAS 1.101.10".utf8).write(to: scpt)
+        #expect(!ChamberSession.canRun(scpt))
+        #expect(!ChamberSession.canRun(tmp.url.appendingPathComponent("missing.sh")))
+    }
+}

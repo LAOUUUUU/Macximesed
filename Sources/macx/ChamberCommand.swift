@@ -83,39 +83,23 @@ struct Chamber: ParsableCommand {
                 throw UserError(
                     ChamberPhase2Error.notBuiltYet("Running a package's install scripts").description + " Meanwhile: macx check \(file)")
             }
-            let manifest = try ChamberManifest.bundled()
-            let store = ChamberStore()
-            guard store.isInstalled(for: manifest) else { throw UserError("The chamber isn't set up yet. Run: macx chamber setup") }
             let url = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
-            let sample: ChamberSample
-            do { sample = try ChamberSample(pinning: url) } catch { throw UserError("Can't read \(file).") }
-            print("\(url.lastPathComponent)  SHA-256 \(sample.sha256)")
-            if let feed = HashFeed.loadCached(), let name = try? feed.lookup(sha256: sample.sha256) {
-                print("Known malware (\(name)). It doesn't need the chamber: don't open it.")
-                throw ExitCode(2)
-            }
-
-            let image: Data
+            if let pinned = try? ChamberSample(pinning: url) { print("\(url.lastPathComponent)  SHA-256 \(pinned.sha256)") }
+            if ChamberSession.isSetUp() { print("Running it in the chamber (no network, \(seconds) s at most)...") }
+            let outcome: ChamberSession.Outcome
             do {
-                image = try ChamberImage.build(rootfs: store.rootfs, sample: sample, seconds: seconds)
-            } catch let p as ChamberImage.Problem {
-                throw UserError(p.description + " Try: macx check \(file)")
+                outcome = try ChamberSession.run(url, seconds: seconds)
+            } catch let p as ChamberSession.Problem {
+                switch p {
+                case .knownMalware:
+                    print(p.description)
+                    throw ExitCode(2)
+                case .cantRun(let why): throw UserError(why + " Try: macx check \(file)")
+                case .unreadable: throw UserError("Can't read \(file).")
+                default: throw UserError(p.description)
+                }
             }
-            print("Running it in the chamber (no network, \(seconds) s at most)...")
-            let run: ChamberVM.Run
-            do {
-                run = try ChamberVM.run(kernel: store.kernel, initramfs: image, timeLimit: TimeInterval(seconds + 30))
-            } catch let p as ChamberVM.Problem {
-                throw UserError(p.description)
-            }
-            guard run.console.ready else {
-                throw UserError("The chamber didn't get as far as running the script (it stopped after \(Int(run.seconds)) s).")
-            }
-
-            let parsed = StraceLog.parse(run.console.trace)
-            let samplePID = parsed.events.first?.process?.pid
-            let report = ChamberJudge(guestHome: URL(fileURLWithPath: ChamberImage.guestHome)).judge(
-                events: parsed.events, samplePID: samplePID, skipped: parsed.skipped, truncated: !run.console.complete)
+            let (sample, report, run) = (outcome.sample, outcome.report, outcome.run)
             Self.show(report, run: run)
 
             guard report.verdict != .nothingSeen, !noQuarantine else {
