@@ -48,6 +48,7 @@ jobs:
       - name: Run the tests
         env:
           MACX_ART_THROWAWAY: "1"
+          ART_CAPTURE: "T1027-1"
         run: ATOMICS="$RUNNER_TEMP/art/atomics" OUT=art-out MACX=.build/release/macx scripts/eval/art.sh
       - name: Report
         if: always()

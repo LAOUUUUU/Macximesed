@@ -50,9 +50,20 @@ while read -r tech test want _ <&3; do
     echo "::group::[$n] $id ($as) want $want"
     $run "$tech" "$test" prereq > "$OUT/$id.prereq.log" 2>&1
     case "$want" in *persist*) baseline ;; esac
+    # ART_CAPTURE="T1027-1 ...": keep the raw exec events of those tests, to replay with `macx watch --replay`.
+    capture=""
+    case " ${ART_CAPTURE:-} " in *" $id "*)
+        set -m
+        sudo /usr/bin/eslogger exec > "$OUT/$id.exec.jsonl" 2> /dev/null < /dev/null &
+        set +m
+        capture=1
+        sleep 2
+        ;;
+    esac
     start=$(now)
     $run "$tech" "$test" run > "$OUT/$id.run.log" 2>&1
     status=$?
+    if [ -n "$capture" ]; then sleep 2; sudo pkill -INT -f "^/usr/bin/eslogger exec$" || true; sleep 2; fi
     sleep 5
     end=$(now)
     pfile=""
