@@ -108,3 +108,5 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 - `sfltool dumpbtm` is undocumented. The parser keeps unknown keys and types and skips what it can't read; re-check on each macOS release.
 
 **Next release is 0.5.0, not 0.4.1** (Lao, 2026-11-25: too much for a x.x.1). The unreleased "Release 0.4.1" bump on main/dev must become 0.5.0 when Lao says release.
+
+**Own Minecraft launcher** (Lao 2026-11-25, no Prism/Modrinth/Mojang launcher): brief research/minecraft-launcher/RESEARCH.md, waiting for Lao's OK + Lao's Azure app registration and Mojang API review form (sign-in is 403 until Mojang allowlists the app). Roblox launcher: allowed flags + rule-following mods only, no FPS memory patch (research/game-launchers/RESEARCH.md).
