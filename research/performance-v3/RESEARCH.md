@@ -28,11 +28,30 @@ Candidates, each with a stored before-value and an undo, measured before it's li
 - **Background Photos analysis while gaming:** nothing safe to switch (it's Apple's), so report only, through "Why it's slow".
 - **Login items** (from `macx persist`) that start heavy apps: a link from the Performance tab to Startup items, with the biggest ones marked.
 
+### More, added on Lao's ask (checked 2026-11-25)
+
+#### Per-game advice for the games Lao plays
+- **Minecraft (Prism Launcher, Modrinth App).** Prism runs a native ARM64 Minecraft, which is the first step on Apple silicon. Sodium (rendering) plus Lithium (game logic) is the standard pair, and FerriteCore cuts memory ([Sodium](https://modrinth.com/project/sodium), [Mac Native modpack](https://modrinth.com/modpack/mac-native)). Metal renderers exist but are alpha ([MetalRender](https://modrinth.com/mod/metalrender), [mcopt](https://github.com/noahdunnagan/mcopt/wiki)). More memory isn't always better, because bigger heaps mean longer garbage-collection pauses ([guide](https://www.online-tech-tips.com/minecraft-performance-optimization-guide/)).
+  **Recommendation:** a read-only Minecraft check. macx reads each Prism/Modrinth instance's own settings and mods folder and reports whether Java is ARM64 or Intel (Rosetta), how much memory is set aside compared with the Mac's, and which of Sodium, Lithium and FerriteCore are missing, with a link to each on Modrinth. It never edits an instance.
+- **Roblox.** Roblox has an official *Maximum Framerate* setting (up to 240) ([Roblox](https://devforum.roblox.com/t/introducing-the-maximum-framerate-setting/2995965/1)). The old `ClientAppSettings.json` FPS flag is marked outdated, must be redone after every update, and is unverified for 2026 ([DevForum](https://devforum.roblox.com/t/how-to-unlock-the-60-fps-cap-withwithout-software/2220352)). macOS caps the frame rate at the display's refresh rate, so above 60 FPS is wasted on the Air's 60 Hz screen ([rbxfpsunlocker-osx](https://github.com/lanylow/rbxfpsunlocker-osx/releases)).
+  **Recommendation:** advice only. Use the in-game setting, at your display's refresh rate. macx doesn't touch Roblox's files or memory (that's how anti-cheat bans happen).
+- **Display refresh rate:** the Games list says what your screen's refresh rate is (60 Hz on the Air, more on some external monitors), so you know when an FPS cap above it is pointless.
+
+#### Backups and sync while gaming
+- `tmutil stopbackup` stops a running Time Machine backup without root. Pausing future backups (`tmutil disable`/`enable`) needs root, and can fail silently without Full Disk Access, so the state must be checked afterwards ([Eclectic Light](https://eclecticlight.co/2020/01/22/time-machine-11-tmutil/), [Apple Community](https://discussions.apple.com/thread/254295393)).
+  **Recommendation:** a *Pause backups while playing* switch in While playing. Play stops a running backup, and the background watch (root, with Full Disk Access) turns automatic backups off for the game and back on after, checking with `tmutil status`, the same way Game network does AWDL. I found no command for pausing iCloud Drive, so that's not included.
+
+#### Disk space
+- Swap needs free space, and a nearly full disk makes a memory-tight Mac much slower. **Recommendation:** warn in the header under 10% free, with a link to Clean.
+
 ## Plan
 1. "Why it's slow" (known Apple culprits, exact paths, advice only).
 2. Quit button in the Memory view (asks first, ordinary quit, non-Apple apps only).
 3. Power awareness in the header.
-4. Virtual display **experiment**: prototype, measure FPS with the Metal HUD in one game, ship only if it helps.
+4. Disk-space warning.
+5. Minecraft check (Java architecture, memory, Sodium/Lithium/FerriteCore), Roblox advice, display refresh rate in Games.
+6. *Pause backups while playing* (stop a running backup; automatic backups off via the background watch, checked).
+7. Virtual display **experiment**: prototype, measure FPS with the Metal HUD in one game, ship only if it helps.
 
 ## Not doing
 - Stopping, renicing or disabling Apple's own daemons (Risky tier, step 10).
