@@ -109,7 +109,7 @@ struct PerformanceView: View {
                     }
                     Text(byMemory ? formatMemory(u.memoryBytes) : "\(Int(u.cpuPercent))%").font(Fonts.mono(12))
                         .frame(width: 84, alignment: .trailing)
-                        .contentTransition(.numericText()).motion(value: byMemory ? Int(u.memoryBytes >> 20) : Int(u.cpuPercent))
+
                 }
                 .padding(.vertical, 8)
                 .background(alignment: .bottom) { Hairline() }
@@ -319,14 +319,13 @@ struct PerformanceView: View {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             let found = CPUSampler.uses(before: before, after: CPUSampler.snapshot(), interval: Date().timeIntervalSince(started))
-            Motion.animate {
-                uses = found.filter { $0.cpuPercent >= 0.5 }
-                level = .current
-                pressure = ThermalPressure.current()
-                memory = MemoryState.current()
-                allUses = found
-                boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
-            }
+            // Plain updates: animating the whole list every 2 s made SwiftUI re-measure the page each time.
+            uses = found.filter { $0.cpuPercent >= 0.5 }
+            level = .current
+            pressure = ThermalPressure.current()
+            memory = MemoryState.current()
+            allUses = found
+            boostOn = TweakLedger.load(at: Boost.defaultLedger) != nil
         }
     }
 

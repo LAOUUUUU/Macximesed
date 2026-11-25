@@ -501,7 +501,25 @@ final class Snapshots {
             return
         }
         let (name, action) = steps[i]
+        // How long the page takes to lay out and draw after it's chosen (what a click feels like).
+        let started = CACurrentMediaTime()
         action()
+        if !name.isEmpty, let view = delegate.window?.contentView {
+            view.layoutSubtreeIfNeeded()
+            view.displayIfNeeded()
+            let ms = (CACurrentMediaTime() - started) * 1000
+            let line = String(format: "%@ %.0f ms\n", name, ms)
+            if let h = FileHandle(forWritingAtPath: folder.appendingPathComponent("timings.txt").path)
+                ?? {
+                    FileManager.default.createFile(atPath: folder.appendingPathComponent("timings.txt").path, contents: nil)
+                    return FileHandle(forWritingAtPath: folder.appendingPathComponent("timings.txt").path)
+                }()
+            {
+                h.seekToEndOfFile()
+                h.write(Data(line.utf8))
+                try? h.close()
+            }
+        }
         // Long enough for the data to load and every animation to settle.
         let slow = name.hasSuffix("check-a-file") && ProcessInfo.processInfo.environment["MACX_APP_SNAPSHOT_CHAMBER"] == "1"
         if slow {

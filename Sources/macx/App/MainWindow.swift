@@ -23,9 +23,9 @@ struct MainView: View {
                     }
                 }
                 .id(model.section)
-                .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 8)), removal: .opacity))
+                .transition(.opacity)
             }
-            .motion(Motion.page, value: model.section)
+            .motion(Motion.quick, value: model.section)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlay(alignment: .bottomTrailing) {
                 if let v = model.updatePrompt { UpdatePrompt(model: model, version: v).padding(.trailing, 24).padding(.bottom, 48) }
@@ -106,7 +106,7 @@ struct Sidebar: View {
         }
         .frame(width: 212)
         .background(Ink.side)
-        .motion(Motion.settle, value: model.section)
+        .motion(Motion.quick, value: model.section)
     }
 }
 

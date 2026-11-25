@@ -297,7 +297,10 @@ struct Reveal: ViewModifier {
             .opacity(shown || reduceMotion ? 1 : 0)
             .offset(y: shown || reduceMotion ? 0 : rise)
             .onAppear {
-                guard !shown, !reduceMotion else { return }
+                guard !shown, !reduceMotion, order <= Motion.maxStaggered else {
+                    shown = true
+                    return
+                }
                 withAnimation(Motion.standard.delay(Double(min(order, Motion.maxStaggered)) * Motion.stagger)) { shown = true }
             }
     }

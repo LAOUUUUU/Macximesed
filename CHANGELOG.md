@@ -5,6 +5,7 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Fixed
+- **Snappier pages:** switching pages is a short cross-fade instead of a slide (which made SwiftUI re-measure the whole page every frame), only the first dozen rows of a long list ease in, and the Performance tab updates its numbers every 2 s without animating the whole list. Page switches measure 0-75 ms in a debug build. `MACX_APP_SNAPSHOT` also writes each page's time to `timings.txt`.
 - **The app could crash on start when it wasn't running from inside Macximesed.app** (e.g. `macx app` from a development build): asking for the notification centre aborts the process there. Notifications are skipped in that case now. Crash report from 2026-11-24.
 
 ## [0.4.1] - 2026-11-25
