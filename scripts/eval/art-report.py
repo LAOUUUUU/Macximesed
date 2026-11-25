@@ -76,7 +76,7 @@ order = {"missed": 0, "false alarm": 1, "caught": 2, "quiet": 3, "info": 4}
 for r in sorted(rows, key=lambda r: (order[r[3]], r[0])):
     print(f"| {r[0]} | {r[1]} | `{r[2]}` | **{r[3]}** | {r[4]} | {r[5]} |")
 
-tcc = load("tcc.jsonl")
+tcc = [e for e in load("tcc.jsonl") if "tcc_modify" in e.get("event", {})]
 print(f"\n### Privacy grants (`tcc_modify`)\n\n{len(tcc)} raw event(s).")
 for e in tcc[:6]:
     m = e.get("event", {}).get("tcc_modify", {})

@@ -87,11 +87,15 @@ echo "::group::privacy grants (tcc_modify)"
 # eslogger buffers what it writes to a file and loses it when killed. With job control on, the background job
 # doesn't ignore SIGINT, which eslogger handles by flushing and exiting.
 set -m
-sudo /usr/bin/eslogger tcc_modify > "$OUT/tcc.jsonl" 2> "$OUT/tcc.err" &
+sudo /usr/bin/eslogger tcc_modify exec > "$OUT/tcc.jsonl" 2> "$OUT/tcc.err" &
 set +m
 sleep 3
 start=$(now)
 {
+    echo "-- marker (shows whether eslogger's output was flushed)"
+    /bin/echo macx-tcc-marker
+    echo "-- screencapture -x (in run 1 this made replayd grant Screen Recording)"
+    screencapture -x "$OUT/shot.png"; echo "screencapture exit $?"
     echo "-- tccutil reset ScreenCapture com.apple.Terminal (user)"
     tccutil reset ScreenCapture com.apple.Terminal
     echo "-- private TCC.framework call, as the user and as root"
@@ -107,7 +111,7 @@ sudo pkill -INT -f "^/usr/bin/eslogger tcc_modify" || true
 sleep 3
 python3 -c 'import json,sys; print(json.dumps(dict(id="tcc", technique="tcc", test=0, want="privacy-granted", as_="both", start=float(sys.argv[1]), end=float(sys.argv[2]), status=0, persist=None)))' "$start" "$end" >> "$OUT/tests.jsonl"
 cat "$OUT/tcc-actions.log"
-echo "tcc_modify events: $(wc -l < "$OUT/tcc.jsonl")"
+echo "events: $(wc -l < "$OUT/tcc.jsonl"), marker seen: $(grep -c macx-tcc-marker "$OUT/tcc.jsonl"), tcc_modify: $(grep -c '"tcc_modify"' "$OUT/tcc.jsonl")"
 echo "::endgroup::"
 
 sleep 3

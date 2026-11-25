@@ -64,7 +64,8 @@ T1548.003 1 -                                    sudo -l and reading sudoers
 T1564.002 1 account-created                      hidden user (UniqueID < 500)
 T1564.002 2 account-created                      hidden user (IsHidden)
 T1136.001 3 account-created                      new local user with dscl
-T1574.006 3 dyld-injection,code-injection        DYLD_INSERT_LIBRARIES on a program
+# T1574.006 3 (DYLD_INSERT_LIBRARIES) is left out: its library is injected into every child it starts, so it
+# multiplies until the runner has no processes left (run 2, macos-26: "fork: Resource temporarily unavailable").
 T1546.005 1 ?                                    trap EXIT in bash
 T1546.005 3 ?                                    trap SIGINT in bash
 T1546.005 5 ?                                    trap DEBUG logging commands
