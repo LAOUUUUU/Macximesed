@@ -363,6 +363,16 @@ public enum CommandPatterns {
         (.downloadToShell, #"(?:\#(shells))\s+<\(\s*(?:curl|wget)\b"#),
         (.downloadToShell, #"\beval\s+["']?\$\(\s*(?:curl|wget)\b"#),
         (.base64ToShell, #"\bbase64\s+(?:-[dD]\b|--decode\b)[^|;\n]*\|\s*(?:sudo\s+)?(?:/\S*/)?(?:\#(shells))\b"#),
+        // Decoding into a file and then running that same file (directly or with a shell).
+        (
+            .base64ToShell,
+            #"\b(?:base64\s+(?:-[dD]\b|--decode\b)|b64decode\b)[^;|\n]*>\s*['"]?(/?[\w./~-]+)['"]?[\s\S]{0,400}?(?:^|[;&|\n]|\b(?:ba|z|da|k)?sh\s)\s*['"]?\1(?:['"]|\s|$)"#
+        ),
+        // The same with the decoder in a variable (cmd="base64 -d"; ... | $cmd > /tmp/x; /tmp/x), set even inside an if.
+        (
+            .base64ToShell,
+            #"\b(\w+)=["']?(?:base64\s+(?:-[dD]\b|--decode\b)|b64decode\b)[\s\S]{0,300}?\$\{?\1\}?[^;|\n]*>\s*['"]?(/?[\w./~-]+)['"]?[\s\S]{0,400}?(?:^|[;&|\n]|\b(?:ba|z|da|k)?sh\s)\s*['"]?\2(?:['"]|\s|$)"#
+        ),
         // Python, Perl and Ruby: exec/eval of decoded code, or decoding and handing the result to a shell.
         (.base64ToShell, #"\b(?:exec|eval)\s*\(\s*(?:[\w.]+\.)?(?:b64decode|decodebytes|decode_base64|decode64|unhexlify)\s*\("#),
         (.base64ToShell, #"\bb64decode\b[\s\S]{0,400}?\b(?:subprocess\.(?:call|run|Popen|check_output)|os\.(?:system|popen))\s*\("#),

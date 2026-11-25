@@ -57,6 +57,19 @@ struct AtomicMissTests {
         for cmd in [python, perl, shellDecode] { #expect(loud(shell(cmd)).isEmpty, "\(cmd)") }
     }
 
+    @Test func decodingIntoAFileAndRunningIt() {  // T1027 #1: the decoded script has no #!, so only the command shows it
+        let cmd = """
+            if [ "$(uname)" = 'FreeBSD' ]; then cmd="b64decode -r"; else cmd="base64 -d"; fi;
+            cat /tmp/encoded.dat | $cmd > /tmp/art.sh
+            chmod +x /tmp/art.sh
+            /tmp/art.sh
+            """
+        #expect(ids(shell(cmd)).contains("base64-to-shell"))
+        #expect(ids(shell("base64 --decode payload.b64 > /tmp/x.sh; sh /tmp/x.sh")).contains("base64-to-shell"))
+        // Decoding to a file that's never run stays quiet.
+        #expect(loud(shell("base64 -d in.b64 > /tmp/out.bin; ls -l /tmp/out.bin")).isEmpty)
+    }
+
     // MARK: Scripts from temporary folders
 
     @Test func scriptRunByItsShebangFromTmp() {  // T1027 #1: /tmp/art.sh run directly
