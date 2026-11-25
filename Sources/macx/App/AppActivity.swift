@@ -162,7 +162,7 @@ extension AppModel {
         let content = UNMutableNotificationContent()
         content.title = "Macximesed \(v) is out"
         content.body = "Open Macximesed to install it now, or when your screen next sleeps."
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(v)", content: content, trigger: nil))
+        NotificationCenterGuard.center?.add(UNNotificationRequest(identifier: "update-\(v)", content: content, trigger: nil))
     }
 }
 
@@ -255,5 +255,13 @@ struct UpdatePrompt: View {
         .overlay(Rectangle().stroke(Ink.outline, lineWidth: 1))
         .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
         .transition(.opacity.combined(with: .offset(y: 12)))
+    }
+}
+
+/// `UNUserNotificationCenter.current()` aborts the whole process (an NSAssertion inside UserNotifications) when macx
+/// isn't running from inside its app bundle, e.g. `macx app` from a development build. Crash report 2026-11-24.
+enum NotificationCenterGuard {
+    static var center: UNUserNotificationCenter? {
+        Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil ? UNUserNotificationCenter.current() : nil
     }
 }

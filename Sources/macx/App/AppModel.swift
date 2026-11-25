@@ -153,7 +153,7 @@ final class AppModel {
 
     func requestNotifications() {
         Task {
-            let center = UNUserNotificationCenter.current()
+            guard let center = NotificationCenterGuard.center else { return }
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
             notifications = Self.map(await Self.authorizationStatus())
             if notifications == .denied {
@@ -166,7 +166,7 @@ final class AppModel {
     /// `notificationSettings()` would hand it across actors (a build error there, fine on 26).
     static func authorizationStatus() async -> UNAuthorizationStatus {
         await withCheckedContinuation { c in
-            UNUserNotificationCenter.current().getNotificationSettings { c.resume(returning: $0.authorizationStatus) }
+            NotificationCenterGuard.center?.getNotificationSettings { c.resume(returning: $0.authorizationStatus) }
         }
     }
 
@@ -184,7 +184,7 @@ final class AppModel {
             content.title = n.title
             content.body = n.body
             content.sound = .default
-            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            NotificationCenterGuard.center?.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         }
     }
 

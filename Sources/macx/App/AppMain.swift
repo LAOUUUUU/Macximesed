@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     func applicationDidFinishLaunching(_ notification: Notification) {
         status = StatusController(model: model, openWindow: { [weak self] section in self?.showWindow(section) })
         let env = ProcessInfo.processInfo.environment
-        UNUserNotificationCenter.current().delegate = self
+        NotificationCenterGuard.center?.delegate = self
         model.runSetup = { [weak self] in self?.showSetup() }
         // For checking the design without Screen Recording: the app draws its own window into PNG files and quits.
         if let dir = env["MACX_APP_SNAPSHOT"], !dir.isEmpty {

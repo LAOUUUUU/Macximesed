@@ -4,6 +4,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Fixed
+- **The app could crash on start when it wasn't running from inside Macximesed.app** (e.g. `macx app` from a development build): asking for the notification centre aborts the process there. Notifications are skipped in that case now. Crash report from 2026-11-24.
+
 ## [0.4.1] - 2026-11-25
 
 ### Added
