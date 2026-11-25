@@ -43,6 +43,27 @@ public enum OtherPersistence {
             items.append(item(.periodicScript, f, detail: text, root: true))
         }
 
+        // StartupItems: retired by Apple (10.10), still tried by old malware and by attack kits.
+        for f in CleanupCatalog.children(of: sys.appendingPathComponent("Library/StartupItems")) where !f.lastPathComponent.hasPrefix(".") {
+            items.append(item(.startupItem, f, root: true))
+        }
+
+        // /etc/cron.*: macOS doesn't run these, but a script dropped there means someone tried.
+        for dir in ["cron.hourly", "cron.daily", "cron.weekly", "cron.monthly"] {
+            for f in CleanupCatalog.children(of: sys.appendingPathComponent("etc/\(dir)")) where !f.lastPathComponent.hasPrefix(".") {
+                let text = (try? String(contentsOf: f, encoding: .utf8)).map { String($0.prefix(8000)) }
+                items.append(item(.periodicScript, f, detail: text, root: true))
+            }
+        }
+
+        // The main sudoers file needs root to read; then any change shows in a diff and weakening is flagged.
+        let sudoers = sys.appendingPathComponent("etc/sudoers")
+        if let text = try? String(contentsOf: sudoers, encoding: .utf8) {
+            let weak = sudoersWeakening(text)
+            items.append(
+                item(.sudoersFile, sudoers, label: "sudoers", detail: weak.isEmpty ? nil : weak.joined(separator: "\n"), root: true))
+        }
+
         // sudoers.d: names are readable, contents need root.
         for f in CleanupCatalog.children(of: sys.appendingPathComponent("etc/sudoers.d")) where !f.lastPathComponent.hasPrefix(".") {
             items.append(item(.sudoersFile, f, root: true))
@@ -88,6 +109,16 @@ public enum OtherPersistence {
     // MARK: Parsers
 
     /// The module in a pam.d line: `type control module [args]`, where control may be `[ ... ]`.
+    /// Lines that make sudo weaker: credentials cached forever, shared across terminals, or no password at all.
+    public static func sudoersWeakening(_ text: String) -> [String] {
+        text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { line in
+            guard !line.hasPrefix("#") else { return false }
+            let l = line.lowercased().replacingOccurrences(of: " ", with: "")
+            return l.contains("timestamp_timeout=-1") || l.contains("!tty_tickets") || l.contains("nopasswd:all")
+                || (l.hasPrefix("all") && l.contains("nopasswd"))
+        }
+    }
+
     static func pamModule(in line: String) -> String? {
         var rest = Substring(line)
         guard let typeEnd = rest.firstIndex(where: { $0 == " " || $0 == "\t" }) else { return nil }

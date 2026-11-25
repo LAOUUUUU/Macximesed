@@ -298,8 +298,9 @@ struct PersistenceScanTests {
         #expect(kinds.filter { $0 == .launchAgent }.count == 1)
         #expect(kinds.filter { $0 == .userLaunchAgent }.count == 1)
         #expect(kinds.filter { $0 == .hiddenFolder }.count == 1)  // .DS_Store is not a folder finding
-        #expect(kinds.filter { $0 == .shellStartup }.count == 1)  // only the risky line, at line 3
-        #expect(items.first { $0.kind == .shellStartup }?.label == "line 3")
+        // The whole file (so any change shows in a diff), and the one risky line, at line 3.
+        let shell = items.filter { $0.kind == .shellStartup }
+        #expect(shell.map(\.label) == ["whole file", "line 3"])
     }
 
     @Test func cronLinesAreItems() {

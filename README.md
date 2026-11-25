@@ -266,6 +266,8 @@ Each rule comes from how AMOS and similar stealers stay on a Mac:
 | `hidden-folder` | high in a Library folder, else medium | Runs something from a hidden (`.name`) folder |
 | `temp-location` | high | Runs from `/tmp`, `/Users/Shared` or Downloads |
 | `missing-program` | high for root autostart, else medium | Its program is gone: a leftover, or a payload that was removed |
+| `startup-item` | high | Anything in `/Library/StartupItems`, which Apple retired long ago |
+| `sudoers-weakened` | high | `/etc/sudoers` (read with sudo) caches sudo forever, shares it between terminals or skips the password |
 | `unsigned-program` / `adhoc-program` / `self-signed-program` | high for root, else medium | No signature, an ad-hoc one with no developer identity, or a self-signed certificate with no Apple developer team (anyone can make one) |
 | `download-to-shell`, `base64-to-shell`, `quarantine-strip`, `password-prompt`, `password-check`, `vm-check`, `keychain-read`, `browser-data-read`, `new-launch-item` | high | Lines in shell startup files or cron that download and run code, decode hidden code, strip the quarantine flag, ask for or check your password, check for a VM, read the keychain or a browser's passwords, or start a `launchctl submit` job |
 | `inline-script`, `hidden-support-folder`, `unreadable-plist` | medium | Worth a look |
