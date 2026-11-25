@@ -68,19 +68,33 @@ struct Hairline: View {
 struct PlainButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, danger }
     var kind: Kind = .secondary
-    @Environment(\.isEnabled) private var enabled
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Fonts.sans(12.5))
-            .padding(.horizontal, 12)
-            .frame(height: 28)
-            .foregroundStyle(kind == .primary ? Ink.paper : (kind == .danger ? Ink.signal : Ink.text))
-            .background(kind == .primary ? Ink.text : Color.clear)
-            .overlay(Rectangle().stroke(kind == .primary ? Ink.text : Ink.outline, lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 2))
-            .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
-            .contentShape(Rectangle())
+        Styled(kind: kind, configuration: configuration)
+    }
+
+    struct Styled: View {
+        let kind: Kind
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isEnabled) private var enabled
+        @State private var over = false
+
+        var body: some View {
+            configuration.label
+                .font(Fonts.sans(12.5))
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .foregroundStyle(kind == .primary ? Ink.paper : (kind == .danger ? Ink.signal : Ink.text))
+                .background(kind == .primary ? Ink.text : (over && enabled ? Ink.rowOpen : Color.clear))
+                .overlay(Rectangle().stroke(kind == .primary ? Ink.text : (over && enabled ? Ink.text : Ink.outline), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 2))
+                .opacity(enabled ? (configuration.isPressed ? 0.78 : 1) : 0.4)
+                .scaleEffect(configuration.isPressed && !Motion.reduced ? 0.97 : 1)
+                .motion(Motion.quick, value: configuration.isPressed)
+                .motion(Motion.quick, value: over)
+                .contentShape(Rectangle())
+                .onHover { over = $0 }
+        }
     }
 }
 
@@ -89,6 +103,7 @@ struct TwoState: View {
     let label: String
     let isOn: Bool
     let set: (Bool) -> Void
+    @Namespace private var ink
 
     var body: some View {
         HStack(spacing: 0) {
@@ -101,13 +116,16 @@ struct TwoState: View {
         .accessibilityLabel(label)
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityAdjustableAction { _ in set(!isOn) }
+        .motion(Motion.settle, value: isOn)
     }
 
     func part(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(text).font(Fonts.sans(12)).padding(.horizontal, 12).frame(height: 24)
                 .foregroundStyle(selected ? Ink.paper : Ink.grey)
-                .background(selected ? Ink.text : Color.clear)
+                .background {
+                    if selected { Rectangle().fill(Ink.text).matchedGeometryEffect(id: "ink", in: ink) }
+                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -155,7 +173,7 @@ struct InfoButton: View {
 
     var body: some View {
         Button {
-            open.toggle()
+            Motion.animate(Motion.quick) { open.toggle() }
         } label: {
             InfoGlyph().frame(width: 22, height: 22).contentShape(Rectangle())
         }
@@ -180,8 +198,9 @@ struct InfoButton: View {
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .shadow(color: .black.opacity(0.14), radius: 9, y: 4)
                 .offset(x: -10, y: 28)
-                .onTapGesture { open = false }
-                .onExitCommand { open = false }
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
+                .onTapGesture { Motion.animate(Motion.quick) { open = false } }
+                .onExitCommand { Motion.animate(Motion.quick) { open = false } }
                 .zIndex(10)
             }
         }
@@ -218,17 +237,131 @@ struct PageHeader<Actions: View>: View {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(text: label)
                     Text(headline).font(Fonts.serif(34)).tracking(-0.4).foregroundStyle(headlineColor)
+                        .contentTransition(.opacity)
+                        .motion(value: headline)
                         .accessibilityAddTraits(.isHeader)
                     if let sentence {
                         Text(sentence).font(Fonts.sans(14)).foregroundStyle(Ink.grey).frame(maxWidth: 580, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .motion(value: sentence)
                     }
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 8) { actions() }
             }
             .padding(.horizontal, 48).padding(.top, 56).padding(.bottom, 28)
+            .reveal(rise: 4)
             Hairline()
         }
+    }
+}
+
+// MARK: - Motion
+
+/// One set of timings for every animation in the app: quick and quiet, ink settling on paper. All of it stops
+/// when System Settings > Accessibility > Display > Reduce motion is on.
+enum Motion {
+    static let quick = Animation.easeOut(duration: 0.14)
+    static let standard = Animation.easeOut(duration: 0.24)
+    static let page = Animation.easeOut(duration: 0.28)
+    static let settle = Animation.spring(response: 0.34, dampingFraction: 0.88)
+    /// The gap between rows easing in one after another, and the most rows that wait for their turn.
+    static let stagger = 0.03
+    static let maxStaggered = 12
+
+    static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// withAnimation, or no animation when Reduce motion is on.
+    static func animate(_ animation: Animation = standard, _ change: () -> Void) {
+        if reduced { change() } else { withAnimation(animation, change) }
+    }
+}
+
+extension View {
+    /// `.animation(_:value:)` that respects Reduce motion.
+    func motion<V: Equatable>(_ animation: Animation = Motion.standard, value: V) -> some View {
+        modifier(MotionModifier(animation: animation, value: value))
+    }
+
+    /// Eases in on first appearance: up a few points and from transparent, rows one after another.
+    func reveal(_ order: Int = 0, rise: CGFloat = 6) -> some View { modifier(Reveal(order: order, rise: rise)) }
+}
+
+struct MotionModifier<V: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: V
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View { content.animation(reduceMotion ? nil : animation, value: value) }
+}
+
+struct Reveal: ViewModifier {
+    let order: Int
+    let rise: CGFloat
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown || reduceMotion ? 1 : 0)
+            .offset(y: shown || reduceMotion ? 0 : rise)
+            .onAppear {
+                guard !shown, !reduceMotion else { return }
+                withAnimation(Motion.standard.delay(Double(min(order, Motion.maxStaggered)) * Motion.stagger)) { shown = true }
+            }
+    }
+}
+
+/// The watch is live: a small filled square whose ink breathes slowly. No glow; still when Reduce motion is on.
+struct LiveMark: View {
+    var color: Color = Ink.text
+    var size: CGFloat = 7
+    @State private var dim = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Rectangle().fill(color).frame(width: size, height: size)
+            .opacity(dim ? 0.35 : 1)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { dim = true }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// Work in progress as a hairline with a short ink segment travelling along it, instead of a spinner.
+struct HairlineProgress: View {
+    var width: CGFloat = 180
+    @State private var phase: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Rectangle().fill(Ink.line)
+            Rectangle().fill(Ink.text).frame(width: width * 0.28)
+                .offset(x: reduceMotion ? width * 0.36 : phase * width * 1.28 - width * 0.28)
+        }
+        .frame(width: width, height: 1.5)
+        .clipped()
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: false)) { phase = 1 }
+        }
+        .accessibilityLabel("Working")
+    }
+}
+
+/// Rows that answer the pointer: a soft fill on hover, a little deeper when pressed.
+struct HoverRow<Content: View>: View {
+    var pressed = false
+    @ViewBuilder let content: () -> Content
+    @State private var over = false
+
+    var body: some View {
+        content()
+            .background(pressed ? Ink.selected : (over ? Ink.rowOpen : Color.clear))
+            .motion(Motion.quick, value: over)
+            .onHover { over = $0 }
     }
 }

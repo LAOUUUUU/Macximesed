@@ -10,16 +10,21 @@ struct MainView: View {
         HStack(spacing: 0) {
             Sidebar(model: model)
             Rectangle().fill(Ink.line).frame(width: 1)
-            Group {
-                switch model.section {
-                case .protection: ProtectionView(model: model)
-                case .startup: StartupView(model: model)
-                case .check: CheckView()
-                case .clean: CleanView(model: model)
-                case .apps: AppsView(model: model)
-                case .settings: SettingsView(model: model)
+            ZStack(alignment: .topLeading) {
+                Group {
+                    switch model.section {
+                    case .protection: ProtectionView(model: model)
+                    case .startup: StartupView(model: model)
+                    case .check: CheckView()
+                    case .clean: CleanView(model: model)
+                    case .apps: AppsView(model: model)
+                    case .settings: SettingsView(model: model)
+                    }
                 }
+                .id(model.section)
+                .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 8)), removal: .opacity))
             }
+            .motion(Motion.page, value: model.section)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(Ink.paper)
@@ -38,13 +43,16 @@ struct MainView: View {
                 .padding(.horizontal, 48).padding(.vertical, 12)
                 .background(Ink.raised)
                 .overlay(alignment: .top) { Hairline() }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .motion(Motion.settle, value: model.adminError)
     }
 }
 
 struct Sidebar: View {
     @Bindable var model: AppModel
+    @Namespace private var selection
 
     func count(_ s: AppModel.Section) -> String {
         switch s {
@@ -68,19 +76,32 @@ struct Sidebar: View {
                         Text(s.rawValue).font(Fonts.sans(13, model.section == s ? .semibold : .regular))
                         Spacer()
                         Text(count(s)).font(Fonts.mono(11)).foregroundStyle(s == .protection ? Ink.signal : Ink.grey)
+                            .contentTransition(.numericText())
+                            .motion(value: count(s))
                     }
                     .padding(.horizontal, 18).padding(.vertical, 6)
-                    .background(model.section == s ? Ink.selected : Color.clear)
+                    .background {
+                        if model.section == s {
+                            HStack(spacing: 0) {
+                                Rectangle().fill(Ink.text).frame(width: 2)
+                                Ink.selected
+                            }
+                            .matchedGeometryEffect(id: "selection", in: selection)
+                        }
+                    }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(RowHover())
                 .focusEffectDisabled()
                 .accessibilityAddTraits(model.section == s ? .isSelected : [])
                 .keyboardShortcut(KeyEquivalent(Character("\(AppModel.Section.allCases.firstIndex(of: s)! + 1)")), modifiers: .command)
             }
             Spacer()
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.state.headline).font(Fonts.sans(11))
+                HStack(spacing: 6) {
+                    if model.state.glyph == .watching { LiveMark(size: 5) }
+                    Text(model.state.headline).font(Fonts.sans(11)).contentTransition(.opacity).motion(value: model.state.headline)
+                }
                 Text("Version \(BuildVersion.current.description)").font(Fonts.sans(11))
             }
             .foregroundStyle(Ink.grey)
@@ -88,6 +109,7 @@ struct Sidebar: View {
         }
         .frame(width: 212)
         .background(Ink.side)
+        .motion(Motion.settle, value: model.section)
     }
 }
 
@@ -121,6 +143,15 @@ struct ProtectionView: View {
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(label: "Protection", headline: model.state.headline, sentence: sentence, headlineColor: headlineColor) {
+                if model.state.glyph == .watching {
+                    HStack(spacing: 7) {
+                        LiveMark()
+                        Text("live").font(Fonts.mono(11)).foregroundStyle(Ink.grey)
+                    }
+                    .padding(.trailing, 10)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Watching live")
+                }
                 switch model.state {
                 case .watching, .starting:
                     Button("Pause for 1 hour…") { model.pause() }.buttonStyle(PlainButtonStyle())
@@ -148,15 +179,16 @@ struct ProtectionView: View {
             fact("\(model.groups.count)", "groups this week")
             HStack(spacing: 4) {
                 Text("\(critical)").foregroundStyle(critical > 0 ? Ink.signal : Ink.text)
+                    .contentTransition(.numericText()).motion(value: critical)
                 Text("critical today")
             }
             if let last = today.last { fact(WatchState.clock(last.time), "last", reversed: true) }
             Spacer()
             HStack(spacing: 6) {
                 Text("Show:")
-                filterButton("critical and high", on: model.seriousOnly) { model.seriousOnly = true }
+                filterButton("critical and high", on: model.seriousOnly) { Motion.animate { model.seriousOnly = true } }
                 Text("·")
-                filterButton("all", on: !model.seriousOnly) { model.seriousOnly = false }
+                filterButton("all", on: !model.seriousOnly) { Motion.animate { model.seriousOnly = false } }
             }
         }
         .font(Fonts.mono(11.5)).foregroundStyle(Ink.grey)
@@ -166,7 +198,7 @@ struct ProtectionView: View {
     func fact(_ value: String, _ label: String, reversed: Bool = false) -> some View {
         HStack(spacing: 4) {
             if reversed { Text(label) }
-            Text(value).foregroundStyle(Ink.text)
+            Text(value).foregroundStyle(Ink.text).contentTransition(.numericText()).motion(value: value)
             if !reversed { Text(label) }
         }
     }
@@ -199,11 +231,12 @@ struct ProtectionView: View {
                     .font(Fonts.sans(14)).foregroundStyle(Ink.grey)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 48).padding(.vertical, 24)
+                    .reveal()
                 Spacer()
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(groups) { g in row(g) }
+                        ForEach(Array(groups.enumerated()), id: \.element.id) { i, g in row(g).reveal(i) }
                     }
                 }
             }
@@ -214,7 +247,7 @@ struct ProtectionView: View {
         let isOpen = open == g.key
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                open = isOpen ? nil : g.key
+                Motion.animate(Motion.settle) { open = isOpen ? nil : g.key }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 20) {
                     SeverityWord(severity: g.severity).frame(width: 96, alignment: .leading)
@@ -237,11 +270,13 @@ struct ProtectionView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(SeverityWord.word(g.severity)): \(g.latest.title), \(g.count) times")
-            if isOpen { detail(g) }
+            if isOpen { detail(g).transition(.opacity.combined(with: .offset(y: -4))) }
         }
         .padding(.horizontal, 48)
         .background(isOpen ? Ink.rowOpen : Color.clear)
+        .modifier(HoverFill(active: !isOpen))
         .background(alignment: .bottom) { Hairline().padding(.horizontal, 48) }
+        .clipped()
         .zIndex(isOpen ? 1 : 0)
     }
 
@@ -338,7 +373,7 @@ struct SettingsView: View {
             PageHeader(label: "Settings", headline: allSet ? "Everything is set up." : "Something needs setting up.") {}
             ScrollView {
                 VStack(spacing: 0) {
-                    section("Full Disk Access") {
+                    section("Full Disk Access", 0) {
                         HStack(spacing: 4) {
                             Text(model.fullDiskAccess ? "On for Macximesed.app." : "Off.").font(Fonts.sans(14))
                             InfoButton(
@@ -357,7 +392,7 @@ struct SettingsView: View {
                         }
                     }
                     Hairline()
-                    section("Background watch") {
+                    section("Background watch", 1) {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 4) {
                                 Text(watchSentence).font(Fonts.sans(14))
@@ -401,13 +436,15 @@ struct SettingsView: View {
                         }
                     }
                     Hairline()
-                    section("Updates") {
+                    section("Updates", 2) {
                         VStack(alignment: .leading, spacing: 14) {
                             HStack(spacing: 4) {
                                 Text(updateSentence).font(Fonts.sans(14))
                                     .foregroundStyle(isUrgent ? Ink.signal : Ink.text)
+                                    .contentTransition(.opacity).motion(value: updateSentence)
                                 InfoButton(text: updateInfo)
                                 Spacer()
+                                if busy != nil { HairlineProgress(width: 90).padding(.trailing, 8).transition(.opacity) }
                                 switch report?.status {
                                 case .available(let v), .urgent(let v, _):
                                     Button(busy == .installing ? "Installing…" : "Install \(v)") { runUpdate(install: true) }
@@ -427,9 +464,10 @@ struct SettingsView: View {
                             }
                             .disabled(UpdateKeys.beta.isEmpty && update.channel == .stable)
                         }
+                        .motion(value: busy)
                     }
                     Hairline()
-                    section("Problems") {
+                    section("Problems", 3) {
                         VStack(alignment: .leading, spacing: 14) {
                             HStack {
                                 Text("Ask after macx crashes").font(Fonts.sans(14))
@@ -450,7 +488,7 @@ struct SettingsView: View {
                         }
                     }
                     Hairline()
-                    section("This app") {
+                    section("This app", 4) {
                         // One row per setting: `section` lays its content out in an HStack, so two rows need a VStack.
                         VStack(alignment: .leading, spacing: 14) {
                             HStack {
@@ -482,12 +520,13 @@ struct SettingsView: View {
         }
     }
 
-    func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    func section<Content: View>(_ title: String, _ order: Int = 0, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .top, spacing: 32) {
             SectionLabel(text: title).frame(width: 200, alignment: .leading).padding(.top, 3)
             content().frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 22)
+        .reveal(order)
         .zIndex(1)
     }
 
@@ -587,5 +626,17 @@ struct SettingsView: View {
         p.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundleURL.path]
         try? p.run()
         NSApp.terminate(nil)
+    }
+}
+
+/// A soft fill under a row while the pointer is over it.
+struct HoverFill: ViewModifier {
+    var active = true
+    @State private var over = false
+    func body(content: Content) -> some View {
+        content
+            .background(active && over ? Ink.rowOpen.opacity(0.6) : Color.clear)
+            .motion(Motion.quick, value: over)
+            .onHover { over = $0 }
     }
 }

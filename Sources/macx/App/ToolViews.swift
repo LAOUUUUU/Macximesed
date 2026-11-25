@@ -16,8 +16,12 @@ import UniformTypeIdentifiers
 struct Loading: View {
     let text: String
     var body: some View {
-        Text(text).font(Fonts.sans(14)).foregroundStyle(Ink.grey)
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 48).padding(.vertical, 24)
+        VStack(alignment: .leading, spacing: 14) {
+            Text(text).font(Fonts.sans(14)).foregroundStyle(Ink.grey)
+            HairlineProgress()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 48).padding(.vertical, 24)
+        .reveal()
     }
 }
 
@@ -78,13 +82,15 @@ struct StartupView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !flagged.isEmpty {
                             groupHeader("Needs a look", flagged.count)
-                            ForEach(flagged) { f in
-                                row(f.item, severity: f.severity, why: f.titles.joined(separator: "\n"))
+                            ForEach(Array(flagged.enumerated()), id: \.element.id) { i, f in
+                                row(f.item, severity: f.severity, why: f.titles.joined(separator: "\n")).reveal(i)
                             }
                         }
                         let known = items.filter { !flaggedKeys.contains($0.key) }
                         groupHeader("Known", known.count)
-                        ForEach(known, id: \.key) { item in row(item, severity: nil, why: nil) }
+                        ForEach(Array(known.enumerated()), id: \.element.key) { i, item in
+                            row(item, severity: nil, why: nil).reveal(flagged.count + i)
+                        }
                     }
                     .padding(.horizontal, 48).padding(.bottom, 32)
                 }
@@ -101,7 +107,7 @@ struct StartupView: View {
             HStack {
                 Text(title).font(Fonts.sans(11.5, .medium).lowercaseSmallCaps()).tracking(1.3)
                 Spacer()
-                Text("\(count)").font(Fonts.mono(11)).foregroundStyle(Ink.grey)
+                Text("\(count)").font(Fonts.mono(11)).foregroundStyle(Ink.grey).contentTransition(.numericText()).motion(value: count)
             }
             .padding(.top, 22).padding(.bottom, 6)
             Hairline(color: Ink.text)
@@ -242,7 +248,11 @@ struct CheckView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     dropTarget.padding(.top, 28)
-                    if let report { details(report) }
+                    if checking != nil { HairlineProgress(width: 240).padding(.top, 18).transition(.opacity) }
+                    if let report {
+                        details(report).id(report.sha256 ?? report.path.path)
+                            .transition(.opacity.combined(with: .offset(y: 10)))
+                    }
                 }
                 .padding(.horizontal, 48).padding(.bottom, 32)
             }
@@ -253,7 +263,11 @@ struct CheckView: View {
         Text(targeted ? "Let go to check it" : "Drop a file here")
             .font(Fonts.sans(13)).foregroundStyle(Ink.grey)
             .frame(maxWidth: .infinity).frame(height: report == nil ? 180 : 72)
-            .overlay(Rectangle().stroke(targeted ? Ink.text : Ink.outline, lineWidth: 1))
+            .background(targeted ? Ink.rowOpen : Color.clear)
+            .overlay(Rectangle().stroke(targeted ? Ink.text : Ink.outline, style: StrokeStyle(lineWidth: 1, dash: targeted ? [] : [4, 3])))
+            .scaleEffect(targeted && !Motion.reduced ? 1.01 : 1)
+            .motion(Motion.settle, value: targeted)
+            .motion(Motion.settle, value: report == nil)
             .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
                 guard let p = providers.first else { return false }
                 _ = p.loadObject(ofClass: URL.self) { url, _ in
@@ -274,7 +288,7 @@ struct CheckView: View {
                     .padding(.top, 28).padding(.bottom, 6)
                     Hairline(color: Ink.text)
                 }
-                ForEach(Array(r.findings.sorted { $0.severity > $1.severity }.enumerated()), id: \.offset) { _, f in
+                ForEach(Array(r.findings.sorted { $0.severity > $1.severity }.enumerated()), id: \.offset) { i, f in
                     VStack(spacing: 0) {
                         HStack(alignment: .firstTextBaseline, spacing: 20) {
                             SeverityWord(severity: f.severity).frame(width: 96, alignment: .leading)
@@ -288,6 +302,7 @@ struct CheckView: View {
                         .padding(.vertical, 10)
                         .background(alignment: .bottom) { Hairline() }
                     }
+                    .reveal(i)
                     .zIndex(1)
                 }
             }
@@ -342,18 +357,22 @@ struct CheckView: View {
             report = nil
             return
         }
-        checking = url.lastPathComponent
-        problem = nil
+        Motion.animate {
+            checking = url.lastPathComponent
+            problem = nil
+        }
         Task.detached(priority: .userInitiated) {
             let checker = FileChecker(signatures: GuardedSignatureChecker(), lookup: HashFeed.loadCached())
             let result = Result { try checker.check(url) }
             await MainActor.run {
-                checking = nil
-                switch result {
-                case .success(let r): report = r
-                case .failure(let e):
-                    report = nil
-                    problem = "\(e)"
+                Motion.animate(Motion.settle) {
+                    checking = nil
+                    switch result {
+                    case .success(let r): report = r
+                    case .failure(let e):
+                        report = nil
+                        problem = "\(e)"
+                    }
                 }
             }
         }
@@ -394,7 +413,7 @@ struct CleanView: View {
             if let items = model.cleanItems {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(items, id: \.id) { item in row(item) }
+                        ForEach(Array(items.enumerated()), id: \.element.id) { i, item in row(item).reveal(i) }
                     }
                     .padding(.horizontal, 48).padding(.bottom, 32)
                 }
@@ -541,7 +560,7 @@ struct AppsView: View {
                 Hairline().padding(.horizontal, 48)
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(shown, id: \.url) { app in row(app) }
+                        ForEach(Array(shown.enumerated()), id: \.element.url) { i, app in row(app).reveal(i) }
                     }
                     .padding(.horizontal, 48).padding(.bottom, 32)
                 }

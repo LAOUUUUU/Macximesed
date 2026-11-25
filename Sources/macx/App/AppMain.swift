@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         let env = ProcessInfo.processInfo.environment
         UNUserNotificationCenter.current().delegate = self
         model.runSetup = { [weak self] in self?.showSetup() }
+        // For checking the design without Screen Recording: the app draws its own window into PNG files and quits.
+        if let dir = env["MACX_APP_SNAPSHOT"], !dir.isEmpty {
+            Snapshots(delegate: self, folder: URL(fileURLWithPath: dir)).start()
+            return
+        }
         if env["MACX_APP_SETUP"] == "1" || FirstRun.shouldShowSetup(finished: UserDefaults.standard.string(forKey: FirstRun.defaultsKey)) {
             showSetup()
         } else if env["MACX_APP_HIDDEN"] != "1" {
@@ -337,8 +342,14 @@ struct MenuPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 SectionLabel(text: "Macximesed")
-                Text(model.state.headline).font(Fonts.serif(22)).tracking(-0.2)
-                    .foregroundStyle(model.state.glyph == .watching ? Ink.text : (model.state.glyph == .paused ? Ink.paused : Ink.signal))
+                HStack(spacing: 9) {
+                    if model.state.glyph == .watching { LiveMark() }
+                    Text(model.state.headline).font(Fonts.serif(22)).tracking(-0.2)
+                        .foregroundStyle(
+                            model.state.glyph == .watching ? Ink.text : (model.state.glyph == .paused ? Ink.paused : Ink.signal)
+                        )
+                        .contentTransition(.opacity).motion(value: model.state.headline)
+                }
                 Text(sub).font(Fonts.sans(12)).foregroundStyle(Ink.grey).lineLimit(2)
             }
             .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 14)
@@ -349,7 +360,7 @@ struct MenuPanelView: View {
                 Text("No alerts this week.").font(Fonts.sans(12.5)).foregroundStyle(Ink.grey)
                     .padding(.horizontal, 18).padding(.vertical, 8)
             }
-            ForEach(latest) { g in
+            ForEach(Array(latest.enumerated()), id: \.element.id) { i, g in
                 Button {
                     open(.protection)
                 } label: {
@@ -367,6 +378,7 @@ struct MenuPanelView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(RowHover()).focusEffectDisabled()
+                .reveal(i, rise: 4)
             }
             Hairline().padding(.top, 6)
             VStack(alignment: .leading, spacing: 0) {
@@ -421,7 +433,74 @@ struct RowHover: ButtonStyle {
         @ViewBuilder let content: () -> Content
         @State private var over = false
         var body: some View {
-            content().background(over || pressed ? Ink.selected : Color.clear).onHover { over = $0 }
+            content().background(pressed ? Ink.selected : (over ? Ink.rowOpen : Color.clear)).motion(Motion.quick, value: over)
+                .onHover { over = $0 }
         }
+    }
+}
+
+/// `MACX_APP_SNAPSHOT=DIR`: every page of the main window, the menu bar panel and the first setup screen, in
+/// light and dark, drawn by the app itself into PNGs (no Screen Recording needed), then quit.
+@MainActor
+final class Snapshots {
+    let delegate: AppDelegate
+    let folder: URL
+    init(delegate: AppDelegate, folder: URL) {
+        self.delegate = delegate
+        self.folder = folder
+    }
+
+    func start() {
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        delegate.showWindow(.protection)
+        var steps: [(String, () -> Void)] = []
+        for appearance in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+            steps.append(("", { NSApp.appearance = NSAppearance(named: appearance.1) }))
+            for section in AppModel.Section.allCases {
+                steps.append(
+                    (
+                        "\(appearance.0)-\(section.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))",
+                        { self.delegate.model.section = section }
+                    ))
+            }
+            steps.append(("\(appearance.0)-menu-panel", {}))
+        }
+        run(steps, 0)
+    }
+
+    func run(_ steps: [(String, () -> Void)], _ i: Int) {
+        guard i < steps.count else {
+            NSApp.terminate(nil)
+            return
+        }
+        let (name, action) = steps[i]
+        action()
+        // Long enough for the data to load and every animation to settle.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (name.isEmpty ? 0.5 : 2.5)) {
+            if name.hasSuffix("menu-panel") {
+                let host = NSHostingView(rootView: MenuPanelView(model: self.delegate.model, open: { _ in }, close: {}))
+                host.frame = NSRect(origin: .zero, size: host.fittingSize)
+                let w = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                w.contentView = host
+                w.appearance = NSApp.appearance
+                // On screen (far off to the side) so its appear animations run, as in the real panel.
+                w.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
+                w.orderFrontRegardless()
+                host.layoutSubtreeIfNeeded()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    self.save(host, name)
+                    self.run(steps, i + 1)
+                }
+                return
+            }
+            if !name.isEmpty, let view = self.delegate.window?.contentView { self.save(view, name) }
+            self.run(steps, i + 1)
+        }
+    }
+
+    func save(_ view: NSView, _ name: String) {
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent(name + ".png"))
     }
 }
