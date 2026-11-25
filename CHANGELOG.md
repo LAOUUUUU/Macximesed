@@ -4,6 +4,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Fixed
+- **Updating from 0.3.0 didn't bring the app icon** to apps installed with `scripts/install.sh`: those updates replace only the macx program inside the app. macx now carries the icon itself, and an update adds it (and names it in Info.plist) when the app doesn't have it yet. .pkg and .dmg installs already had it.
+
 ## [0.4.0] - 2026-11-25
 
 ### Added

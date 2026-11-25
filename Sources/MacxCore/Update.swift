@@ -494,12 +494,19 @@ public struct UpdateInstaller: Sendable {
         var env = info["LSEnvironment"] as? [String: String] ?? [:]
         env["MACX_APP"] = "1"
         info["LSEnvironment"] = env
+        info["CFBundleIconFile"] = "AppIcon"
         return info
     }
 
     /// After swapping the executable, update the bundle's version and sign the bundle again (ad-hoc), so
     /// its signature covers the new binary and Info.plist.
     static func reseal(_ app: URL, version: BuildVersion, identity: SigningIdentity?, signer: AppSigner) throws {
+        // Apps installed before the icon existed get it now (it's sealed by the signature below).
+        let icon = app.appendingPathComponent("Contents/Resources/AppIcon.icns")
+        if !FileManager.default.fileExists(atPath: icon.path), !AppIcon.icns.isEmpty {
+            try? FileManager.default.createDirectory(at: icon.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? AppIcon.icns.write(to: icon)
+        }
         let infoURL = app.appendingPathComponent("Contents/Info.plist")
         if let data = try? Data(contentsOf: infoURL),
             var info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]

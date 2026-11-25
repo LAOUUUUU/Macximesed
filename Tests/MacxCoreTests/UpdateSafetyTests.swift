@@ -173,3 +173,31 @@ struct RealSigningUpdateTests {
         #expect(entText.contains("com.apple.security.virtualization"))
     }
 }
+
+@Suite("Binary updates bring the app icon")
+struct UpdateIconTests {
+    @Test func theIconIsAddedWhenMissingAndNamedInInfoPlist() throws {
+        let tmp = try TempDir()
+        let app = tmp.url.appendingPathComponent("Macximesed.app")
+        try FileManager.default.createDirectory(at: app.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+        try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": "dev.macximesed.macx"], format: .xml, options: 0)
+            .write(to: app.appendingPathComponent("Contents/Info.plist"))
+        try UpdateInstaller.reseal(app, version: .release(SemVer("0.4.1")!), identity: nil, signer: FakeSigner())
+        let icon = try Data(contentsOf: app.appendingPathComponent("Contents/Resources/AppIcon.icns"))
+        #expect(icon.starts(with: Data("icns".utf8)))
+        #expect(icon == AppIcon.icns)
+        let info = try #require(
+            PropertyListSerialization.propertyList(from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil)
+                as? [String: Any])
+        #expect(info["CFBundleIconFile"] as? String == "AppIcon")
+    }
+}
+
+@Suite("The icon inside macx matches the one in the repo")
+struct AppIconInSyncTests {
+    @Test func sameBytes() throws {
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/AppIcon.icns")
+        #expect(AppIcon.icns == (try Data(contentsOf: file)))
+    }
+}
